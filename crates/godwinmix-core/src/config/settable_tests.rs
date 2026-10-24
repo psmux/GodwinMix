@@ -35,6 +35,13 @@ fn every_property_is_something_a_form_can_draw() {
     assert!(props["program.video_bitrate_kbps"]["description"].as_str().unwrap().contains("bitrate"));
     assert_eq!(props["hardware.encode"]["enum"][0], "auto");
     assert_eq!(props["safety.on_operator_silence.action"]["type"], "string");
+    // The NVENC session settings are for a headend on a card with the limit
+    // lifted: a form shows them under Advanced, and still says their section.
+    for key in ["governor.nvenc_session_probe", "governor.nvenc_sessions"] {
+        assert_eq!(props[key]["x-gmx-group"], "advanced", "{key}");
+        assert_eq!(props[key]["x-gmx-section"], "governor", "{key}");
+    }
+    assert_eq!(props["governor.reserve_cores"]["x-gmx-group"], "governor");
 }
 
 /// A value for `key` that differs from its default and still loads.

@@ -52,12 +52,13 @@ decoder = "nvh264dec"
 download = "cudadownload"
 parser = "h264parse"
 memory = "system"
+profile = "main"
 requires = ["nvh264enc"]
 license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "gop-size", unit = "frames" }
 verified = []
-comment = "NVENC on Linux and Windows. `preset` is the modern nvcodec naming; an older nvh264enc ignores it with a warning and keeps its default, which is why `zerolatency` is set as well."
+comment = "NVENC on Linux and Windows. `preset` is the modern nvcodec naming; an older nvh264enc ignores it with a warning and keeps its default, which is why `zerolatency` is set as well. Main profile: left to itself NVENC makes Baseline, and High's 8x8 transform cost so much of the engine that forty six 720p channels at p1 ran it at 100% and lost frames, where Main ran at 87% with no loss and kept most of High's gain (SSIM 0.955 to 0.970 against Baseline's 0.953 to 0.967 on 1080i, 480i and 720p60 broadcast)."
 properties = { preset = "p4", tune = "ultra-low-latency", "rc-mode" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, bframes = 0, "b-frames" = 0, zerolatency = true, "aud" = false }
 
 [[video]]
@@ -373,6 +374,7 @@ id = "h264-software-openh264"
 codec = "h264"
 accel = "software"
 rank = 64
+convert_rank = 25
 encoder = "openh264enc"
 decoder = "openh264dec"
 parser = "h264parse"
@@ -381,7 +383,7 @@ license = "BSD-2-Clause"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "gop-size", unit = "frames" }
 verified = []
-comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit. Its decoder is the software H.264 decoder ahead of libav. It takes 4:2:0 8 bit streams (baseline, main and high); a High 10 or 4:2:2 stream does not match its caps and goes to avdec_h264. It does not decode interlaced coding, and it runs on one thread: on a 1080p30 high profile stream it cost about 1.5 times avdec_h264's CPU time. A machine taking interlaced broadcast feeds, or decoding several cameras on the CPU, wants `GMX_CODEC_RANK=h264-software-decode=70`."
+comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit. Its decoder is the software H.264 decoder ahead of libav. It takes 4:2:0 8 bit streams (baseline, main and high); a High 10 or 4:2:2 stream does not match its caps and goes to avdec_h264. It does not decode interlaced coding, and it runs on one thread: on a 1080p30 high profile stream it cost about 1.5 times avdec_h264's CPU time. A machine taking interlaced broadcast feeds, or decoding several cameras on the CPU, wants `GMX_CODEC_RANK=h264-software-decode=70`. Converting a stream for a rendition it goes after libav (`convert_rank`): the converter builds its decoder alone, and a 4:4:4 or High 10 stream into openh264 failed as not negotiated."
 properties = { complexity = "low", "rate-control" = "bitrate", bitrate = { unit = "bit", from = "video.bitrate_kbps" }, "multi-thread" = { unit = "count", from = "cpu.count" } }
 
 [[video]]
@@ -469,6 +471,36 @@ verified = []
 comment = "Decode only, from gst-libav, and the last resort for HEVC."
 
 # ---------------------------------------------------------------------------
+# MPEG-2, decode only: broadcast feeds a headend converts
+# ---------------------------------------------------------------------------
+
+[[video]]
+id = "mpeg2-nvidia"
+codec = "mpeg2"
+accel = "nvidia"
+rank = 240
+decoder = "nvmpeg2videodec"
+download = "cudadownload"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts"]
+verified = []
+comment = "NVDEC. No parser: the listener frames MPEG-2 a picture at a time itself and gives the decoder its caps. MPEG-2 keeps at most two reference pictures and a picture goes out as soon as it is decoded, so the decoder holds no display queue of its own."
+decode_properties = { "max-display-delay" = 0 }
+
+[[video]]
+id = "mpeg2-software-decode"
+codec = "mpeg2"
+accel = "software"
+rank = 30
+decoder = "avdec_mpeg2video"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts"]
+verified = []
+comment = "Decode only, from gst-libav: MPEG-2 where there is no hardware decoder."
+
+# ---------------------------------------------------------------------------
 # Audio
 # ---------------------------------------------------------------------------
 
@@ -549,6 +581,7 @@ accel = "software"
 rank = 110
 encoder = "voaacenc"
 parser = "aacparse"
+max_channels = 2
 requires = []
 license = "Apache-2.0"
 container = ["flv", "mpegts", "mp4", "matroska"]

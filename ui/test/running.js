@@ -9,6 +9,7 @@ import {
 import { ratesFrom, openRunning } from "../panels/header/running.js";
 import { bannerText, showBanner } from "../panels/header/banner.js";
 import { destinationsPill } from "../panels/header/destinations.js";
+import { directOutputs, directTally } from "../shell/direct-page.js";
 import { fmtDuration } from "../shell/dom.js";
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
@@ -57,6 +58,7 @@ const press = (root, text) => [...root.querySelectorAll("button")].find((b) => b
 
 export async function runningTests(test, eq, ok) {
   document.querySelectorAll(".still-running").forEach((b) => b.remove());
+  try { sessionStorage.removeItem("gmx.running.answered"); } catch {}
 
   test("the model lists what streams, records and receives, and leaves out what is stopped", () => {
     const items = runningThings({ outputs: [YOUTUBE, RECORDING, STOPPED, NO_KEY] }, [CHANNEL], { youtube: 4400 }, 1000000 + 90000);
@@ -159,6 +161,44 @@ export async function runningTests(test, eq, ok) {
   await until(() => !bar.isConnected, "the banner to go");
   test("Stop all on the banner stops the stream and the recording", () => {
     eq(left.sent.map(([m]) => m).filter((m) => m !== "channel.list"), ["output.stop", "output.remove"]);
+  });
+
+  // Answered once, the banner does not come back for the same things when
+  // the page loads again, as it does on every show tab switch.
+  const kept = standIn([{ ...YOUTUBE, id: "kept" }]);
+  const first = showBanner(kept, runningThings(kept.state));
+  press(first, "Keep");
+  test("a banner answered with Keep does not come back for the same outputs", () => {
+    ok(!first.isConnected, "Keep closes it");
+    eq(showBanner(kept, runningThings(kept.state)), null);
+  });
+  const more = standIn([{ ...YOUTUBE, id: "kept" }, { ...YOUTUBE, id: "other", uri_host: "rtmp://live.twitch.tv/…" }]);
+  const again = showBanner(more, runningThings(more.state));
+  test("something new still raises it, about the new thing alone", () => {
+    ok(again && again.textContent.includes("Twitch") && !again.textContent.includes("YouTube"), again && again.textContent);
+  });
+  again.remove();
+  document.querySelectorAll(".toast").forEach((t) => t.remove());
+
+  // A direct show's page has no mixer and no outputs in its status: its
+  // outputs come from show.list and show.stats.
+  const ch = {
+    id: "ch101", name: "CH101", state: "running", compositing: false, health: { state: "ok", alarms: [] },
+    outputs: [
+      { id: "viewers", label: "viewers", uri_host: "hls://viewers", enabled: true, state: "live", kbps: 0, error: null, has_key: false },
+      { id: "spare", label: "spare", uri_host: "udp://10.0.0.9:5000", enabled: false, state: "off", error: null, has_key: false },
+    ],
+  };
+  const chStats = { id: "ch101", input: { kbps: 2400 }, outputs: [{ id: "viewers", state: "live", kbps: 2100 }] };
+  test("a direct show's HLS output counts as a destination live", () => {
+    const outs = directOutputs(ch, chStats);
+    eq(outs.map((o) => [o.id, o.state, o.kbps]), [["viewers", "live", 2100], ["spare", "stopped", 0]]);
+    eq(destinationsPill(outs).text, "1 destination live");
+  });
+  test("a direct show's tally is its input, not black", () => {
+    eq(directTally(ch, chStats), { on: true, label: "direct, input live" });
+    const down = { ...ch, health: { state: "alarm", alarms: [{ kind: "no-input", since_ms: 1 }] } };
+    eq(directTally(down, { ...chStats, input: { kbps: 0 } }), { on: false, label: "direct, no input" });
   });
 
   // Stop streaming and Start streaming on an Outputs row.

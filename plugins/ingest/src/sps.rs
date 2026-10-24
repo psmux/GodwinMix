@@ -73,6 +73,10 @@ fn skip_scaling_list(bits: &mut Bits, size: u32) -> Option<()> {
     Some(())
 }
 
+#[path = "sps_vui.rs"]
+mod vui;
+pub use vui::frame_rate;
+
 /// The profiles whose SPS carries chroma format and bit depth fields.
 fn high_profile(profile: u32) -> bool {
     matches!(profile, 100 | 110 | 122 | 244 | 44 | 83 | 86 | 118 | 128 | 138 | 139 | 134 | 135)
@@ -81,15 +85,38 @@ fn high_profile(profile: u32) -> bool {
 /// Width and height in pixels, after cropping. `nal` starts with the NAL
 /// header byte.
 pub fn size(nal: &[u8]) -> Option<(u32, u32)> {
+    layout(nal).map(|l| (l.width, l.height))
+}
+
+/// What an SPS says about its pictures: their size, and what a slice
+/// header needs to be read as far as `field_pic_flag`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Layout {
+    pub width: u32,
+    pub height: u32,
+    pub separate_colour_plane: bool,
+    /// Bits of `frame_num` in a slice header.
+    pub frame_num_bits: u32,
+    /// False when pictures may be coded as fields.
+    pub frame_mbs_only: bool,
+}
+
+/// Read an SPS as far as the frame cropping fields.
+pub fn layout(nal: &[u8]) -> Option<Layout> {
+    walk(nal).map(|(l, _)| l)
+}
+
+/// The layout, and the reader left where the VUI begins.
+pub(crate) fn walk(nal: &[u8]) -> Option<(Layout, Bits)> {
     let mut b = Bits::new(nal.get(1..)?);
     let profile = b.bits(8)?;
     b.bits(16)?; // constraint flags and level
     b.ue()?; // seq_parameter_set_id
-    let mut chroma = 1;
+    let (mut chroma, mut separate) = (1, false);
     if high_profile(profile) {
         chroma = b.ue()?;
         if chroma == 3 {
-            b.bit()?; // separate_colour_plane_flag
+            separate = b.bit()? == 1;
         }
         b.ue()?; // bit_depth_luma
         b.ue()?; // bit_depth_chroma
@@ -103,7 +130,7 @@ pub fn size(nal: &[u8]) -> Option<(u32, u32)> {
             }
         }
     }
-    b.ue()?; // log2_max_frame_num
+    let frame_num_bits = b.ue()? + 4;
     match b.ue()? {
         0 => {
             b.ue()?;
@@ -142,42 +169,9 @@ pub fn size(nal: &[u8]) -> Option<(u32, u32)> {
     };
     let width = (width_mbs * 16).checked_sub((left + right) * crop_x)?;
     let height = (height_units * 16 * (2 - frame_mbs_only)).checked_sub((top + bottom) * crop_y)?;
-    Some((width, height))
+    Some((Layout { width, height, separate_colour_plane: separate, frame_num_bits, frame_mbs_only: frame_mbs_only == 1 }, b))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn exponential_golomb_reads_the_textbook_values() {
-        // 1, 010, 011, 00100 are 0, 1, 2 and 3.
-        let mut b = Bits { data: vec![0b1010_0110, 0b0100_0000], at: 0 };
-        assert_eq!(b.ue(), Some(0));
-        assert_eq!(b.ue(), Some(1));
-        assert_eq!(b.ue(), Some(2));
-        assert_eq!(b.ue(), Some(3));
-    }
-
-    #[test]
-    fn an_emulation_prevention_byte_is_not_part_of_the_payload() {
-        let b = Bits::new(&[0x00, 0x00, 0x03, 0x01]);
-        assert_eq!(b.data, vec![0x00, 0x00, 0x01]);
-    }
-
-    #[test]
-    fn a_1080p_sps_is_cropped_from_1088_to_1080() {
-        // What x264 writes for 1920x1080: 68 macroblock rows, cropped by 8.
-        let sps = [
-            0x67, 0x64, 0x00, 0x28, 0xac, 0xd9, 0x40, 0x78, 0x02, 0x27, 0xe5, 0xc0, 0x44, 0x00,
-            0x00, 0x03, 0x00, 0x04, 0x00, 0x00, 0x03, 0x00, 0xf0, 0x3c, 0x60, 0xc6, 0x58,
-        ];
-        assert_eq!(size(&sps), Some((1920, 1080)));
-    }
-
-    #[test]
-    fn a_truncated_sps_is_nothing_rather_than_a_panic() {
-        assert_eq!(size(&[0x67, 0x64]), None);
-        assert_eq!(size(&[]), None);
-    }
-}
+#[path = "sps_tests.rs"]
+mod tests;

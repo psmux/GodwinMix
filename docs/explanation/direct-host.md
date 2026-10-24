@@ -109,6 +109,77 @@ not decode its keyframes again. A show that only copies has its keyframes
 decoded by the vitals themselves, only while its alarms are on or someone is
 looking.
 
+## One socket per multicast group, read in Rust
+
+A headend takes many programs from few multiplexes: fifty channels off
+eight ATSC groups is six or seven programs a group. With one `udpsrc` per
+show, seven programs on one group were seven joins, seven sockets each
+taking the whole 30 to 40 Mbit/s multiplex, and seven demuxers each reading
+all of it to keep one seventh. The `udp://` and `rtp://` input is now its
+own code (`input/native/`), with nothing from GStreamer between the socket
+and the hub:
+
+```text
+  socket thread, one per group ──► tables read once (the udp plugin's Filter)
+    │  each show's own program's packets, a queue per show, never waited on
+    ├──► show thread: PES ──► H.264 | HEVC | MPEG-2 | AAC | AC-3 | MPEG audio ──► tags ──► hub
+    └──► show thread: ...
+```
+
+The socket thread is the only one that touches the network. It takes up to
+32 datagrams a system call on Linux, reads the PAT, PMT and SDT for every
+show on the group at once, counts the group's continuity errors, RTP gaps
+and stuffing, and copies each show's packets into that show's queue with a
+`try_send`. A show that falls behind loses packets in its own queue. The
+lock on the list of shows is held while one batch is handed out, which is
+copying, and never across a receive.
+
+Each show's thread turns its packets into tags: PES packets put back
+together, the times read off each PES header when it starts, unwrapped
+across the 33 bit wrap and counted from the program's first PCR, the way
+`tsdemux` counts them. The framing is the parsers', reimplemented: an
+`avcC` or `hvcC` header and length prefixed access units, ADTS taken off
+AAC, AC-3 and MPEG audio cut one frame per tag. The tags are byte for byte
+what `parsebin`, the parsers and the tagger make of the same file, which
+`native/tests/compare.rs` checks for H.264 with AAC, HEVC with 5.1 AC-3,
+H.264 with layer II, and MPEG-2 with two AC-3 tracks, every track compared,
+times within a millisecond. Sound and picture are kept as far apart as the
+PES times say, to the millisecond, across a sender that restarts on another
+clock (`native/tests/sync.rs`).
+
+What that costs, measured with `dev/bench/mpts.sh` and the same run on a
+real feed. CPU is a share of one core for the whole direct host, each show
+with one UDP copy output and its alarms off; the second half of a 60 s run.
+
+Nine programs on one multicast group on the loopback of a 64 core Linux
+build server (one 720p30 H.264 encode at 3.5 Mbit/s with two AC-3 tracks,
+copied into nine programs, about 35 Mbit/s):
+
+| Input | CPU | Resident memory | Threads |
+|---|---|---|---|
+| native | 15.9 to 17.0 % | 18.4 MB | 24 |
+| GStreamer | 95.3 to 106.6 % | 26.2 MB | 33 |
+
+A box with 8 MPTS groups of ATSC programs (MPEG-2 video at 480i to 1080i,
+AC-3 in one to three tracks) on a 48 thread Xeon, read from the real
+multicast. Of the 50 programs the shows asked for, 45 were in the feed; the
+other five were named in each show's `error` as not in it.
+
+| Shows | What is carried | Input | CPU | Resident memory | Threads |
+|---|---|---|---|---|---|
+| 7, one group | MPEG-2 and every sound track | native | 6.1 to 8.3 % | 15.8 MB | 20 |
+| 7, one group | MPEG-2 and every sound track | GStreamer | 12.8 to 13.8 % | 21.4 MB | 27 |
+| 50, eight groups | the first sound track | native | 39.8 to 43.0 % | 25.1 MB | 113 |
+| 50, eight groups | the first sound track | GStreamer | 94.1 to 152.2 % | 53.4 MB | 156 |
+| 50, eight groups | MPEG-2 and every sound track | native | 50.2 to 55.9 % | 39.2 MB | 113 |
+| 50, eight groups | MPEG-2 and every sound track | GStreamer | 118.5 to 164.5 % | 55.9 MB | 156 |
+
+No GOP was dropped and no continuity error counted in any run. Per show the
+native input is one thread and the GStreamer input two (its streaming
+thread and its runner), beside each output's own; the native socket
+threads are one per group, eight for fifty shows. `params.engine =
+"gstreamer"` still takes the old input, for a feed this one reads wrong.
+
 ## Backup inputs
 
 A backup is the input work's: `input/backup.rs` runs main and backup warm,

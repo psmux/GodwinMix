@@ -16,6 +16,9 @@ pub fn show_stats(host: &Host, show: &Show) -> Value {
     drop(seen);
     let desc = host.hub.stream(&show.row.app(), STREAM).unwrap_or(Value::Null);
     fill(&mut input, &desc, last_tag);
+    if let Some(db) = host.vitals.peak(&show.row.id) {
+        input["audio_peak_db"] = json!((db * 10.0).round() / 10.0);
+    }
     let outputs: Vec<Value> = show
         .outputs
         .iter()
@@ -54,4 +57,31 @@ fn fill(input: &mut Value, desc: &Value, last_tag: Option<u64>) {
     if let Some(o) = input.as_object_mut() {
         o.retain(|_, x| !x.is_null());
     }
+}
+
+/// A video reading of a field coded stream, whose tags are fields, as
+/// frames: `fps` halved and `field_coded` set, so a plan keeps 29.97 and
+/// not the 59.94 fields of 480i or 1080i.
+pub fn fields_to_frames(video: &mut Value) {
+    video["field_coded"] = json!(true);
+    if let Some(f) = video["fps"].as_f64() {
+        video["fps"] = json!((f * 50.0).round() / 100.0);
+    }
+}
+
+/// `direct.input`'s `tracks`: each track the hub measured, `{track, kind,
+/// codec, channels, sample_rate}` or the video's size and rate, with the
+/// `pid` and `lang` the input read from the PMT where it did.
+pub fn tracks(measured: &Value, from_input: &[super::input::TrackInfo]) -> Value {
+    let rows = measured.as_array().into_iter().flatten().map(|t| {
+        let mut v = t.clone();
+        let mine = from_input.iter().find(|i| t["kind"] == i.kind && t["track"].as_u64() == Some(u64::from(i.track)));
+        v["pid"] = json!(mine.and_then(|i| i.pid));
+        v["lang"] = json!(mine.and_then(|i| i.lang.clone()));
+        if mine.is_some_and(|i| i.field_coded) {
+            fields_to_frames(&mut v);
+        }
+        v
+    });
+    Value::Array(rows.collect())
 }

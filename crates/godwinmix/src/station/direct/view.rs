@@ -22,7 +22,7 @@ impl super::Direct {
         r.outputs
             .iter()
             .map(|d| {
-                let live = seen.output(&d.id, d.enabled && !r.compositing);
+                let live = super::outputs::unreadable(id, &d.id).unwrap_or_else(|| seen.output(&d.id, d.enabled && !r.compositing));
                 let mut view = Destination {
                     id: d.id.clone(),
                     platform: d.platform.clone(),
@@ -38,9 +38,14 @@ impl super::Direct {
                     plan: None,
                     refused: None,
                     playback: None,
+                    params: None,
                 };
                 if let Some((live, playback)) = self.hls.view(id, &d.id).filter(|_| d.enabled && !r.compositing) {
                     (view.live, view.playback) = (live, Some(playback));
+                    view.params = self.hls.params(id, &d.id);
+                }
+                if !r.compositing {
+                    view.live = super::seen::behind_input(view.live, seen.input_down());
                 }
                 if d.rendition.is_some() && d.enabled && !r.compositing {
                     let (plan, refused) = self.transcode.view(id, &d.id);
@@ -68,15 +73,23 @@ impl super::Direct {
                 if let Some(l) = &hls {
                     (row.state, row.kbps, row.reconnects) = (String::new(), l.kbps, l.reconnects);
                 }
-                let live = hls.unwrap_or_else(|| seen.output(&o.id, true));
+                let live = super::outputs::unreadable(id, &o.id).or(hls).unwrap_or_else(|| seen.output(&o.id, true));
                 if row.state.is_empty() {
                     row.state = serde_json::to_value(live.state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+                }
+                // Its state follows the input, as in the list (`behind_input`).
+                if !compositing && seen.input_down() {
+                    row.kbps = 0;
+                    if row.state == "live" {
+                        row.state = "waiting".into();
+                    }
                 }
                 row.rendition_text = match (&o.rendition, self.transcode.view(id, &o.id).0) {
                     (None, _) => "copy".into(),
                     (Some(_), Some(plan)) => text_of(&plan),
                     (Some(_), None) => "waiting for the input".into(),
                 };
+                row.steps = o.rendition.as_ref().map(|_| self.transcode.steps(id, &o.id)).unwrap_or_default();
                 row
             })
             .collect();

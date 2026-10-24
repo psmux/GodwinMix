@@ -110,6 +110,7 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 | `Ctrl+Z`, `Ctrl+Shift+Z` | undo and redo |
 | `Ctrl+O` | open a project file |
 | `Ctrl+S` | save the project as a file |
+| `Ctrl+Shift+T` | reopen the show closed last (a browser keeps this key for its own tabs) |
 | `F10`, or `Alt` pressed and let go | put the keyboard on the menu bar |
 
 That table is a summary. `ui/shell/keymap.js` is the map itself, and it wins
@@ -176,7 +177,20 @@ stop, as the menu bar is.
 | `Enter`, `Space` | on another show's tab, switch to it; on this show's own tab, open its menu |
 | `F2` | rename it in place; `Enter` keeps the name, `Escape` puts it back |
 | `Delete` | remove it, after a yes |
-| the menu key | its menu: Rename, Start or Stop, Remove |
+| the menu key | its menu: Rename, Start or Stop, Close, Remove |
+
+A middle click on a tab closes that show, as its `×` does. `Ctrl+W` does not:
+in a browser it closes the page, and nothing on the page takes it over.
+
+Anywhere on the page, with two shows or more:
+
+| Key | Does |
+|---|---|
+| `Ctrl+Tab`, `Ctrl+PageDown`; `Cmd+Shift+]` on a Mac | the next show, round from the last to the first |
+| `Ctrl+Shift+Tab`, `Ctrl+PageUp`; `Cmd+Shift+[` on a Mac | the show before |
+
+A browser may keep these for its own tabs; the desktop app does not. In a
+browser the arrow keys on the focused tab row and `Enter` always work.
 
 These keys are the tab's, not the page's: `F2` and `Delete` on a tab never
 reach a scene or a source.

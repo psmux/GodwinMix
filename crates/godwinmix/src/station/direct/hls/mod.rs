@@ -18,6 +18,7 @@ pub mod channel;
 mod channel_serve;
 mod child;
 pub mod edit;
+pub mod facade;
 mod keep;
 mod serve;
 pub mod spec;
@@ -108,7 +109,9 @@ impl Packagers {
             };
             let p = want.spec.params;
             let (show, output) = key.clone();
-            let w = Want { show, output, source: want.source, why_not: want.why_not, segment_ms: p.segment_ms, part_ms: p.part_ms, window_s: p.window_s, viewer_key };
+            let (source, why_not, sounds) = (want.source, want.why_not, want.sounds);
+            let (segment_ms, part_ms, window_s, segments, access) = (p.segment_ms, p.part_ms, p.window_s, p.segments, p.access);
+            let w = Want { show, output, source, why_not, segment_ms, part_ms, window_s, segments, access, viewer_key, sounds };
             let stream = match old {
                 Some(c) if c.stream.params == p && c.stream.viewer_key == w.viewer_key => c.stream,
                 _ => Arc::new(Stream::new(&key.1, p, &w.viewer_key)),

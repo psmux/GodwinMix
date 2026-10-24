@@ -73,6 +73,6 @@ pub use resolve::DEFAULT_TOLERANCE;
 pub use static_model::StaticCostModel;
 
 pub use godwinmix_protocol::rendition::{
-    AudioCodec, AudioShape, AudioWant, Container, Cost, EncoderSlot, Fps, RenditionRequest,
+    AudioCodec, AudioShape, AudioWant, Container, Cost, EncoderPick, EncoderSlot, Fps, RenditionRequest,
     StreamInfo, VideoCodec, VideoShape, VideoWant,
 };

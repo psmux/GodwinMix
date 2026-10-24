@@ -24,6 +24,7 @@
 mod admit;
 mod answers;
 mod governor;
+mod gpu;
 mod machine;
 mod model;
 mod outcome;
@@ -33,11 +34,15 @@ mod refuse;
 mod shed;
 mod source;
 mod spec;
+mod spec_video;
 mod state;
+mod steps;
 mod watch;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_headend;
 
 use std::sync::OnceLock;
 
@@ -50,6 +55,7 @@ use serde_json::{json, Value};
 pub use machine::Machine;
 pub use shed::RETRY;
 pub use price::assumed_input;
+pub use source::audio_codec;
 use outcome::Outcome;
 use state::State;
 
@@ -66,6 +72,13 @@ pub fn request_for(id: &str, choice: &RenditionChoice) -> Result<Option<Renditio
     let request = requests.remove(0);
     let empty = request.video.is_none() && request.audio.is_none() && !request.no_video && !request.no_audio;
     Ok((!empty).then_some(request))
+}
+
+/// Whether a destination's rendition converts every sound track, which a
+/// direct show's input must then carry.
+pub fn every_track(d: &StoredDestination) -> bool {
+    let request = d.rendition.as_ref().and_then(|c| request_for(&d.id, c).ok().flatten());
+    request.and_then(|r| r.audio).and_then(|a| a.tracks) == Some(godwinmix_protocol::rendition::Tracks::All)
 }
 
 /// The channels' renditions.
@@ -94,6 +107,11 @@ impl Transcode {
         self.governor.use_station(governor)
     }
 
+    /// The video encoders this machine has, as the planner sees them.
+    pub fn slots(&self) -> Vec<godwinmix_protocol::rendition::EncoderSlot> {
+        self.machine().slots()
+    }
+
     fn machine(&self) -> &Machine {
         self.machine.get_or_init(|| {
             let cat = godwinmix_core::catalogue::global();
@@ -111,7 +129,7 @@ impl Transcode {
         match state.outcome(channel, &d.id) {
             Some(Outcome::Copy(_)) => {}
             Some(Outcome::Refused(_)) => return None,
-            Some(Outcome::Transcode { plan, video, audio }) => {
+            Some(Outcome::Transcode { plan, video, audio, tracks }) => {
                 row["stream"] = json!(plan.stream);
                 row["rendition"] = json!(true);
                 if let Some(v) = video {
@@ -119,6 +137,9 @@ impl Transcode {
                 }
                 if let Some(a) = audio {
                     row["audio"] = json!(a);
+                }
+                if !tracks.is_empty() {
+                    row["audio_tracks"] = json!(tracks);
                 }
             }
             // Its stream is not live yet: the listener waits rather than

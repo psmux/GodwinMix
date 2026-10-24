@@ -34,6 +34,14 @@
           "title": "Switch show…"
         },
         {
+          "command": "show.reopen",
+          "title": "Reopen closed show"
+        },
+        {
+          "command": "show.import-flussonic",
+          "title": "Import a Flussonic config…"
+        },
+        {
           "separator": true
         },
         {
@@ -153,6 +161,16 @@
           "command": "view.wall",
           "title": "Monitoring wall",
           "check": "wall"
+        },
+        {
+          "command": "view.headend",
+          "title": "Headend",
+          "check": "headend"
+        },
+        {
+          "command": "view.flowmap",
+          "title": "Flow map",
+          "check": "flowmap"
         },
         {
           "command": "view.reset-layout",

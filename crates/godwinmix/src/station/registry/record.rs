@@ -22,6 +22,12 @@ pub struct Record {
     pub input: Option<InputSpec>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<OutputRecord>,
+    /// Closed from its tab (`show.close`): out of the page's tab row until
+    /// `show.open`. Closing without keep_running sets `stopped` as well, so
+    /// a closed show does not start with the station unless it was kept
+    /// running.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub closed: bool,
     /// What a person set for its alarms, when they set anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alarms: Option<AlarmSettings>,
@@ -35,9 +41,13 @@ fn is_true(b: &bool) -> bool {
     *b
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 impl Record {
     /// A show that composites, as every show was before wave 4.
     pub fn new(id: &str, name: &str, config: Option<PathBuf>) -> Record {
-        Record { id: id.into(), name: name.into(), config, stopped: false, compositing: true, input: None, outputs: Vec::new(), alarms: None }
+        Record { id: id.into(), name: name.into(), config, stopped: false, closed: false, compositing: true, input: None, outputs: Vec::new(), alarms: None }
     }
 }

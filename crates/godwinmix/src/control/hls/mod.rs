@@ -8,10 +8,13 @@
 //! | `GET /hls/{output}/{rung}/init.mp4` | the init segment (`init1.mp4` after a rebuild) |
 //! | `GET /hls/{output}/{rung}/{n}.m4s` | a whole segment |
 //! | `GET /hls/{output}/{rung}/{n}.{p}.m4s` | one LL-HLS part |
+//! | `GET /hls/{output}/master-ts.m3u8`, `{rendition}/ts.m3u8`, `{rendition}/{start_ms}.ts` | MPEG-TS beside them (`ts.rs`) |
 //!
 //! # Who may read
 //!
-//! Either the control token with the `read` scope, the same rule as every
+//! An output with `access = "open"` lets in a player on loopback or a
+//! private network with nothing at all (anyone, with `open_public`).
+//! Otherwise, either the control token with the `read` scope, the same rule as every
 //! other preview door (`Authorization: Bearer`, or `?token=` on a GET), or
 //! the output's own viewer key as `?key=`. The viewer key opens this one
 //! output's playlists and segments and nothing else on the port, so it is
@@ -39,6 +42,7 @@
 pub mod auth;
 pub mod files;
 pub mod playlists;
+pub mod ts;
 
 use crate::control::Ctx;
 use axum::body::{Body, Bytes};
@@ -82,12 +86,14 @@ pub fn router<D: Door>(door: D) -> Router<D> {
     Router::new()
         .route("/hls/{output}/master.m3u8", get(playlists::master::<D>))
         .route("/hls/{output}/manifest.mpd", get(playlists::dash::<D>))
+        .route("/hls/{output}/master-ts.m3u8", get(ts::master::<D>))
+        .route("/hls/{output}/{rung}/ts.m3u8", get(ts::media::<D>))
         .route("/hls/{output}/{rung}/index.m3u8", get(playlists::media::<D>))
         .route("/hls/{output}/{rung}/{file}", get(files::file::<D>))
         .with_state(door)
 }
 
-const PLAYLIST: &str = "application/vnd.apple.mpegurl";
+pub(crate) const PLAYLIST: &str = "application/vnd.apple.mpegurl";
 
 /// A refusal a player logs and a person can read: a status, and a JSON body
 /// with the message and what to do next.
@@ -102,7 +108,7 @@ fn playlist_response(text: String) -> Response {
 }
 
 /// A playlist or an MPD: text that changes every part and may not be kept.
-fn listing(text: String, content_type: &'static str) -> Response {
+pub(crate) fn listing(text: String, content_type: &'static str) -> Response {
     let mut r = (StatusCode::OK, text).into_response();
     let h = r.headers_mut();
     h.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
@@ -114,7 +120,7 @@ fn listing(text: String, content_type: &'static str) -> Response {
 
 /// Bytes the ring already holds, handed out by reference: the body is the
 /// ring's own `Bytes`, one per part, and nothing is copied per viewer.
-fn media_response(parts: Vec<Bytes>, content_type: &'static str, max_age: u32) -> Response {
+pub(crate) fn media_response(parts: Vec<Bytes>, content_type: &'static str, max_age: u32) -> Response {
     let len: usize = parts.iter().map(Bytes::len).sum();
     let stream = futures_util::stream::iter(parts.into_iter().map(Ok::<_, std::io::Error>));
     let mut r = Body::from_stream(stream).into_response();

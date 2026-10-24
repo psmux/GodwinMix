@@ -33,7 +33,7 @@ fn tag(kind: TagKind, ms: u32, key: bool, header: bool) -> MediaTag {
         TagKind::Video => if key || header { &[0x17, u8::from(!header), 0, 0, 0] } else { &[0x27, 1, 0, 0, 0] },
         _ => &[0xAF, u8::from(!header), 0x11, 0x90],
     };
-    MediaTag { kind, timestamp_ms: ms, keyframe: key, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ms, keyframe: key, sequence_header: header, payload: Arc::from(body) }
 }
 
 /// A channel stream is read straight off the hub, and a second publisher

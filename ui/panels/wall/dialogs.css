@@ -69,7 +69,12 @@
 .wl-doutname { display: grid; min-width: 0; }
 .wl-doutname strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wl-doutfmt { color: var(--dim); font-size: var(--fs-sm); white-space: nowrap; }
+.wl-dlinks { grid-column: 1 / -1; display: grid; gap: 4px; }
+.wl-dlink { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wl-dlink > .wl-sub:first-child { flex: none; width: 5.5em; }
+.wl-dlink code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
 .wl-dbox { display: grid; gap: 10px; padding: 12px; border: var(--border) solid var(--line); border-radius: var(--radius); }
+.wl-dhls { display: grid; gap: 8px; }
 @media (max-width: 760px) {
   .wl-detail { min-width: 0; }
   .wl-dgrid, .wl-dgrid.four { grid-template-columns: 1fr 1fr; }

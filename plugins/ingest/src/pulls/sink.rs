@@ -91,7 +91,7 @@ impl ToChannel {
         }
         self.announced = Some(gist);
         described["channel"] = json!(self.channel);
-        described["relay"] = json!(self.gate.relay.get().cloned().unwrap_or_default());
+        described["relay"] = json!(self.gate.relay_address());
         if let Some(r) = &self.gate.reporter {
             r.event("channel.stream", described);
         }

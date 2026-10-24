@@ -20,7 +20,7 @@ use crate::media_tag::{MediaTag, TagKind};
 const RTMP_VERSION: u8 = 3;
 
 /// Serve one accepted client until it goes, over TLS when `tls` is set.
-pub fn serve(stream: TcpStream, tls: Option<Arc<rustls::ServerConfig>>, gate: Arc<dyn Gate>, stop: &AtomicBool) {
+pub fn serve(stream: TcpStream, tls: Option<Arc<rustls::ServerConfig>>, gate: Arc<dyn Gate>, stop: &AtomicBool, who: &str) {
     let peer = stream.peer_addr().ok();
     let socket = match stream.try_clone() {
         Ok(s) => s,
@@ -42,6 +42,7 @@ pub fn serve(stream: TcpStream, tls: Option<Arc<rustls::ServerConfig>>, gate: Ar
         loopback: peer.is_some_and(|a| a.ip().is_loopback()),
         gate,
         inlets: HashMap::new(),
+        who: who.to_string(),
     };
     if let Err(e) = conn.run(stop) {
         conn.gate.note(format!("an RTMP connection from {} ended: {e}", conn.peer));
@@ -59,6 +60,8 @@ struct Connection {
     gate: Arc<dyn Gate>,
     /// What each published stream feeds, by the name it was published under.
     inlets: HashMap<String, Box<dyn Inlet>>,
+    /// The server's token, for a loopback client asking which server it reached.
+    who: String,
 }
 
 impl Connection {
@@ -79,7 +82,14 @@ impl Connection {
                 Got::Nothing => continue,
             };
             let bytes = &buffer[..read];
-            if std::mem::take(&mut first) && bytes[0] != RTMP_VERSION && self.loopback && self.io.is_plain() {
+            let opening = std::mem::take(&mut first);
+            if opening && self.loopback && self.io.is_plain() && bytes.starts_with(super::WHO) {
+                // The server asking whether 127.0.0.1 reaches it, or a reader
+                // making sure it reached this plugin. Answered and closed.
+                let _ = self.socket.write_all(format!("{}\n", self.who).as_bytes());
+                return Ok(());
+            }
+            if opening && bytes[0] != RTMP_VERSION && self.loopback && self.io.is_plain() {
                 // Not RTMP, from this machine: a reader asking the hub for a
                 // stream. It gets the socket and this thread becomes its writer.
                 // The relay keeps its own time: the publisher's timeouts are
@@ -187,6 +197,7 @@ impl Connection {
     fn push(&mut self, stream_key: &str, kind: TagKind, timestamp_ms: u32, body: &[u8]) {
         let Some(inlet) = self.inlets.get_mut(stream_key) else { return };
         inlet.tag(MediaTag {
+            track: 0,
             kind,
             timestamp_ms,
             keyframe: kind == TagKind::Video && codec::is_keyframe(body),

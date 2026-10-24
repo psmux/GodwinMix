@@ -35,6 +35,23 @@ pub struct ProgramInfo {
     pub streams: Vec<String>,
 }
 
+/// One elementary stream the input carries on the hub, as its PMT names it.
+/// The codec, channels and rate the frames themselves say are the hub's
+/// (`hub::meter`); `direct.input`'s `tracks` puts the two together.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrackInfo {
+    /// The tag's `track`: 0 for the video and the first sound, then 1, 2, 3.
+    pub track: u8,
+    /// `video` or `audio`.
+    pub kind: &'static str,
+    pub pid: Option<u16>,
+    /// ISO 639 code from the PMT's language descriptor: `eng`, `spa`.
+    pub lang: Option<String>,
+    /// Video coded as fields, each field a tag of its own, as `h264parse`
+    /// frames it. The input's `fps` is then frames, two fields to one.
+    pub field_coded: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct InputStats {
     pub state: State,
@@ -62,6 +79,12 @@ pub struct InputStats {
     pub programs: Vec<ProgramInfo>,
     /// While it waits to try again after a failure: how long it waits.
     pub retry_ms: Option<u64>,
+    /// Scrambled packets on the chosen program, counted since the input
+    /// started: a feed whose key is missing reads as nothing but this.
+    pub scrambled: u64,
+    /// Every stream carried, video first then sound by track. Empty from an
+    /// input that does not know its PIDs.
+    pub tracks: Vec<TrackInfo>,
 }
 
 impl InputStats {
@@ -77,6 +100,7 @@ impl InputStats {
             "audio_channels": self.audio_channels,
             "cc_errors": self.cc_errors,
             "packets_lost": self.packets_lost,
+            "scrambled": self.scrambled,
             "keyframe_ms": self.keyframe_ms,
             "last_frame_ms": self.last_frame_ms,
         });
@@ -106,7 +130,7 @@ mod tests {
         let s = InputStats { state: State::Live, kbps: 8000, ..InputStats::default() };
         let v = s.json();
         for key in ["kbps", "fps", "width", "height", "video_codec", "audio_codec", "audio_channels",
-                    "cc_errors", "packets_lost", "keyframe_ms", "last_frame_ms", "state"] {
+                    "cc_errors", "packets_lost", "scrambled", "keyframe_ms", "last_frame_ms", "state"] {
             assert!(v.get(key).is_some(), "{key} missing");
         }
         assert!(v.get("programs").is_none() && v.get("error").is_none());

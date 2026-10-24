@@ -1,6 +1,7 @@
 // The wall's clicks and keys against wall-stub.js: sorting, the filter,
-// grouping, the cursor, acknowledging, opening a show, the compositing
-// switch and its refusal, and a station without a show list or show.stats.
+// grouping, the cursor, acknowledging, opening a show, a closed show and
+// its Open, the compositing switch and its refusal, and a station without
+// a show list or show.stats.
 
 import { wallStub } from "./wall-stub.js";
 import { wait, until, sent, key, dialogs, closeDialogs, openOn } from "./wall-help.js";
@@ -84,6 +85,24 @@ export async function actTests(test, eq, ok) {
     ok([...document.querySelectorAll(".toast")].some((t) => /cannot go direct/.test(t.textContent)), "said");
   });
   view.close();
+
+  const shut = wallStub({ n: 3 });
+  Object.assign(shut.shows[1], { closed: true, state: "stopped" });
+  const kept = await openOn(shut);
+  const closedRow = kept.root.querySelector(`#wl-${shut.shows[1].id}`);
+  test("a show closed from its tab is on the wall, said to be closed, with Open", () => {
+    ok(/closed/.test(closedRow.querySelector(".wl-sub").textContent), closedRow.querySelector(".wl-sub").textContent);
+    ok(closedRow.querySelector(".wl-open"), "an Open button");
+    eq(kept.root.querySelectorAll(".wl-open").length, 1);
+  });
+  closedRow.querySelector(".wl-open").click();
+  await until(() => sent(shut, "show.open").length && dialogs().length);
+  test("Open puts it back in the tab row, then opens it as any show opens", () => {
+    eq(sent(shut, "show.open")[0].params, { id: shut.shows[1].id });
+    eq(dialogs().at(-1).querySelector("h2").textContent, shut.shows[1].name);
+  });
+  closeDialogs();
+  kept.close();
 
   const bare = wallStub({ noShows: true, n: 1 });
   const { toggleWall } = await import("../panels/wall/view.js");

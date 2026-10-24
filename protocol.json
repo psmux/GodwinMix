@@ -959,6 +959,17 @@
             "integer",
             "null"
           ]
+        },
+        "tracks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tracks"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The first sound track alone (when left out), or every one the source\ncarries, each converted on its own at its own channel count unless\n`channels` says otherwise."
         }
       },
       "type": "object"
@@ -1894,6 +1905,27 @@
       ],
       "type": "object"
     },
+    "ChannelAddRequest2": {
+      "additionalProperties": false,
+      "description": "`headend.channel.add`: one channel or many, made in one go.",
+      "properties": {
+        "channels": {
+          "items": {
+            "$ref": "#/$defs/HeadendChannel"
+          },
+          "type": "array"
+        },
+        "dry_run": {
+          "default": false,
+          "description": "True: check them and price them, and make nothing. Left out: false.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "channels"
+      ],
+      "type": "object"
+    },
     "ChannelAdded": {
       "description": "What `channel.add` answers: the channel and its first key.",
       "properties": {
@@ -1907,6 +1939,153 @@
       "required": [
         "channel",
         "key"
+      ],
+      "type": "object"
+    },
+    "ChannelBackup": {
+      "additionalProperties": false,
+      "description": "A channel's backup input: an input with no backup of its own.",
+      "properties": {
+        "interface": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "program": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "type": "object"
+    },
+    "ChannelBulkRequest": {
+      "additionalProperties": false,
+      "description": "`headend.channel.bulk`: the same change to many channels.",
+      "properties": {
+        "custom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TranscodeProfile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "With `profile` `custom`: the conversion every one of them takes."
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interface": {
+          "description": "Join every multicast input on this card. Empty: the default route's.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "description": "A profile for every one of them.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "names"
+      ],
+      "type": "object"
+    },
+    "ChannelChange": {
+      "description": "What an add, an update or a removal did.",
+      "properties": {
+        "done": {
+          "description": "The channels made, changed or removed, by name.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "refused": {
+          "description": "Each one that was not, with why. `index` is its place in the request.",
+          "items": {
+            "$ref": "#/$defs/ShowRefused"
+          },
+          "type": "array"
+        },
+        "restarted": {
+          "description": "Channels whose show had to be made again (input or conversion moved).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "done",
+        "refused",
+        "dry_run"
+      ],
+      "type": "object"
+    },
+    "ChannelEntry": {
+      "description": "A channel as `headend.channel.list` answers it.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/HeadendChannel"
+        },
+        "detached_from": {
+          "description": "Set for a channel that came from the followed file and was edited\nhere: the file it no longer follows. `headend.channel.follow` hands\nit back.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "follows": {
+          "description": "Set for a stream of the Flussonic config this station follows: the\nfile. An edit here takes the channel out of the file's hands (see\n`headend.channel.update`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "show": {
+          "description": "The show it runs as, once made.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "channel"
       ],
       "type": "object"
     },
@@ -1960,6 +2139,86 @@
       "required": [
         "kind",
         "state"
+      ],
+      "type": "object"
+    },
+    "ChannelHls": {
+      "additionalProperties": false,
+      "description": "The channel's HLS output, which every channel has.",
+      "properties": {
+        "access": {
+          "default": "open",
+          "description": "`open` (the default): no viewer key, answered on loopback and private\naddresses only, for a gateway or cache that checks its own. `keyed`:\na viewer key in every link.",
+          "type": "string"
+        },
+        "segment_ms": {
+          "default": 3400,
+          "description": "The longest a segment may be, in milliseconds. Cut at a keyframe.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "segments": {
+          "default": "both",
+          "description": "`both` (MPEG-TS and CMAF, the default), `ts` or `cmaf`.",
+          "type": "string"
+        },
+        "window": {
+          "description": "Seconds of segments kept in the playlist. Left out: the packager's.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ChannelInput": {
+      "additionalProperties": false,
+      "description": "Where a channel's programme comes from.",
+      "properties": {
+        "backup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelBackup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A second input, taken when this one stops and let go when it comes\nback."
+        },
+        "interface": {
+          "description": "The network card a multicast group is joined on, by name or by one\nof its IPv4 addresses. Left out: the one the default route uses.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Further params the input takes, as `docs/reference/direct-inputs.md`\nlists them: `passphrase` and `latency_ms` for SRT, `transport` for\nRTSP, `stall_ms` and `return_ms` for the switch to the backup.",
+          "type": "object"
+        },
+        "program": {
+          "description": "The MPEG-TS program number to take from a feed that carries several.\nLeft out: the first.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "The address, as a direct show's input takes it: `udp://@239.0.0.1:5000`\n(multicast), `udp://0.0.0.0:5000` (unicast to this machine),\n`rtp://@239.0.0.1:5000`, `srt://192.0.2.10:9000`, `srt://@:9000`,\n`rtmp://host/app/key`, `rtsp://192.0.2.20/stream1`,\n`https://example.com/live/index.m3u8` or `file:///clips/loop.ts`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
       ],
       "type": "object"
     },
@@ -2093,6 +2352,44 @@
       "required": [
         "channels",
         "rtmp"
+      ],
+      "type": "object"
+    },
+    "ChannelNames": {
+      "additionalProperties": false,
+      "description": "`headend.channel.remove` and `headend.channel.follow`.",
+      "properties": {
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "names"
+      ],
+      "type": "object"
+    },
+    "ChannelOutput": {
+      "additionalProperties": false,
+      "description": "One output beside the HLS one: a UDP multicast or unicast out, an SRT\nor RTMP push.",
+      "properties": {
+        "copy": {
+          "description": "True: sent as the input comes, whatever the channel's profile. Left\nout: the same conversion as the HLS output.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "A slug, unique in the channel. Left out: `push-1`, `push-2` in order.",
+          "type": "string"
+        },
+        "uri": {
+          "description": "`udp://239.0.1.1:5000`, `srt://192.0.2.30:9000`, `rtmp://host/app/key`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
       ],
       "type": "object"
     },
@@ -2349,6 +2646,25 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "ChannelUpdateRequest": {
+      "additionalProperties": false,
+      "description": "`headend.channel.update`: one channel, replaced whole.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/HeadendChannel",
+          "description": "What it becomes. A different `name` renames it, which changes its\npublic path and makes its show again."
+        },
+        "name": {
+          "description": "The channel's name now.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "channel"
       ],
       "type": "object"
     },
@@ -2945,6 +3261,23 @@
       ],
       "type": "object"
     },
+    "Deinterlace": {
+      "description": "Whether an interlaced picture is made progressive.",
+      "oneOf": [
+        {
+          "enum": [
+            "off",
+            "on"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Only pictures the stream marks as interlaced.",
+          "type": "string"
+        }
+      ]
+    },
     "Destination": {
       "description": "One destination as a client sees it. The key never appears: `has_key`\nsays whether there is one.",
       "properties": {
@@ -2991,6 +3324,17 @@
         },
         "label": {
           "type": "string"
+        },
+        "params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HlsOutputParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What an `hls://` output of a show without compositing was given, as\n`show.output.set` takes it, less the viewer key. Read while it runs."
         },
         "plan": {
           "anyOf": [
@@ -3545,6 +3889,21 @@
         "scene"
       ],
       "type": "object"
+    },
+    "EncoderPick": {
+      "description": "Where a rendition's picture is encoded, when it must be one or the other.",
+      "oneOf": [
+        {
+          "const": "gpu",
+          "description": "A hardware encoder: NVENC, Quick Sync, VideoToolbox or VA-API.",
+          "type": "string"
+        },
+        {
+          "const": "cpu",
+          "description": "A software encoder, such as x264.",
+          "type": "string"
+        }
+      ]
     },
     "EnrolRequest": {
       "properties": {
@@ -4553,6 +4912,26 @@
       "type": "object"
     },
     "Fit": {
+      "description": "How a picture goes into a size of another shape.",
+      "oneOf": [
+        {
+          "const": "pad",
+          "description": "Keep the whole picture and fill the rest with bars.",
+          "type": "string"
+        },
+        {
+          "const": "crop",
+          "description": "Fill the frame and cut what overhangs.",
+          "type": "string"
+        },
+        {
+          "const": "stretch",
+          "description": "Fill the frame and change the picture's shape.",
+          "type": "string"
+        }
+      ]
+    },
+    "Fit2": {
       "description": "How content fills its frame. SVG's vocabulary, which replaces OBS's seven\nbounds types and maps onto `sizing-policy` on a `glvideomixer` pad.",
       "oneOf": [
         {
@@ -6530,6 +6909,222 @@
       ],
       "type": "object"
     },
+    "GpuDevice": {
+      "description": "One GPU: what it is, its newest reading and the ones before it.",
+      "properties": {
+        "driver": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "history": {
+          "default": [],
+          "description": "One a second, oldest first, the last two minutes at most.",
+          "items": {
+            "$ref": "#/$defs/GpuSample"
+          },
+          "type": "array"
+        },
+        "index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "`NVIDIA GeForce RTX 3060`.",
+          "type": "string"
+        },
+        "now": {
+          "$ref": "#/$defs/GpuSample"
+        }
+      },
+      "required": [
+        "index",
+        "name",
+        "now"
+      ],
+      "type": "object"
+    },
+    "GpuSample": {
+      "description": "One reading of one GPU. A number the driver would not give is left out.",
+      "properties": {
+        "at_ms": {
+          "description": "Unix milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decoder_pct": {
+          "description": "NVDEC, percent.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "encoder_fps": {
+          "description": "The sessions' average frame rate.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "encoder_pct": {
+          "description": "NVENC, percent.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "encoder_sessions": {
+          "description": "Open NVENC sessions, every process on the machine.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fan_pct": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "gpu_pct": {
+          "description": "The 3D and compute engines, percent of the last sample period.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "graphics_mhz": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_mhz": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_total_mib": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_used_mib": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "power_limit_w": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "power_w": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "temperature_c": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "video_mhz": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "at_ms"
+      ],
+      "type": "object"
+    },
+    "GpuStatus": {
+      "description": "`gpu.status`'s answer.",
+      "properties": {
+        "every_ms": {
+          "description": "How often a reading is taken while someone asks.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpus": {
+          "items": {
+            "$ref": "#/$defs/GpuDevice"
+          },
+          "type": "array"
+        },
+        "note": {
+          "description": "Why there are no GPUs, or what is missing, in one sentence.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "`nvml`, `nvidia-smi`, or `none`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "every_ms",
+        "gpus"
+      ],
+      "type": "object"
+    },
+    "GpuStatusRequest": {
+      "description": "`gpu.status`.",
+      "properties": {
+        "since_ms": {
+          "description": "Only the history after this time, unix milliseconds: what a client\nthat already holds the rest asks for. Left out, the whole history.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "GraphicListing": {
       "description": "`scene.graphic.list`.",
       "properties": {
@@ -6597,6 +7192,296 @@
       },
       "required": [
         "sources"
+      ],
+      "type": "object"
+    },
+    "HeadendChannel": {
+      "additionalProperties": false,
+      "description": "One channel.",
+      "properties": {
+        "custom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TranscodeProfile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The conversion, when `profile` is `custom`. A Flussonic `transcoder`\nline is imported as one of these."
+        },
+        "enabled": {
+          "default": true,
+          "description": "False: kept, and its show stopped.",
+          "type": "boolean"
+        },
+        "hls": {
+          "$ref": "#/$defs/ChannelHls",
+          "default": {
+            "access": "open",
+            "segment_ms": 3400,
+            "segments": "both"
+          }
+        },
+        "input": {
+          "$ref": "#/$defs/ChannelInput"
+        },
+        "name": {
+          "description": "The channel's public name: letters, digits, `-`, `_` and `.`, up to\n64. It is the path every player and gateway uses,\n`/<name>/index.m3u8`, so it never changes once viewers have it. The\nshow's id is made from it.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it came from: `added here`, `import of <source>`, or\n`<file>, edited here`. Set by the station; ignored when sent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/ChannelOutput"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "default": "copy",
+          "description": "A profile's id from `headend.channel.list` (`copy` passes the input\nthrough as it comes), or `custom` with `custom` set.",
+          "type": "string"
+        },
+        "title": {
+          "description": "What the screen and the show list call it. Left out: the name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "input"
+      ],
+      "type": "object"
+    },
+    "HeadendEncoder": {
+      "description": "An encoder this machine has, for the profile editor's choice.",
+      "properties": {
+        "codec": {
+          "description": "`h264`, `h265`.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The catalogue's id, `h264-nvidia`, `x264`.",
+          "type": "string"
+        },
+        "on": {
+          "description": "`gpu` or `cpu`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "codec",
+        "on"
+      ],
+      "type": "object"
+    },
+    "HeadendExport": {
+      "description": "`headend.export`: the channels kept here in Flussonic's config language.",
+      "properties": {
+        "notes": {
+          "description": "What the text cannot say, one line each: a profile setting Flussonic\nhas no word for.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "HeadendImportReport": {
+      "description": "`headend.import`'s answer: the report, then what was made.",
+      "properties": {
+        "converted": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "copied": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disabled": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "following": {
+          "description": "The Flussonic config this station follows, when it follows one. A\nchannel made by an import is kept by the station, not in that file,\nand the file's own streams are not touched.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/ImportNote"
+          },
+          "type": "array"
+        },
+        "shows": {
+          "$ref": "#/$defs/ShowAddManyResult",
+          "description": "`show.add_many`'s answer for these shows: on a dry run what would be\nmade, what it costs and what would be refused; otherwise what was."
+        },
+        "source": {
+          "description": "`pasted text`, or the path that was read.",
+          "type": "string"
+        },
+        "streams": {
+          "items": {
+            "$ref": "#/$defs/ImportedStream"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "dry_run",
+        "streams",
+        "converted",
+        "copied",
+        "disabled",
+        "notes",
+        "shows"
+      ],
+      "type": "object"
+    },
+    "HeadendImportRequest": {
+      "additionalProperties": false,
+      "description": "`headend.import`. One of `text` and `path`.",
+      "properties": {
+        "dry_run": {
+          "description": "Left out: true. Read the config, price its shows and make nothing.\nFalse makes them.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Or a file on the station's machine, such as\n`/etc/flussonic/flussonic.conf`, read by the station.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "The config's text, as pasted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HeadendSetup": {
+      "description": "`headend.channel.list`.",
+      "properties": {
+        "channels": {
+          "description": "Every channel: the ones kept here, then the followed file's.",
+          "items": {
+            "$ref": "#/$defs/ChannelEntry"
+          },
+          "type": "array"
+        },
+        "encoders": {
+          "description": "The video encoders the planner may pick, GPU ones first.",
+          "items": {
+            "$ref": "#/$defs/HeadendEncoder"
+          },
+          "type": "array"
+        },
+        "following": {
+          "description": "The Flussonic config this station follows, when it follows one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profiles": {
+          "description": "The built in profiles, then the ones saved here.",
+          "items": {
+            "$ref": "#/$defs/TranscodeProfile"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "channels",
+        "profiles",
+        "encoders"
+      ],
+      "type": "object"
+    },
+    "HeadendStatus": {
+      "description": "`headend.status`: whether this station runs in headend mode.",
+      "properties": {
+        "file": {
+          "description": "The file it follows.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "following": {
+          "description": "True while the station follows a Flussonic config\n(`godwinmix headend --flussonic FILE`).",
+          "type": "boolean"
+        },
+        "listeners": {
+          "description": "Where Flussonic's URLs and API answer, `address:port`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "log": {
+          "description": "The Flussonic style log, when one is written.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "What a reader of this answer can do next, in one sentence.",
+          "type": "string"
+        },
+        "shows": {
+          "description": "Of those, the ones running as a show.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "streams": {
+          "description": "Streams in the file as last read.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "following",
+        "streams",
+        "shows",
+        "note"
       ],
       "type": "object"
     },
@@ -6767,8 +7652,22 @@
       "additionalProperties": false,
       "description": "An `hls://` output's params, as an `hls/output` takes them.",
       "properties": {
+        "access": {
+          "description": "`keyed` (the default) or `open`: whether a player needs the viewer key.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "low_latency": {
           "description": "true: parts of 333 ms.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "open_public": {
+          "description": "With `access = \"open\"`, answer players outside loopback and the\nprivate networks too.",
           "type": [
             "boolean",
             "null"
@@ -6789,6 +7688,13 @@
           "minimum": 0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "segments": {
+          "description": "`cmaf` (the default), `ts` or `both`: which segments are made.",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -6825,6 +7731,35 @@
       },
       "required": [
         "id"
+      ],
+      "type": "object"
+    },
+    "ImportNote": {
+      "description": "A line the import read and does not act on, or acts on differently.",
+      "properties": {
+        "kind": {
+          "description": "`ignored`: nothing in GodwinMix uses it. `not_carried`: understood,\nand GodwinMix does something else, which `what` says.",
+          "type": "string"
+        },
+        "line": {
+          "description": "0 when the note is about the whole config.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scope": {
+          "description": "`global`, or `stream NAME`.",
+          "type": "string"
+        },
+        "what": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "line",
+        "kind",
+        "what"
       ],
       "type": "object"
     },
@@ -7018,6 +7953,45 @@
       ],
       "type": "object"
     },
+    "ImportedStream": {
+      "description": "One `stream` of the config, as the show it becomes.",
+      "properties": {
+        "copy": {
+          "description": "No `transcoder`: the input is served as it comes.",
+          "type": "boolean"
+        },
+        "disabled": {
+          "description": "`disabled true`: the show is made and stopped.",
+          "type": "boolean"
+        },
+        "input": {
+          "description": "The show's input, as `show.add` takes it, with any password in an\naddress shown as `***`."
+        },
+        "name": {
+          "description": "Flussonic's name, the show's name when it is made.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "The show's outputs: the HLS output with its params and rendition,\nthen one per `push`.",
+          "items": true,
+          "type": "array"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "disabled",
+        "copy",
+        "input",
+        "outputs"
+      ],
+      "type": "object"
+    },
     "InputSpec": {
       "description": "What a show without compositing takes in. A show that composites makes\nits input its one source.",
       "properties": {
@@ -7072,6 +8046,14 @@
         "audio_codec": {
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "audio_peak_db": {
+          "description": "The first sound track's peak in dBFS over a short burst, measured\nabout once a second while the show's alarms are on or its picture is\nasked for; -120 is digital silence. Left out while unmeasured.",
+          "format": "double",
+          "type": [
+            "number",
             "null"
           ]
         },
@@ -7917,6 +8899,77 @@
       },
       "required": [
         "level"
+      ],
+      "type": "object"
+    },
+    "MachineStatus": {
+      "description": "`machine.status`'s answer: the box, not one process.",
+      "properties": {
+        "cores": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cpu_pct": {
+          "description": "Every process on the machine, percent of all cores, over the last\nsecond. Left out until two readings have been taken.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "host_name": {
+          "type": "string"
+        },
+        "load_average": {
+          "description": "One, five and fifteen minutes, where the system keeps them.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "memory_available_mib": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "memory_total_mib": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "process_uptime_secs": {
+          "description": "Since this process started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "uptime_secs": {
+          "description": "Since the machine booted.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "host_name",
+        "cores",
+        "process_uptime_secs"
       ],
       "type": "object"
     },
@@ -9181,6 +10234,13 @@
           "default": "",
           "description": "waiting, connecting, live, reconnecting, failed, or off.",
           "type": "string"
+        },
+        "steps": {
+          "description": "What its picture goes through, in order: the decode, the scale and\nthe encode, for an output that converts. Empty for a copy.",
+          "items": {
+            "$ref": "#/$defs/OutputStep"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -9251,6 +10311,38 @@
         "state",
         "reconnects",
         "queue_secs"
+      ],
+      "type": "object"
+    },
+    "OutputStep": {
+      "description": "One step of an output's conversion.",
+      "properties": {
+        "accel": {
+          "description": "The hardware family, `nvidia`, for a step that uses some.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "element": {
+          "description": "The GStreamer element that does it, `nvh264enc`, where the plan\nnames one. A scale on the CPU leaves the choice to the host.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gpu": {
+          "default": false,
+          "description": "Whether it runs on a GPU, its pictures in the GPU's memory.",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "`decode`, `scale` or `encode`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
       ],
       "type": "object"
     },
@@ -10053,12 +11145,29 @@
     "Playback": {
       "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
       "properties": {
+        "access": {
+          "description": "`keyed` (a player needs the viewer key) or `open`.",
+          "type": "string"
+        },
         "dash_url_path": {
           "description": "The same segments as a DASH MPD.",
           "type": "string"
         },
         "master_url_path": {
           "description": "`/hls/viewers/master.m3u8?show=bbc-one&key=...`.",
+          "type": "string"
+        },
+        "segment_ms": {
+          "description": "The length segments are cut to, in milliseconds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "segments": {
+          "description": "Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out\nwhere the server does not say.",
           "type": "string"
         },
         "viewers": {
@@ -10605,6 +11714,59 @@
         "target",
         "path",
         "transport"
+      ],
+      "type": "object"
+    },
+    "ProfileChange": {
+      "description": "`headend.profile.save` and `headend.profile.remove`.",
+      "properties": {
+        "channels": {
+          "description": "The channels that take it, whose shows follow the change.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "channels"
+      ],
+      "type": "object"
+    },
+    "ProfileRemoveRequest": {
+      "additionalProperties": false,
+      "description": "`headend.profile.remove`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "move_to": {
+          "description": "The profile the channels that take this one move to. Left out, a\nprofile some channel takes is not removed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ProfileSaveRequest": {
+      "additionalProperties": false,
+      "description": "`headend.profile.save`.",
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/TranscodeProfile"
+        }
+      },
+      "required": [
+        "profile"
       ],
       "type": "object"
     },
@@ -11374,6 +12536,194 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "ScanRequest": {
+      "additionalProperties": false,
+      "description": "`headend.scan`.",
+      "properties": {
+        "interface": {
+          "description": "The card to join a multicast group on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "The feed: `udp://@239.0.0.1:5000`, `rtp://@239.0.0.1:5000`, a\nunicast `udp://0.0.0.0:5000`, or any other MPEG-TS input a channel\ntakes.",
+          "type": "string"
+        },
+        "wait_ms": {
+          "description": "The longest to listen, in milliseconds, 2000 to 20000. Left out: 8000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "type": "object"
+    },
+    "ScanResult": {
+      "description": "`headend.scan`'s answer.",
+      "properties": {
+        "error": {
+          "description": "Set when nothing was read: what the input said, and what to check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listened_ms": {
+          "description": "How long it listened.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "programs": {
+          "items": {
+            "$ref": "#/$defs/ScannedProgram"
+          },
+          "type": "array"
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri",
+        "programs",
+        "listened_ms"
+      ],
+      "type": "object"
+    },
+    "ScannedProgram": {
+      "description": "One program of the multiplex.",
+      "properties": {
+        "channel": {
+          "description": "The channel that already takes this program from this feed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kbps": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "From the SDT, when the feed sends one.",
+          "type": "string"
+        },
+        "number": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "scrambled": {
+          "description": "Scrambled packets seen: a program whose key is missing here.",
+          "type": "boolean"
+        },
+        "streams": {
+          "description": "What the PMT lists, in its order: `h264`, `aac`, `teletext`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tracks": {
+          "description": "The video and sound tracks with what their frames said in the time\nlistened. Empty when the program sent no frame in that time.",
+          "items": {
+            "$ref": "#/$defs/ScannedTrack"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "number",
+        "streams"
+      ],
+      "type": "object"
+    },
+    "ScannedTrack": {
+      "description": "One elementary stream of a program, as its PMT names it and its frames\nshow it.",
+      "properties": {
+        "channels": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "codec": {
+          "description": "`h264`, `mpeg2`, `aac`, `ac3`.",
+          "type": "string"
+        },
+        "fps": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "interlaced": {
+          "description": "The picture is sent as fields (1080i, 480i).",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "`video` or `audio`.",
+          "type": "string"
+        },
+        "lang": {
+          "description": "ISO 639 code from the PMT, `eng`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pid": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "codec"
       ],
       "type": "object"
     },
@@ -12246,6 +13596,11 @@
           ],
           "description": "The alarms a person set for it, when they set any."
         },
+        "closed": {
+          "default": false,
+          "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+          "type": "boolean"
+        },
         "compositing": {
           "default": true,
           "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
@@ -12492,6 +13847,23 @@
       },
       "required": [
         "show"
+      ],
+      "type": "object"
+    },
+    "ShowCloseRequest": {
+      "description": "`show.close`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "keep_running": {
+          "default": false,
+          "description": "true: it leaves the tab row and carries on, on air and sending, the\nway the desktop app keeps running in the background. Left out or\nfalse: it stops as well, and stays stopped across a restart of the\nstation until `show.open`.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     },
@@ -12914,6 +14286,11 @@
             }
           ],
           "description": "The alarms a person set for it, when they set any."
+        },
+        "closed": {
+          "default": false,
+          "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+          "type": "boolean"
         },
         "compositing": {
           "default": true,
@@ -14559,6 +15936,53 @@
       ],
       "type": "object"
     },
+    "Tracks": {
+      "description": "Which sound tracks a rendition converts.",
+      "enum": [
+        "first",
+        "all"
+      ],
+      "type": "string"
+    },
+    "TranscodeProfile": {
+      "additionalProperties": false,
+      "description": "One conversion. `video` and `audio` are a rendition's wants: left out,\nthat half is passed through as it comes, so a profile with neither is a\npass through.",
+      "properties": {
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioWant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "builtin": {
+          "description": "True for a built in profile, which cannot be changed or removed. Set\nby the station; ignored when sent.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "A slug. The built in ones are listed by `headend.channel.list`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the screen calls it.",
+          "type": "string"
+        },
+        "video": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoWant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Transform": {
       "additionalProperties": false,
       "description": "Where an item sits and how it is sized.",
@@ -14576,7 +16000,7 @@
           "description": "Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5)\ncentre, (1,1) bottom right."
         },
         "fit": {
-          "$ref": "#/$defs/Fit",
+          "$ref": "#/$defs/Fit2",
           "default": "none"
         },
         "frame": {
@@ -14966,6 +16390,16 @@
     "VideoWant": {
       "description": "The video an output wants. Every field left out is taken from the source.",
       "properties": {
+        "bframes": {
+          "description": "B frames between references. The catalogue's (none, for live) when\nleft out.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "bitrate_kbps": {
           "description": "Target bitrate. A copy is kept when the source is within\n`bitrate_tolerance` of it.",
           "format": "uint32",
@@ -14993,6 +16427,39 @@
             }
           ]
         },
+        "deinterlace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Deinterlace"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Off when left out: an interlaced picture is scaled as it comes."
+        },
+        "encoder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EncoderPick"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only a GPU encoder, or only one on the CPU. Left out, the planner\ntakes a GPU encoder first and the CPU when the GPU is full or has\nnone of this codec."
+        },
+        "fit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How a picture of another shape goes into the size asked for. Pad when\nleft out, in black, which is what scaling has always done."
+        },
         "fps": {
           "anyOf": [
             {
@@ -15011,12 +16478,35 @@
             "null"
           ]
         },
+        "keyframe_frames": {
+          "description": "Keyframe interval in frames of the source's own rate, as Flussonic's\n`gop` is written. Taken over `keyframe_ms` when both are set.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "keyframe_ms": {
           "description": "Keyframe interval. Renditions in one ladder share it.",
           "format": "uint32",
           "minimum": 0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "pad_color": {
+          "description": "The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preset": {
+          "description": "The encoder's speed and quality preset in its own words (`p4` on\nNVENC, `veryfast` on x264). The catalogue's when left out.",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -18512,6 +20002,350 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "headend",
+        "readOnlyHint": true,
+        "tool": "gpu_status"
+      },
+      "mutating": false,
+      "name": "gpu.status",
+      "params": {
+        "$ref": "#/$defs/GpuStatusRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/gpu/status"
+      },
+      "result": {
+        "$ref": "#/$defs/GpuStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "add_headend_channels"
+      },
+      "mutating": true,
+      "name": "headend.channel.add",
+      "params": {
+        "$ref": "#/$defs/ChannelAddRequest2"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/channel/add"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "bulk_edit_headend_channels"
+      },
+      "mutating": true,
+      "name": "headend.channel.bulk",
+      "params": {
+        "$ref": "#/$defs/ChannelBulkRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/channel/bulk"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "follow_flussonic_again"
+      },
+      "mutating": true,
+      "name": "headend.channel.follow",
+      "params": {
+        "$ref": "#/$defs/ChannelNames"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/channel/follow"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "headend_channels"
+      },
+      "mutating": false,
+      "name": "headend.channel.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/headend/channel/list"
+      },
+      "result": {
+        "$ref": "#/$defs/HeadendSetup"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_headend_channels"
+      },
+      "mutating": true,
+      "name": "headend.channel.remove",
+      "params": {
+        "$ref": "#/$defs/ChannelNames"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/channel/remove"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "update_headend_channel"
+      },
+      "mutating": true,
+      "name": "headend.channel.update",
+      "params": {
+        "$ref": "#/$defs/ChannelUpdateRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/channel/update"
+      },
+      "result": {
+        "$ref": "#/$defs/ChannelChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "export_flussonic"
+      },
+      "mutating": false,
+      "name": "headend.export",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/export"
+      },
+      "result": {
+        "$ref": "#/$defs/HeadendExport"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "import_flussonic"
+      },
+      "mutating": true,
+      "name": "headend.import",
+      "params": {
+        "$ref": "#/$defs/HeadendImportRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/import"
+      },
+      "result": {
+        "$ref": "#/$defs/HeadendImportReport"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_transcode_profile"
+      },
+      "mutating": true,
+      "name": "headend.profile.remove",
+      "params": {
+        "$ref": "#/$defs/ProfileRemoveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/profile/remove"
+      },
+      "result": {
+        "$ref": "#/$defs/ProfileChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "save_transcode_profile"
+      },
+      "mutating": true,
+      "name": "headend.profile.save",
+      "params": {
+        "$ref": "#/$defs/ProfileSaveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/profile/save"
+      },
+      "result": {
+        "$ref": "#/$defs/ProfileChange"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "scan_feed"
+      },
+      "mutating": false,
+      "name": "headend.scan",
+      "params": {
+        "$ref": "#/$defs/ScanRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/scan"
+      },
+      "result": {
+        "$ref": "#/$defs/ScanResult"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "headend_status"
+      },
+      "mutating": false,
+      "name": "headend.status",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/headend/status"
+      },
+      "result": {
+        "$ref": "#/$defs/HeadendStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mutating": true,
       "name": "log.gst",
       "params": {
@@ -18567,6 +20401,34 @@
       "scope": "admin",
       "since": "1",
       "summary": "Change one instance's or one module's log level while the mixer runs."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "headend",
+        "readOnlyHint": true,
+        "tool": "machine_status"
+      },
+      "mutating": false,
+      "name": "machine.status",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/machine/status"
+      },
+      "result": {
+        "$ref": "#/$defs/MachineStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average."
     },
     {
       "destructive": false,
@@ -21195,6 +23057,25 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mutating": true,
+      "name": "show.close",
+      "params": {
+        "$ref": "#/$defs/ShowCloseRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/close"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
@@ -21219,6 +23100,25 @@
       "scope": "read",
       "since": "1",
       "summary": "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.open",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/open"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Put a closed show back in the tab row. One that closing stopped starts again."
     },
     {
       "destructive": false,
@@ -22374,7 +24274,7 @@
     },
     {
       "method": "GET",
-      "note": "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read",
+      "note": "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read, or with nothing from loopback and private networks when params.access is open",
       "path": "/hls/{output}/master.m3u8"
     },
     {
@@ -22389,8 +24289,18 @@
     },
     {
       "method": "GET",
-      "note": "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory",
+      "note": "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, or an MPEG-TS segment {start_ms}.ts, from memory",
       "path": "/hls/{output}/{rung}/{file}"
+    },
+    {
+      "method": "GET",
+      "note": "an hls/output's MPEG-TS multivariant playlist, with params.segments ts or both: main carries the picture and the first sound, each further sound is its own rendition. The same keys as master.m3u8",
+      "path": "/hls/{output}/master-ts.m3u8"
+    },
+    {
+      "method": "GET",
+      "note": "an MPEG-TS media playlist, main or audio<n>; segments named by their UTC start in ms",
+      "path": "/hls/{output}/{rung}/ts.m3u8"
     }
   ]
 }

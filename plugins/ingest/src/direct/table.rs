@@ -4,8 +4,8 @@
 
 use serde_json::Value;
 
-use super::input::spec::InputSpec;
-use crate::sends::{destination, Wanted};
+use super::input::spec::{Carry, InputSpec};
+use crate::sends::{destination, Feed, Wanted};
 use crate::transcode::{stream_specs, StreamSpec};
 
 /// The one stream a direct show publishes on the hub.
@@ -64,7 +64,7 @@ fn row(r: &Value) -> Result<Row, String> {
         Ok(input) => (input, None),
         Err(e) => {
             let uri = raw.get("uri").and_then(Value::as_str).unwrap_or_default();
-            (InputSpec { uri: uri.to_string(), program: None, params: Value::Null, backup: None }, Some(e.message))
+            (InputSpec { params: Value::Null, ..InputSpec::new(uri) }, Some(e.message))
         }
     };
     let app = app_of(&id);
@@ -78,7 +78,12 @@ fn row(r: &Value) -> Result<Row, String> {
             w.stream = STREAM.into();
             w
         })
-        .collect();
+        .collect::<Vec<Wanted>>();
+    let mut input = input;
+    input.carry = carry(r, &outputs);
+    if let Some(b) = input.backup.as_mut() {
+        b.carry = input.carry;
+    }
     Ok(Row {
         name: r.get("name").and_then(Value::as_str).unwrap_or(&id).to_string(),
         input,
@@ -88,4 +93,13 @@ fn row(r: &Value) -> Result<Row, String> {
         refused,
         id,
     })
+}
+
+/// What the input carries for this row: MPEG-2 video whenever an output
+/// converts (a copy cannot send it anyway), and every sound track when the
+/// station asks in the row's `carry`.
+fn carry(r: &Value, outputs: &[Wanted]) -> Carry {
+    let asked = |k: &str| r.get("carry").and_then(|c| c.get(k)).and_then(Value::as_bool).unwrap_or(false);
+    let converts = outputs.iter().any(|w| matches!(w.feed, Feed::Rendition { .. }));
+    Carry { mpeg2: converts || asked("mpeg2"), tracks: asked("tracks") }
 }

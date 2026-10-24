@@ -24,21 +24,25 @@ export function formatStep(client, opts = {}) {
   const extra = el("div.rnd-customwrap", { hidden: true });
   const lede = el("span.rnd-dim", { text: "Reading what this machine can make" });
   const node = el("section.rnd-step", {}, [el("div.rnd-steph", {}, [el("span.rnd-kicker", { text: "Format" }), lede]), cards, extra]);
-  const state = { choice: undefined, first: undefined, custom: null, presets: null };
+  const state = { choice: undefined, first: undefined, custom: null, presets: null, room: 0 };
 
   const pick = async (id) => {
     state.choice = id;
     for (const c of cards.children) c.setAttribute("aria-checked", String(c.dataset.id === id));
     extra.hidden = id !== "custom";
     if (id === "custom" && !state.custom) {
-      state.custom = await customForm({ request: opts.current && !opts.current.preset ? opts.current : null, codecs: codecsOf(state.presets) });
+      // The Custom card's badge follows the form, as a preset's does its request.
+      const badge = () => customBadge(cards, state.custom && state.custom.request("custom"), state.room);
+      state.custom = await customForm({ request: opts.current && !opts.current.preset ? opts.current : null, codecs: codecsOf(state.presets), onChange: badge });
       extra.appendChild(state.custom.el);
+      badge();
     }
   };
 
   const ready = (async () => {
     const [presets, room, shape] = await Promise.all([loadPresets(client), roomNow(client), Promise.resolve(opts.shape)]);
     state.presets = presets;
+    state.room = room;
     if (!presets) {
       // A core with no renditions: the output is what it always was.
       node.hidden = true;
@@ -103,6 +107,15 @@ function presetCard(p, room, suggestedFor, pick) {
 
 function customCard(pick) {
   return card("custom", "Custom", "Codec, size, rate and bitrate", null, "", pick);
+}
+
+function customBadge(cards, request, room) {
+  const top = cards.querySelector('.rnd-card[data-id="custom"] .rnd-ctop');
+  if (!top || !request) return;
+  const kind = costClass({ id: "custom", request }, room);
+  const b = top.querySelector(".rnd-badge") || top.appendChild(el("span.rnd-badge"));
+  b.className = `rnd-badge ${kind}`;
+  b.textContent = COST_WORDS[kind];
 }
 
 /** The video codecs some available preset uses, which the machine can therefore encode. */

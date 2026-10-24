@@ -133,6 +133,8 @@ impl Channels {
                 declared_fps: None,
                 measured: None,
                 source_error: None,
+                more_audio: Vec::new(),
+                interlaced: false,
             });
         }
     }

@@ -24,7 +24,14 @@ pub struct Options {
     pub supervised: bool,
     /// Flags every show is started with as well.
     pub common: Vec<String>,
+    /// False for a headend: no show that composites is started, so the
+    /// station runs direct shows and nothing else.
+    pub mixing: bool,
+    /// Called once the control port is bound, with the station.
+    pub ready: Option<Ready>,
 }
+
+pub type Ready = Box<dyn FnOnce(Arc<Station>) + Send>;
 
 pub async fn run(opts: Options) -> Result<()> {
     let cfg = Config::load(&opts.config).with_context(|| format!("could not load {}", opts.config.display()))?;
@@ -36,6 +43,8 @@ pub async fn run(opts: Options) -> Result<()> {
     // every show reads the same file (see `child::command`).
     let tokens = Arc::new(cfg.tokens(opts.rehearsal).with_devices(crate::devices::for_station(&opts.config)));
     crate::ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    // When this process started, for machine.status.
+    crate::control::methods::lifecycle::started_ms();
     let _ = godwinmix_core::catalogue::init(Some(&cfg), opts.codecs.as_deref());
     let runtime = core_observe::runtime_dir(&opts.config);
     load_plugins(&cfg, &tokens, &runtime);
@@ -56,6 +65,7 @@ pub async fn run(opts: Options) -> Result<()> {
     let exe = std::env::current_exe().context("finding this program, to start the shows with")?;
     let launch = Launch { exe, common: opts.common.clone(), calibration: Some(runtime.clone()) };
     let st = Station::new(Registry::open(&opts.config)?, events.clone(), tokens, render.clone(), launch);
+    stand_in(&st, &opts, &cfg, &bind);
     super::direct::inputs::seal_written(&st);
     let addr = link::listen(Arc::new(Linked(st.clone()))).await.context("opening the show link")?;
     let _ = st.link.set(addr);
@@ -65,7 +75,10 @@ pub async fn run(opts: Options) -> Result<()> {
     let tls = crate::tls::start(&cfg, &bind, &opts.config, &events);
     let ingest = open_channels(&st, &cfg, &opts.config, events);
     render.begin();
-    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect();
+    let starting: Vec<String> = match opts.mixing {
+        true => st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect(),
+        false => Vec::new(),
+    };
     for id in &starting {
         supervise::start(&st, id);
     }
@@ -78,6 +91,9 @@ pub async fn run(opts: Options) -> Result<()> {
     }
     let app = server::router(st.clone());
     let serving = tokio::spawn(crate::tls::serve(listener, app, tls.map(|t| t.acceptor)));
+    if let Some(ready) = opts.ready {
+        ready(st.clone());
+    }
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
@@ -92,6 +108,16 @@ pub async fn run(opts: Options) -> Result<()> {
     let _ = tokio::task::spawn_blocking(move || ingest.shutdown()).await;
     serving.abort();
     Ok(())
+}
+
+/// What the station answers for a show that is not running: its own
+/// `core.info` and its config file (`alone.rs`).
+fn stand_in(st: &Station, opts: &Options, cfg: &Config, bind: &str) {
+    let path = std::path::absolute(&opts.config).unwrap_or_else(|_| opts.config.clone());
+    let overrides: &[(&str, &str)] = if bind != cfg.control.bind { &[("control.bind", "--bind")] } else { &[] };
+    crate::control::methods::config::configure(cfg, overrides);
+    crate::control::methods::presets::configure(&path, cfg.ui.clone());
+    let _ = st.alone.set(super::alone::Own::new(path, cfg, opts.rehearsal));
 }
 
 /// SIGTERM (a service manager) or SIGHUP (the terminal closed): stop every
@@ -154,6 +180,8 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     let _ = st.channels.set(channels);
     super::direct::Direct::attach(st, supervisor.clone());
     super::direct::hls::channel::Links::attach(st);
+    // The headend channels the station keeps, if it keeps any.
+    crate::headend::native::start(st);
     let (starting, station) = (supervisor.clone(), st.clone());
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {

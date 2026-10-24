@@ -263,6 +263,11 @@ fn record(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>, 
             }
         };
         put(format!("\n--- mixer started {} ---\n", stamp()).as_bytes());
+        // What the shell found while putting the plugins in place, such as a
+        // copy the operator installed running in place of the bundled one.
+        for line in crate::plugins::take_notes() {
+            put(format!("[desktop] {line}\n").as_bytes());
+        }
         while let Some(event) = rx.recv().await {
             match event {
                 CommandEvent::Stdout(line) | CommandEvent::Stderr(line) => {

@@ -72,7 +72,9 @@ impl Direct {
             })
             .collect();
         self.replan(&shows);
-        Value::Array(shows.iter().map(|(r, o)| self.row(r, o)).collect())
+        let mut rows: Vec<Value> = shows.iter().map(|(r, o)| self.row(r, o)).collect();
+        rows.extend(self.probes.rows());
+        Value::Array(rows)
     }
 
     fn row(&self, r: &Record, outs: &[StoredDestination]) -> Value {
@@ -94,6 +96,7 @@ impl Direct {
         if let Some(streams) = self.transcode.streams(&r.id) {
             row["transcode"] = streams;
         }
+        row["carry"] = carry(outs);
         strip_nulls(&mut row);
         row
     }
@@ -112,6 +115,22 @@ impl Direct {
             }
         }
     }
+}
+
+/// What the input carries beyond one video and one sound, from what the
+/// show's outputs ask, never from what the plan gave them: MPEG-2 for any
+/// output with a rendition, every sound track for one that converts them
+/// all. Taken from the plan, a rendition refused because the first word on
+/// the input had no picture yet (MPEG-2 is carried only for a rendition)
+/// left the output out of the row, the host stopped carrying MPEG-2, the
+/// picture never came, and the refusal stood for good: 24 of 52 channels
+/// of a headend import, four minutes in.
+fn carry(outs: &[StoredDestination]) -> Value {
+    let on = || outs.iter().filter(|d| d.enabled);
+    json!({
+        "mpeg2": on().any(|d| d.rendition.is_some()),
+        "tracks": on().any(crate::channels::transcode::every_track),
+    })
 }
 
 /// What the host watches: black, freeze and silence on by default for a

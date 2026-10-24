@@ -89,6 +89,12 @@ pub struct Station {
     pub list_cache: super::list::ListCache,
     /// Switches of compositing under way, as tasks `task.get` reads.
     pub switches: super::switch::Switches,
+    /// The Flussonic config this station follows, in headend mode.
+    pub headend: OnceLock<std::sync::Weak<crate::headend::Headend>>,
+    /// The headend channels the station keeps itself, read on first use.
+    pub native: OnceLock<Arc<crate::headend::native::Native>>,
+    /// What the station says of itself for a show that is not running.
+    pub alone: OnceLock<super::alone::Own>,
 }
 
 impl Station {
@@ -116,6 +122,9 @@ impl Station {
             direct,
             list_cache: Default::default(),
             switches: Default::default(),
+            headend: OnceLock::new(),
+            native: OnceLock::new(),
+            alone: OnceLock::new(),
         })
     }
 

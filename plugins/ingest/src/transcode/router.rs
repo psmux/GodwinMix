@@ -6,16 +6,19 @@
 //! sound is an audio encoder's or the stream's own. Nothing is sent for a
 //! pair until its video has a keyframe, and no sound older than that
 //! keyframe, so every destination starts on a picture it can decode.
+//!
+//! A pair may carry further sound tracks, each from a node of its own: they
+//! go out as tracks 1, 2, 3 of the same publication, which only a reader of
+//! every track is given (`Hub::subscribe_all`).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard};
 
-use rml_rtmp::sessions::StreamMetadata;
 use serde_json::Value;
 
+use super::meta::metadata;
 use super::sink::Route;
-use crate::flv;
 use crate::hub::{Hub, Publication};
 use crate::media_tag::{MediaTag, TagKind};
 
@@ -25,6 +28,24 @@ pub struct Output {
     pub key: String,
     pub video: Option<String>,
     pub audio: Option<String>,
+    /// The node of each further sound track, track 1 first.
+    pub tracks: Vec<String>,
+}
+
+impl Output {
+    /// The track a producer's tags go out as in this pair, if it feeds it:
+    /// 0 for its video and first sound, 1, 2, 3 for the others.
+    fn track_of(&self, node: &str) -> Option<u8> {
+        if self.video.as_deref() == Some(node) || self.audio.as_deref() == Some(node) {
+            return Some(0);
+        }
+        self.tracks.iter().position(|t| t == node).map(|i| u8::try_from(i + 1).unwrap_or(u8::MAX))
+    }
+}
+
+/// `tag` as track `n`; the payload is shared, never copied.
+fn numbered(tag: &MediaTag, n: u8) -> MediaTag {
+    MediaTag { track: n, ..tag.clone() }
 }
 
 struct Open {
@@ -35,15 +56,24 @@ struct Open {
 }
 
 #[derive(Default)]
-struct Inner {
+pub(super) struct Inner {
     wanted: Vec<Output>,
     open: Vec<Open>,
     live: bool,
     /// The newest sequence header of each producer, for a pair opened late.
-    headers: HashMap<String, MediaTag>,
-    script: Option<MediaTag>,
+    pub(super) headers: HashMap<String, MediaTag>,
+    pub(super) script: Option<MediaTag>,
     /// Each node's description, for the metadata of a pair it feeds.
-    nodes: HashMap<String, Value>,
+    pub(super) nodes: HashMap<String, Value>,
+}
+
+/// Whether every AAC encoder a pair's sound comes from has given its header.
+/// A pair starts on a keyframe only once they have: started on NVENC's
+/// first keyframe, which comes before the first AAC frame, a reader (the
+/// HLS packager) began without the sound, built its pipeline again when the
+/// header came, and its MPEG-TS cutter never lined up with the CMAF after.
+fn sound_ready(o: &Output, encodes: &[String], headers: &[String]) -> bool {
+    o.audio.iter().chain(&o.tracks).filter(|n| encodes.contains(n)).all(|n| headers.contains(n))
 }
 
 /// Where a converted stream's decoded pictures go, when someone asked.
@@ -112,9 +142,9 @@ impl Router {
             let Ok(publication) = self.hub.publish_via(&self.app, &output.key, "transcode", None, "transcode") else { continue };
             let script = metadata(inner, &output, self.base.load(Ordering::Relaxed));
             publication.push(script);
-            for producer in [&output.video, &output.audio].into_iter().flatten() {
-                if let Some(h) = inner.headers.get(producer) {
-                    publication.push(h.clone());
+            for producer in [&output.video, &output.audio].into_iter().flatten().chain(&output.tracks) {
+                if let (Some(h), Some(n)) = (inner.headers.get(producer), output.track_of(producer)) {
+                    publication.push(numbered(h, n));
                 }
             }
             inner.open.push(Open { output, publication, started: None });
@@ -127,7 +157,11 @@ impl Router {
         match tag.kind {
             TagKind::Script => self.lock().script = Some(tag),
             TagKind::Video => self.tag(&format!("copy:{stream}:video"), tag),
-            TagKind::Audio => self.tag(&format!("copy:{stream}:audio"), tag),
+            TagKind::Audio if tag.track == 0 => self.tag(&format!("copy:{stream}:audio"), tag),
+            TagKind::Audio => {
+                let node = format!("copy:{stream}:audio{}", tag.track);
+                self.tag(&node, tag)
+            }
         }
     }
 }
@@ -138,13 +172,16 @@ impl Route for Router {
         if tag.sequence_header {
             inner.headers.insert(node.to_string(), tag.clone());
         }
+        let headers: Vec<String> = inner.headers.keys().cloned().collect();
+        let encodes: Vec<String> = inner.nodes.iter().filter(|(_, v)| v["kind"] == "aencode").map(|(k, _)| k.clone()).collect();
         for o in inner.open.iter_mut() {
             let video = o.output.video.as_deref() == Some(node);
-            let audio = o.output.audio.as_deref() == Some(node);
-            if tag.sequence_header && (video || audio) {
-                o.publication.push(tag.clone());
+            let Some(n) = o.output.track_of(node) else { continue };
+            let audio = !video;
+            if tag.sequence_header {
+                o.publication.push(numbered(&tag, n));
             } else if video {
-                if o.started.is_none() && !tag.keyframe {
+                if o.started.is_none() && (!tag.keyframe || !sound_ready(&o.output, &encodes, &headers)) {
                     continue;
                 }
                 o.started.get_or_insert(tag.timestamp_ms);
@@ -152,7 +189,7 @@ impl Route for Router {
             } else if audio {
                 let late = o.output.video.is_some() && o.started.is_none_or(|at| tag.timestamp_ms < at);
                 if !late {
-                    o.publication.push(tag.clone());
+                    o.publication.push(numbered(&tag, n));
                 }
             }
         }
@@ -168,35 +205,4 @@ impl Route for Router {
             tap(sample);
         }
     }
-}
-
-/// `onMetaData` for a pair: the publisher's own, with the size, rate and
-/// bit rates of whatever this pair encodes put in their place.
-fn metadata(inner: &Inner, output: &Output, at: u32) -> MediaTag {
-    let mut meta = inner
-        .script
-        .as_ref()
-        .and_then(|s| crate::restream::meta::parse(&s.payload))
-        .unwrap_or_else(StreamMetadata::new);
-    if let Some(v) = output.video.as_ref().and_then(|id| inner.nodes.get(id)) {
-        let n = |k: &str| v.get(k).and_then(Value::as_u64).map(|x| x as u32);
-        meta.video_width = n("width");
-        meta.video_height = n("height");
-        meta.video_bitrate_kbps = n("bitrate_kbps");
-        meta.video_codec_id = Some(7);
-        let fps = v.get("fps").and_then(Value::as_array).and_then(|p| Some(p.first()?.as_f64()? / p.get(1)?.as_f64()?.max(1.0)));
-        meta.video_frame_rate = fps.map(|f| f as f32);
-    }
-    if let Some(a) = output.audio.as_ref().and_then(|id| inner.nodes.get(id)) {
-        let n = |k: &str| a.get(k).and_then(Value::as_u64).map(|x| x as u32);
-        meta.audio_bitrate_kbps = n("bitrate_kbps");
-        meta.audio_sample_rate = n("sample_rate");
-        meta.audio_channels = n("channels");
-        meta.audio_codec_id = Some(10);
-    }
-    if output.audio.is_none() {
-        (meta.audio_codec_id, meta.audio_bitrate_kbps, meta.audio_channels, meta.audio_sample_rate) = (None, None, None, None);
-    }
-    let payload = flv::metadata_body(&meta);
-    MediaTag { kind: TagKind::Script, timestamp_ms: at, keyframe: false, sequence_header: false, payload: payload.into() }
 }

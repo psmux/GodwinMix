@@ -20,6 +20,9 @@ export const GROUPS = [
   ["plugins", "Plugins"],
 ];
 
+/** Keys few people need, which the core marks `x-gmx-group: advanced`. Last, and closed. */
+export const ADVANCED = "advanced";
+
 /** The group a key belongs to: `x-gmx-group`, or the part before the dot. */
 export function groupOf(key, prop) {
   return String((prop && prop["x-gmx-group"]) || key.split(".")[0]);
@@ -35,8 +38,10 @@ export function layoutFromSchema(schema) {
     bySection.get(g).push(key);
   }
   const known = GROUPS.map(([g]) => g);
-  const order = known.filter((g) => bySection.has(g)).concat([...bySection.keys()].filter((g) => !known.includes(g)));
-  const title = (g) => (GROUPS.find(([id]) => id === g) || [g, g[0].toUpperCase() + g.slice(1)])[1];
+  const order = known.filter((g) => bySection.has(g)).concat([...bySection.keys()].filter((g) => !known.includes(g) && g !== ADVANCED));
+  if (bySection.has(ADVANCED)) order.push(ADVANCED);
+  // "Advanced" is the label the schema kit draws closed.
+  const title = (g) => (g === ADVANCED ? "Advanced" : (GROUPS.find(([id]) => id === g) || [g, g[0].toUpperCase() + g.slice(1)])[1]);
   return {
     type: "vertical",
     elements: order.map((g) => ({

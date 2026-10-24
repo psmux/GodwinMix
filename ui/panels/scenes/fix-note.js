@@ -26,8 +26,8 @@ export function nameOf(client, id) {
 
 /** "3 sources here are not running", or "Lyrics is not running". */
 export function summaryLine(client, ids) {
-  if (ids.length === 1) return `${nameOf(client, ids[0])} is not running`;
-  return `${ids.length} sources here are not running`;
+  if (ids.length > 1) return `${ids.length} sources here are not running`;
+  return `${nameOf(client, ids[0])} ${client?.store?.source(ids[0]) ? "is not running" : "is no longer in this mixer"}`;
 }
 
 /**

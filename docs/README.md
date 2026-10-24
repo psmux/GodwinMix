@@ -135,8 +135,13 @@ Start here if you have never run it.
 * [Customize the workspace](how-to/customize-the-workspace.md)
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
 * [Install the control page as an app](how-to/install-as-an-app.md): on a phone or a desktop, and the certificate a phone needs for it
+* [Set up a headend in GodwinMix](how-to/set-up-a-headend.md): channels, a scan of a multiplex and transcode profiles, with no Flussonic needed
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
+* [Replace Flussonic with GodwinMix](how-to/replace-flussonic.md)
+* [Convert broadcast feeds on the GPU](how-to/convert-broadcast-feeds-on-the-gpu.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
+* [Watch a headend of many channels](how-to/watch-a-headend.md)
+* [Read the flow map: what comes in, what each show does with it, what goes out](how-to/read-the-flow-map.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
 * [Record a channel and share a watch link](how-to/record-a-channel.md)
 * [Save and open a project](how-to/save-and-open-a-project.md)
@@ -194,6 +199,8 @@ Start here if you have never run it.
 * [Reference: the shipped codec catalogue](reference/codecs.md)
 * [Every way in and every way out: transports, containers, codecs](reference/formats.md)
 * [Renditions and the planner: the rules, the plan, the reasons](reference/renditions.md)
+* [The machine: gpu.status and machine.status](reference/machine-status.md)
+* [Hub tags: tracks, MPEG-2 and what each reader is given](reference/hub-tags.md)
 * [The HLS output: params, routes, the viewer key](reference/hls-output.md)
 * [Graphics](reference/graphics.md)
 * [Graphic templates: the SVG kind, the pack, the methods](reference/graphic-templates.md)
@@ -205,6 +212,8 @@ Start here if you have never run it.
 * [Preview monitor status](reference/preview-monitor.md)
 * [The channel methods](reference/channels.md)
 * [Reference: what a direct show takes in](reference/direct-inputs.md)
+* [Reference: the Flussonic facade](reference/flussonic-facade.md)
+* [Reference: headend channels, profiles and the scan](reference/headend-channels.md)
 * [Direct shows: the host's table, events and calls](reference/direct-shows.md)
 * [Reference: the resource governor](reference/governor.md)
 * [Media upload](reference/media-upload.md)
@@ -246,6 +255,7 @@ Start here if you have never run it.
 * [Converting a channel's stream for one destination](explanation/channel-transcoding.md)
 * [The direct host](explanation/direct-host.md)
 * [The resource governor](explanation/resource-governor.md)
+* [Headend mode: GodwinMix as a channel server](explanation/headend-mode.md)
 
 
 ## For AI agents

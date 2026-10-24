@@ -12,12 +12,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use godwinmix_protocol::destination::DestinationState;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use super::host::Host;
-use super::show::Show;
 use super::stats::show_stats;
-use super::table::STREAM;
+use super::input_event::input_event;
 
 /// Where an event goes: the plugin's reporter, or a test.
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
@@ -102,43 +101,4 @@ fn moved(said: &mut HashMap<String, Value>, name: String, key: Value) -> Option<
 fn with(mut v: Value, k: &str, x: Value) -> Value {
     v[k] = x;
     v
-}
-
-/// `event/direct.input` for a show, and what decides whether it moved.
-fn input_event(host: &Host, show: &Show) -> (Value, Value) {
-    let app = show.row.app();
-    let seen = show.seen.lock().unwrap_or_else(|e| e.into_inner());
-    let live = seen.live();
-    let error = seen.refused.clone().or_else(|| seen.stats.error.clone());
-    // The inputs say so this way while the backup carries the show.
-    let backup = seen.stats.error.as_deref().is_some_and(|e| e.starts_with("on the backup input"));
-    drop(seen);
-    let desc = host.hub.stream(&app, STREAM).unwrap_or(Value::Null);
-    let mut v = Map::new();
-    v.insert("show".into(), json!(show.row.id));
-    v.insert("state".into(), json!(if live { "live" } else { "idle" }));
-    v.insert("from".into(), json!(from(&show.row.input.uri)));
-    v.insert("backup".into(), json!(backup));
-    v.insert("relay".into(), json!((host.relay)()));
-    v.insert("stream".into(), json!(format!("{app}/{STREAM}")));
-    for k in ["video", "audio"] {
-        if !desc[k].is_null() {
-            v.insert(k.into(), desc[k].clone());
-        }
-    }
-    if let Some(e) = &error {
-        v.insert("error".into(), json!(e));
-    }
-    let shape = |k: &str| json!([desc[k]["codec"], desc[k]["width"], desc[k]["height"], desc[k]["channels"]]);
-    // The relay too: it opens when a show first needs it, and a station
-    // waiting to read the show learns where only from this event.
-    let key = json!([live, backup, shape("video"), shape("audio"), error, (host.relay)()]);
-    (Value::Object(v), key)
-}
-
-/// Where an input comes from, as a person would say it, with no password.
-fn from(uri: &str) -> String {
-    let Some((_, rest)) = uri.split_once("://") else { return uri.to_string() };
-    let host = rest.split(['/', '?']).next().unwrap_or(rest);
-    host.rsplit('@').next().unwrap_or(host).to_string()
 }

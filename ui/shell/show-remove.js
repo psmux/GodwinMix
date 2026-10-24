@@ -10,9 +10,10 @@ import { toast, errorToast } from "./toast.js";
 import { switchTo } from "./show-actions.js";
 
 export async function remove(view, show) {
-  if (view.shows.length < 2) {
+  if ((view.all || view.shows).length < 2) {
     return toast({ text: `${show.name} is the only show on this machine, so it stays. Add another show first if you want this one gone.` });
   }
+  if (view.shows.length < 2) return toast({ text: `${show.name} is the only open show, so it stays. Open another show first, from File, Switch show.` });
   if (show.id === "main") return toast({ text: `${show.name} runs from the station's own settings file, so it cannot be removed. Stop it from its menu instead.` });
   const live = show.on_air ? " It is on air now, and stops first." : " It stops first if it is running.";
   const yes = await confirmModal(`Remove the show ${show.name}?${live} Its scenes, sources and outputs go with it.`, "Remove show");

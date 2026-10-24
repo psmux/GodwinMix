@@ -34,6 +34,7 @@ import { installTests } from "./install.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
 import { wallChannelTests } from "./wall-channels.js";
+import { flowmapTests } from "./flowmap.js";
 import { browserDeviceTests } from "./browser-devices.js";
 import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
@@ -43,6 +44,10 @@ import { recordingStopTests } from "./recording-stop.js";
 import { runningTests } from "./running.js";
 import { sourceBackupTests } from "./source-backup.js";
 import { sourceBackupFormTests } from "./source-backup-form.js";
+import { headendAdvancedTests } from "./headend-advanced.js";
+import { outputsEditTests } from "./outputs-edit.js";
+import { headendStationTests } from "./headend-station.js";
+import { headendSetupTests } from "./headend-setup.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -3043,6 +3048,12 @@ tileLevelTests(test, eq, ok)
     line("fail", "the wall channels suite threw: " + e.message);
     console.error(e);
   })
+  .then(() => flowmapTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the flow map suite threw: " + e.message);
+    console.error(e);
+  })
   .then(() => browserDeviceTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
@@ -3124,6 +3135,30 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the mixer settings suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => headendAdvancedTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the headend settings suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => outputsEditTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the output edit suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => headendStationTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the headend station suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => headendSetupTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the headend setup suite threw: " + e.message);
     console.error(e);
   })
   .then(designerFixtureSuite)

@@ -46,6 +46,49 @@ pub enum Container {
     Webrtc,
 }
 
+/// How a picture goes into a size of another shape.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Fit {
+    /// Keep the whole picture and fill the rest with bars.
+    #[default]
+    Pad,
+    /// Fill the frame and cut what overhangs.
+    Crop,
+    /// Fill the frame and change the picture's shape.
+    Stretch,
+}
+
+/// Whether an interlaced picture is made progressive.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Deinterlace {
+    #[default]
+    Off,
+    On,
+    /// Only pictures the stream marks as interlaced.
+    Auto,
+}
+
+/// Where a rendition's picture is encoded, when it must be one or the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum EncoderPick {
+    /// A hardware encoder: NVENC, Quick Sync, VideoToolbox or VA-API.
+    Gpu,
+    /// A software encoder, such as x264.
+    Cpu,
+}
+
+/// Which sound tracks a rendition converts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Tracks {
+    #[default]
+    First,
+    All,
+}
+
 /// A frame rate as a fraction, so 29.97 is exact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct Fps {

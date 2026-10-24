@@ -461,6 +461,11 @@ pub struct AudioWant {
     pub codec: Option<AudioCodec>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate: Option<u32>,
+    /// The first sound track alone (when left out), or every one the source
+    /// carries, each converted on its own at its own channel count unless
+    /// `channels` says otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tracks: Option<Tracks>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -845,12 +850,85 @@ pub struct ChannelAddRequest {
     pub secret: Option<String>,
 }
 
+/// `headend.channel.add`: one channel or many, made in one go.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelAddRequest2 {
+    pub channels: Vec<HeadendChannel>,
+    /// True: check them and price them, and make nothing. Left out: false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+}
+
 /// What `channel.add` answers: the channel and its first key.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChannelAdded {
     pub channel: Channel,
     pub key: NewKey,
+}
+
+/// A channel's backup input: an input with no backup of its own.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelBackup {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    pub params: BTreeMap<String, Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    pub uri: String,
+}
+
+/// `headend.channel.bulk`: the same change to many channels.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelBulkRequest {
+    /// With `profile` `custom`: the conversion every one of them takes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom: Option<TranscodeProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// Join every multicast input on this card. Empty: the default route's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    pub names: Vec<String>,
+    /// A profile for every one of them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+}
+
+/// What an add, an update or a removal did.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelChange {
+    /// The channels made, changed or removed, by name.
+    pub done: Vec<String>,
+    pub dry_run: bool,
+    /// Each one that was not, with why. `index` is its place in the request.
+    pub refused: Vec<ShowRefused>,
+    /// Channels whose show had to be made again (input or conversion moved).
+    pub restarted: Vec<String>,
+}
+
+/// A channel as `headend.channel.list` answers it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelEntry {
+    pub channel: HeadendChannel,
+    /// Set for a channel that came from the followed file and was edited
+    /// here: the file it no longer follows. `headend.channel.follow` hands
+    /// it back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detached_from: Option<String>,
+    /// Set for a stream of the Flussonic config this station follows: the
+    /// file. An edit here takes the channel out of the file's hands (see
+    /// `headend.channel.update`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follows: Option<String>,
+    /// The show it runs as, once made.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show: Option<String>,
 }
 
 /// A channel's feed as a list shows it.
@@ -875,6 +953,54 @@ pub struct ChannelFeed {
     /// Scheme, host and port of the pull address, for `pull`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri_host: Option<String>,
+}
+
+/// The channel's HLS output, which every channel has.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelHls {
+    /// `open` (the default): no viewer key, answered on loopback and private
+    /// addresses only, for a gateway or cache that checks its own. `keyed`:
+    /// a viewer key in every link.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
+    /// The longest a segment may be, in milliseconds. Cut at a keyframe.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
+    /// `both` (MPEG-TS and CMAF, the default), `ts` or `cmaf`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<String>,
+    /// Seconds of segments kept in the playlist. Left out: the packager's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window: Option<u32>,
+}
+
+/// Where a channel's programme comes from.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelInput {
+    /// A second input, taken when this one stops and let go when it comes
+    /// back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<ChannelBackup>,
+    /// The network card a multicast group is joined on, by name or by one
+    /// of its IPv4 addresses. Left out: the one the default route uses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    /// Further params the input takes, as `docs/reference/direct-inputs.md`
+    /// lists them: `passphrase` and `latency_ms` for SRT, `transport` for
+    /// RTSP, `stall_ms` and `return_ms` for the switch to the backup.
+    pub params: BTreeMap<String, Value>,
+    /// The MPEG-TS program number to take from a feed that carries several.
+    /// Left out: the first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    /// The address, as a direct show's input takes it: `udp://@239.0.0.1:5000`
+    /// (multicast), `udp://0.0.0.0:5000` (unicast to this machine),
+    /// `rtp://@239.0.0.1:5000`, `srt://192.0.2.10:9000`, `srt://@:9000`,
+    /// `rtmp://host/app/key`, `rtsp://192.0.2.20/stream1`,
+    /// `https://example.com/live/index.m3u8` or `file:///clips/loop.ts`.
+    pub uri: String,
 }
 
 /// One key, as a list shows it.
@@ -937,6 +1063,29 @@ pub struct ChannelList {
     /// mixer has open for ingest, and the channels each is open for.
     pub listeners: Vec<Listener>,
     pub rtmp: RtmpInfo,
+}
+
+/// `headend.channel.remove` and `headend.channel.follow`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelNames {
+    pub names: Vec<String>,
+}
+
+/// One output beside the HLS one: a UDP multicast or unicast out, an SRT
+/// or RTMP push.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelOutput {
+    /// True: sent as the input comes, whatever the channel's profile. Left
+    /// out: the same conversion as the HLS output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copy: Option<bool>,
+    /// A slug, unique in the channel. Left out: `push-1`, `push-2` in order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// `udp://239.0.1.1:5000`, `srt://192.0.2.30:9000`, `rtmp://host/app/key`.
+    pub uri: String,
 }
 
 /// A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart
@@ -1042,6 +1191,17 @@ pub struct ChannelThumbnailRequest {
     /// Pixels across, 16 to 640, made even. 320 when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
+}
+
+/// `headend.channel.update`: one channel, replaced whole.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelUpdateRequest {
+    /// What it becomes. A different `name` renames it, which changes its
+    /// public path and makes its show again.
+    pub channel: HeadendChannel,
+    /// The channel's name now.
+    pub name: String,
 }
 
 /// One key this call changed, and when the change takes effect.
@@ -1317,6 +1477,11 @@ pub struct Crop {
     pub top: f64,
 }
 
+/// Whether an interlaced picture is made progressive.
+pub type Deinterlace = String;
+/// The values api_level 1 knows for [`Deinterlace`].
+pub const DEINTERLACE_VALUES: &[&str] = &["auto", "off", "on"];
+
 /// One destination as a client sees it. The key never appears: `has_key`
 /// says whether there is one.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1342,6 +1507,10 @@ pub struct Destination {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_hint: Option<String>,
     pub label: String,
+    /// What an `hls://` output of a show without compositing was given, as
+    /// `show.output.set` takes it, less the viewer key. Read while it runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     /// What the plan gave it, while its stream is live.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<DestinationPlan>,
@@ -1580,6 +1749,11 @@ pub struct EditBeginRequest {
     pub live: Option<bool>,
     pub scene: String,
 }
+
+/// Where a rendition's picture is encoded, when it must be one or the other.
+pub type EncoderPick = String;
+/// The values api_level 1 knows for [`EncoderPick`].
+pub const ENCODER_PICK_VALUES: &[&str] = &["gpu", "cpu"];
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2011,11 +2185,16 @@ pub struct Finding {
     pub severity: Severity,
 }
 
-/// How content fills its frame. SVG's vocabulary, which replaces OBS's seven
-/// bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+/// How a picture goes into a size of another shape.
 pub type Fit = String;
 /// The values api_level 1 knows for [`Fit`].
-pub const FIT_VALUES: &[&str] = &["none", "contain", "cover", "stretch", "fit-width", "fit-height", "max"];
+pub const FIT_VALUES: &[&str] = &["pad", "crop", "stretch"];
+
+/// How content fills its frame. SVG's vocabulary, which replaces OBS's seven
+/// bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+pub type Fit2 = String;
+/// The values api_level 1 knows for [`Fit2`].
+pub const FIT2_VALUES: &[&str] = &["none", "contain", "cover", "stretch", "fit-width", "fit-height", "max"];
 
 /// Content on the wire. The same four shapes as the tree, except that a group
 /// names no children: they are records whose parent is the group.
@@ -2845,6 +3024,85 @@ pub struct GovernorStatus {
     pub shed: Vec<ShedNote>,
 }
 
+/// One GPU: what it is, its newest reading and the ones before it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuDevice {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub driver: Option<String>,
+    /// One a second, oldest first, the last two minutes at most.
+    pub history: Vec<GpuSample>,
+    pub index: u32,
+    /// `NVIDIA GeForce RTX 3060`.
+    pub name: String,
+    pub now: GpuSample,
+}
+
+/// One reading of one GPU. A number the driver would not give is left out.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuSample {
+    /// Unix milliseconds.
+    pub at_ms: u64,
+    /// NVDEC, percent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decoder_pct: Option<u32>,
+    /// The sessions' average frame rate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_fps: Option<u32>,
+    /// NVENC, percent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_pct: Option<u32>,
+    /// Open NVENC sessions, every process on the machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_sessions: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fan_pct: Option<u32>,
+    /// The 3D and compute engines, percent of the last sample period.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_pct: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graphics_mhz: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_mhz: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_total_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_used_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub power_limit_w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub power_w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature_c: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_mhz: Option<u32>,
+}
+
+/// `gpu.status`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuStatus {
+    /// How often a reading is taken while someone asks.
+    pub every_ms: u32,
+    pub gpus: Vec<GpuDevice>,
+    /// Why there are no GPUs, or what is missing, in one sentence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// `nvml`, `nvidia-smi`, or `none`.
+    pub source: String,
+}
+
+/// `gpu.status`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuStatusRequest {
+    /// Only the history after this time, unix milliseconds: what a client
+    /// that already holds the rest asks for. Left out, the whole history.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since_ms: Option<u64>,
+}
+
 /// `scene.graphic.list`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2878,6 +3136,138 @@ pub struct GroupSourcesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub sources: Vec<String>,
+}
+
+/// One channel.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendChannel {
+    /// The conversion, when `profile` is `custom`. A Flussonic `transcoder`
+    /// line is imported as one of these.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom: Option<TranscodeProfile>,
+    /// False: kept, and its show stopped.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hls: Option<ChannelHls>,
+    pub input: ChannelInput,
+    /// The channel's public name: letters, digits, `-`, `_` and `.`, up to
+    /// 64. It is the path every player and gateway uses,
+    /// `/<name>/index.m3u8`, so it never changes once viewers have it. The
+    /// show's id is made from it.
+    pub name: String,
+    /// Where it came from: `added here`, `import of <source>`, or
+    /// `<file>, edited here`. Set by the station; ignored when sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    pub outputs: Vec<ChannelOutput>,
+    /// A profile's id from `headend.channel.list` (`copy` passes the input
+    /// through as it comes), or `custom` with `custom` set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// What the screen and the show list call it. Left out: the name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+/// An encoder this machine has, for the profile editor's choice.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendEncoder {
+    /// `h264`, `h265`.
+    pub codec: String,
+    /// The catalogue's id, `h264-nvidia`, `x264`.
+    pub id: String,
+    /// `gpu` or `cpu`.
+    pub on: String,
+}
+
+/// `headend.export`: the channels kept here in Flussonic's config language.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendExport {
+    /// What the text cannot say, one line each: a profile setting Flussonic
+    /// has no word for.
+    pub notes: Vec<String>,
+    pub text: String,
+}
+
+/// `headend.import`'s answer: the report, then what was made.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendImportReport {
+    pub converted: i64,
+    pub copied: i64,
+    pub disabled: i64,
+    pub dry_run: bool,
+    /// The Flussonic config this station follows, when it follows one. A
+    /// channel made by an import is kept by the station, not in that file,
+    /// and the file's own streams are not touched.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub following: Option<String>,
+    pub notes: Vec<ImportNote>,
+    /// `show.add_many`'s answer for these shows: on a dry run what would be
+    /// made, what it costs and what would be refused; otherwise what was.
+    pub shows: ShowAddManyResult,
+    /// `pasted text`, or the path that was read.
+    pub source: String,
+    pub streams: Vec<ImportedStream>,
+}
+
+/// `headend.import`. One of `text` and `path`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendImportRequest {
+    /// Left out: true. Read the config, price its shows and make nothing.
+    /// False makes them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Or a file on the station's machine, such as
+    /// `/etc/flussonic/flussonic.conf`, read by the station.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The config's text, as pasted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// `headend.channel.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendSetup {
+    /// Every channel: the ones kept here, then the followed file's.
+    pub channels: Vec<ChannelEntry>,
+    /// The video encoders the planner may pick, GPU ones first.
+    pub encoders: Vec<HeadendEncoder>,
+    /// The Flussonic config this station follows, when it follows one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub following: Option<String>,
+    /// The built in profiles, then the ones saved here.
+    pub profiles: Vec<TranscodeProfile>,
+}
+
+/// `headend.status`: whether this station runs in headend mode.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendStatus {
+    /// The file it follows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// True while the station follows a Flussonic config
+    /// (`godwinmix headend --flussonic FILE`).
+    pub following: bool,
+    /// Where Flussonic's URLs and API answer, `address:port`.
+    pub listeners: Vec<String>,
+    /// The Flussonic style log, when one is written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<String>,
+    /// What a reader of this answer can do next, in one sentence.
+    pub note: String,
+    /// Of those, the ones running as a show.
+    pub shows: i64,
+    /// Streams in the file as last read.
+    pub streams: i64,
 }
 
 /// Everything in the document that is not a scene or an item: the name, the
@@ -2967,15 +3357,25 @@ pub struct HistoryStep {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HlsOutputParams {
+    /// `keyed` (the default) or `open`: whether a player needs the viewer key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
     /// true: parts of 333 ms.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub low_latency: Option<bool>,
+    /// With `access = "open"`, answer players outside loopback and the
+    /// private networks too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_public: Option<bool>,
     /// LL-HLS part, 0 for none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub part_ms: Option<u32>,
     /// 500 to 10000, default 2000.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub segment_ms: Option<u32>,
+    /// `cmaf` (the default), `ts` or `both`: which segments are made.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<String>,
     /// 16 characters or more.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer_key: Option<String>,
@@ -2993,6 +3393,20 @@ pub type Id = String;
 #[serde(default)]
 pub struct IdRequest {
     pub id: String,
+}
+
+/// A line the import read and does not act on, or acts on differently.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportNote {
+    /// `ignored`: nothing in GodwinMix uses it. `not_carried`: understood,
+    /// and GodwinMix does something else, which `what` says.
+    pub kind: String,
+    /// 0 when the note is about the whole config.
+    pub line: i64,
+    /// `global`, or `stream NAME`.
+    pub scope: String,
+    pub what: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3089,6 +3503,26 @@ pub struct ImportedReport {
     pub scenes: Vec<String>,
 }
 
+/// One `stream` of the config, as the show it becomes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportedStream {
+    /// No `transcoder`: the input is served as it comes.
+    pub copy: bool,
+    /// `disabled true`: the show is made and stopped.
+    pub disabled: bool,
+    /// The show's input, as `show.add` takes it, with any password in an
+    /// address shown as `***`.
+    pub input: Value,
+    /// Flussonic's name, the show's name when it is made.
+    pub name: String,
+    /// The show's outputs: the HLS output with its params and rendition,
+    /// then one per `push`.
+    pub outputs: Vec<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
 /// What a show without compositing takes in. A show that composites makes
 /// its input its one source.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3119,6 +3553,11 @@ pub struct InputStats {
     pub audio_channels: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_codec: Option<String>,
+    /// The first sound track's peak in dBFS over a short burst, measured
+    /// about once a second while the show's alarms are on or its picture is
+    /// asked for; -120 is digital silence. Left out while unmeasured.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_peak_db: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cc_errors: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3490,6 +3929,30 @@ pub struct LogSetRequest {
     /// wins, so a more specific override still beats a broader one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
+}
+
+/// `machine.status`'s answer: the box, not one process.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MachineStatus {
+    pub cores: u32,
+    /// Every process on the machine, percent of all cores, over the last
+    /// second. Left out until two readings have been taken.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_pct: Option<f64>,
+    pub host_name: String,
+    /// One, five and fifteen minutes, where the system keeps them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_average: Option<Vec<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_available_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_total_mib: Option<u64>,
+    /// Since this process started.
+    pub process_uptime_secs: u64,
+    /// Since the machine booted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime_secs: Option<u64>,
 }
 
 /// `scene.history.mark`.
@@ -4050,6 +4513,9 @@ pub struct OutputStats {
     /// waiting, connecting, live, reconnecting, failed, or off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// What its picture goes through, in order: the decode, the scale and
+    /// the encode, for an output that converts. Empty for a copy.
+    pub steps: Vec<OutputStep>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -4087,6 +4553,24 @@ pub struct OutputStatus {
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+/// One step of an output's conversion.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OutputStep {
+    /// The hardware family, `nvidia`, for a step that uses some.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accel: Option<String>,
+    /// The GStreamer element that does it, `nvh264enc`, where the plan
+    /// names one. A scale on the CPU leaves the choice to the host.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub element: Option<String>,
+    /// Whether it runs on a GPU, its pictures in the GPU's memory.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<bool>,
+    /// `decode`, `scale` or `encode`.
+    pub kind: String,
 }
 
 /// A sparse change to one item of a referenced scene.
@@ -4373,10 +4857,20 @@ pub struct PlanView {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Playback {
+    /// `keyed` (a player needs the viewer key) or `open`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
     /// The same segments as a DASH MPD.
     pub dash_url_path: String,
     /// `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
     pub master_url_path: String,
+    /// The length segments are cut to, in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
+    /// Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out
+    /// where the server does not say.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<String>,
     /// Players that fetched something in the last two windows.
     pub viewers: u32,
 }
@@ -4622,6 +5116,33 @@ pub struct PreviewSocket {
     /// What is on the far end, so a client knows what to expect before it
     /// connects.
     pub transport: String,
+}
+
+/// `headend.profile.save` and `headend.profile.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProfileChange {
+    /// The channels that take it, whose shows follow the change.
+    pub channels: Vec<String>,
+    pub id: String,
+}
+
+/// `headend.profile.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProfileRemoveRequest {
+    pub id: String,
+    /// The profile the channels that take this one move to. Left out, a
+    /// profile some channel takes is not removed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub move_to: Option<String>,
+}
+
+/// `headend.profile.save`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ProfileSaveRequest {
+    pub profile: TranscodeProfile,
 }
 
 /// What `program.get` answers with, and what `program.take` returns so that no
@@ -4948,6 +5469,87 @@ pub struct SaveRequest {
     /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<String>,
+}
+
+/// `headend.scan`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScanRequest {
+    /// The card to join a multicast group on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    /// The feed: `udp://@239.0.0.1:5000`, `rtp://@239.0.0.1:5000`, a
+    /// unicast `udp://0.0.0.0:5000`, or any other MPEG-TS input a channel
+    /// takes.
+    pub uri: String,
+    /// The longest to listen, in milliseconds, 2000 to 20000. Left out: 8000.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_ms: Option<u32>,
+}
+
+/// `headend.scan`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScanResult {
+    /// Set when nothing was read: what the input said, and what to check.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// How long it listened.
+    pub listened_ms: u64,
+    pub programs: Vec<ScannedProgram>,
+    pub uri: String,
+}
+
+/// One program of the multiplex.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScannedProgram {
+    /// The channel that already takes this program from this feed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kbps: Option<u32>,
+    /// From the SDT, when the feed sends one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub number: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// Scrambled packets seen: a program whose key is missing here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scrambled: Option<bool>,
+    /// What the PMT lists, in its order: `h264`, `aac`, `teletext`.
+    pub streams: Vec<String>,
+    /// The video and sound tracks with what their frames said in the time
+    /// listened. Empty when the program sent no frame in that time.
+    pub tracks: Vec<ScannedTrack>,
+}
+
+/// One elementary stream of a program, as its PMT names it and its frames
+/// show it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScannedTrack {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channels: Option<u32>,
+    /// `h264`, `mpeg2`, `aac`, `ac3`.
+    pub codec: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    /// The picture is sent as fields (1080i, 480i).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interlaced: Option<bool>,
+    /// `video` or `audio`.
+    pub kind: String,
+    /// ISO 639 code from the PMT, `eng`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
 }
 
 /// `scene.list`.
@@ -5369,6 +5971,11 @@ pub struct Show {
     /// The alarms a person set for it, when they set any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alarms: Option<AlarmSettings>,
+    /// Closed from its tab: the page leaves it out of the tab row until
+    /// `show.open`. Nothing of it is deleted. A show closed with
+    /// `keep_running` is still running, and its `state` says so.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
     /// true: scenes, transitions and a programme encode, in a process of
     /// its own. false: one input straight to its outputs, in the shared
     /// direct host, with no compositor.
@@ -5469,6 +6076,19 @@ pub struct ShowAddRequest {
 #[serde(default)]
 pub struct ShowChanged {
     pub show: Show,
+}
+
+/// `show.close`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowCloseRequest {
+    pub id: String,
+    /// true: it leaves the tab row and carries on, on air and sending, the
+    /// way the desktop app keeps running in the background. Left out or
+    /// false: it stops as well, and stays stopped across a restart of the
+    /// station until `show.open`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_running: Option<bool>,
 }
 
 /// What a new show starts from.
@@ -5663,6 +6283,11 @@ pub struct ShowSetResult {
     /// The alarms a person set for it, when they set any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alarms: Option<AlarmSettings>,
+    /// Closed from its tab: the page leaves it out of the tab row until
+    /// `show.open`. Nothing of it is deleted. A show closed with
+    /// `keep_running` is still running, and its `state` says so.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
     /// true: scenes, transitions and a programme encode, in a process of
     /// its own. false: one input straight to its outputs, in the shared
     /// direct host, with no compositor.
@@ -6409,6 +7034,33 @@ pub struct ToolCallRequest {
     pub source: Option<String>,
 }
 
+/// Which sound tracks a rendition converts.
+pub type Tracks = String;
+/// The values api_level 1 knows for [`Tracks`].
+pub const TRACKS_VALUES: &[&str] = &["first", "all"];
+
+/// One conversion. `video` and `audio` are a rendition's wants: left out,
+/// that half is passed through as it comes, so a profile with neither is a
+/// pass through.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscodeProfile {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioWant>,
+    /// True for a built in profile, which cannot be changed or removed. Set
+    /// by the station; ignored when sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builtin: Option<bool>,
+    /// A slug. The built in ones are listed by `headend.channel.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What the screen calls it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<VideoWant>,
+}
+
 /// Where an item sits and how it is sized.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -6420,7 +7072,7 @@ pub struct Transform {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anchor: Option<Vec2>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fit: Option<Fit>,
+    pub fit: Option<Fit2>,
     /// The rectangle the content is fitted into, in canvas pixels. Absent
     /// means the content's own size, scaled.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -6594,6 +7246,10 @@ pub struct VideoShape {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VideoWant {
+    /// B frames between references. The catalogue's (none, for live) when
+    /// left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bframes: Option<u8>,
     /// Target bitrate. A copy is kept when the source is within
     /// `bitrate_tolerance` of it.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -6604,13 +7260,36 @@ pub struct VideoWant {
     pub bitrate_tolerance: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub codec: Option<VideoCodec>,
+    /// Off when left out: an interlaced picture is scaled as it comes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deinterlace: Option<Deinterlace>,
+    /// Only a GPU encoder, or only one on the CPU. Left out, the planner
+    /// takes a GPU encoder first and the CPU when the GPU is full or has
+    /// none of this codec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<EncoderPick>,
+    /// How a picture of another shape goes into the size asked for. Pad when
+    /// left out, in black, which is what scaling has always done.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<Fit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fps: Option<Fps>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
+    /// Keyframe interval in frames of the source's own rate, as Flussonic's
+    /// `gop` is written. Taken over `keyframe_ms` when both are set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_frames: Option<u32>,
     /// Keyframe interval. Renditions in one ladder share it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub keyframe_ms: Option<u32>,
+    /// The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pad_color: Option<String>,
+    /// The encoder's speed and quality preset in its own words (`p4` on
+    /// NVENC, `veryfast` on x264). The catalogue's when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
 }
@@ -6910,7 +7589,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 233] = [
+pub const METHODS: [MethodInfo; 249] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6980,9 +7659,23 @@ pub const METHODS: [MethodInfo; 233] = [
     MethodInfo { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/show")) },
     MethodInfo { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/governor/calibrate")) },
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
+    MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
+    MethodInfo { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/add")) },
+    MethodInfo { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/bulk")) },
+    MethodInfo { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/follow")) },
+    MethodInfo { name: "headend.channel.list", summary: "Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/headend/channel/list")) },
+    MethodInfo { name: "headend.channel.remove", summary: "Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/headend/channel/remove")) },
+    MethodInfo { name: "headend.channel.update", summary: "Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/update")) },
+    MethodInfo { name: "headend.export", summary: "The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/headend/export")) },
+    MethodInfo { name: "headend.import", summary: "Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/import")) },
+    MethodInfo { name: "headend.profile.remove", summary: "Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/headend/profile/remove")) },
+    MethodInfo { name: "headend.profile.save", summary: "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/profile/save")) },
+    MethodInfo { name: "headend.scan", summary: "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/headend/scan")) },
+    MethodInfo { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/headend/status")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
+    MethodInfo { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/machine/status")) },
     MethodInfo { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/convert")) },
     MethodInfo { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/folder/add")) },
     MethodInfo { name: "media.folder.list", summary: "Every folder in the media library with how many files are in it, and every tag in use.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media/folder/list")) },
@@ -7099,7 +7792,9 @@ pub const METHODS: [MethodInfo; 233] = [
     MethodInfo { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/setup/start")) },
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
     MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
+    MethodInfo { name: "show.close", summary: "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/close")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
+    MethodInfo { name: "show.open", summary: "Put a closed show back in the tab row. One that closing stopped starts again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/open")) },
     MethodInfo { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output/add")) },
     MethodInfo { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/shows/{id}/output/remove")) },
     MethodInfo { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output")) },
@@ -7829,6 +8524,71 @@ impl Client {
         self.call("governor.status", &serde_json::json!({})).await
     }
 
+    /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
+    pub async fn gpu_status(&self, params: &GpuStatusRequest) -> Result<GpuStatus> {
+        self.call("gpu.status", params).await
+    }
+
+    /// Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
+    pub async fn headend_channel_add(&self, params: &ChannelAddRequest2) -> Result<ChannelChange> {
+        self.call("headend.channel.add", params).await
+    }
+
+    /// The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.
+    pub async fn headend_channel_bulk(&self, params: &ChannelBulkRequest) -> Result<ChannelChange> {
+        self.call("headend.channel.bulk", params).await
+    }
+
+    /// Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.
+    pub async fn headend_channel_follow(&self, params: &ChannelNames) -> Result<ChannelChange> {
+        self.call("headend.channel.follow", params).await
+    }
+
+    /// Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has.
+    pub async fn headend_channel_list(&self) -> Result<HeadendSetup> {
+        self.call("headend.channel.list", &serde_json::json!({})).await
+    }
+
+    /// Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back.
+    pub async fn headend_channel_remove(&self, params: &ChannelNames) -> Result<ChannelChange> {
+        self.call("headend.channel.remove", params).await
+    }
+
+    /// Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow.
+    pub async fn headend_channel_update(&self, params: &ChannelUpdateRequest) -> Result<ChannelChange> {
+        self.call("headend.channel.update", params).await
+    }
+
+    /// The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for.
+    pub async fn headend_export(&self) -> Result<HeadendExport> {
+        self.call("headend.export", &serde_json::json!({})).await
+    }
+
+    /// Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
+    pub async fn headend_import(&self, params: &HeadendImportRequest) -> Result<HeadendImportReport> {
+        self.call("headend.import", params).await
+    }
+
+    /// Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead.
+    pub async fn headend_profile_remove(&self, params: &ProfileRemoveRequest) -> Result<ProfileChange> {
+        self.call("headend.profile.remove", params).await
+    }
+
+    /// Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.
+    pub async fn headend_profile_save(&self, params: &ProfileSaveRequest) -> Result<ProfileChange> {
+        self.call("headend.profile.save", params).await
+    }
+
+    /// Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.
+    pub async fn headend_scan(&self, params: &ScanRequest) -> Result<ScanResult> {
+        self.call("headend.scan", params).await
+    }
+
+    /// Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.
+    pub async fn headend_status(&self) -> Result<HeadendStatus> {
+        self.call("headend.status", &serde_json::json!({})).await
+    }
+
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.
     pub async fn log_gst(&self, params: &LogGstRequest) -> Result<LogGstResult> {
         self.call("log.gst", params).await
@@ -7842,6 +8602,11 @@ impl Client {
     /// Change one instance's or one module's log level while the mixer runs.
     pub async fn log_set(&self, params: &LogSetRequest) -> Result<BTreeMap<String, Value>> {
         self.call("log.set", params).await
+    }
+
+    /// The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
+    pub async fn machine_status(&self) -> Result<MachineStatus> {
+        self.call("machine.status", &serde_json::json!({})).await
     }
 
     /// Transcode a library file to a web safe copy, in the background.
@@ -8424,9 +9189,19 @@ impl Client {
         self.call("show.add_many", params).await
     }
 
+    /// Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.
+    pub async fn show_close(&self, params: &ShowCloseRequest) -> Result<Show> {
+        self.call("show.close", params).await
+    }
+
     /// Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
     pub async fn show_list(&self) -> Result<ShowList> {
         self.call("show.list", &serde_json::json!({})).await
+    }
+
+    /// Put a closed show back in the tab row. One that closing stopped starts again.
+    pub async fn show_open(&self, params: &IdRequest) -> Result<Show> {
+        self.call("show.open", params).await
     }
 
     /// Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.

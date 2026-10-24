@@ -1,5 +1,6 @@
 //! Which HLS outputs should run, and what each one reads.
 
+use crate::station::packager::tracks::{self, Sound};
 use crate::station::packager::wire::Source;
 use super::spec;
 use crate::station::direct::outputs;
@@ -13,6 +14,8 @@ pub struct Want {
     pub spec: spec::HlsSpec,
     pub source: Option<Source>,
     pub why_not: Option<String>,
+    /// The input's sound tracks, with their languages.
+    pub sounds: Vec<Sound>,
 }
 
 /// Every HLS output that should run, with what it reads.
@@ -23,10 +26,14 @@ pub fn wants(st: &Station) -> BTreeMap<(String, String), Want> {
         if !r.outputs.iter().any(|o| o.enabled && o.platform == spec::SCHEME) {
             continue;
         }
-        let relay = st.direct.seen.lock().get(&r.id).and_then(|s| s.relay());
+        let (relay, sounds) = {
+            let seen = st.direct.seen.lock();
+            let s = seen.get(&r.id);
+            (s.and_then(|s| s.relay()), s.and_then(|s| s.input.as_ref()).map(tracks::sounds).unwrap_or_default())
+        };
         for d in outputs::stored(&r.id, &r.outputs).into_iter().filter(|d| d.enabled && d.platform == spec::SCHEME) {
             let (source, why_not) = source_of(st, &r.id, &d, relay.as_ref());
-            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not });
+            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not, sounds: sounds.clone() });
         }
     }
     out
@@ -54,6 +61,15 @@ fn source_of(st: &Station, show: &str, d: &StoredDestination, relay: Option<&(St
         _ => {}
     }
     let main = row["stream"].as_str().unwrap_or("main");
-    let key = format!("{main}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"));
+    let mut key = format!("{main}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"));
+    // A pair that converts every sound track is published with the nodes of
+    // the tracks after the first on its name, as the ingest plugin's
+    // `transcode::output_key_with` writes it. Read without them, the name
+    // was one nobody published, and every such channel waited for ever.
+    let tracks: Vec<&str> = row["audio_tracks"].as_array().into_iter().flatten().filter_map(|t| t.as_str()).collect();
+    if !tracks.is_empty() {
+        key.push('|');
+        key.push_str(&tracks.join(","));
+    }
     (Some(Source { relay, path: format!("{app}/{key}") }), None)
 }

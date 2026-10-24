@@ -85,6 +85,11 @@ pub struct Show {
     /// The alarms a person set for it, when they set any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alarms: Option<AlarmSettings>,
+    /// Closed from its tab: the page leaves it out of the tab row until
+    /// `show.open`. Nothing of it is deleted. A show closed with
+    /// `keep_running` is still running, and its `state` says so.
+    #[serde(default)]
+    pub closed: bool,
 }
 
 /// `show.list`.

@@ -18,6 +18,7 @@
 
 pub mod link;
 pub mod registry;
+pub mod alone;
 mod ask;
 pub mod calibrate;
 mod channel_calls;
@@ -26,7 +27,7 @@ pub mod direct;
 pub mod child;
 mod files;
 mod host;
-mod ingest;
+pub(crate) mod ingest;
 pub mod packager;
 pub mod list;
 pub mod methods;
@@ -48,4 +49,4 @@ pub mod usage;
 pub mod state;
 pub mod supervise;
 
-pub use run::{run, Options};
+pub use run::{run, Options, Ready};

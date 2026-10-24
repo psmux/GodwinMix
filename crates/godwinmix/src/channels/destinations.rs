@@ -160,6 +160,7 @@ impl Channels {
                     plan,
                     refused,
                     playback,
+                    params: None,
                 }
             })
             .collect()

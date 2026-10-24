@@ -6,14 +6,22 @@
 mod channel_custom;
 mod channel_feed;
 mod channel_off;
+mod close;
 mod direct;
 mod direct_live;
 mod direct_restart;
 mod gallery_install;
+mod headend_follow;
+mod headend_import;
+mod headend_native;
+mod headend_page;
 mod health_main;
 mod hls_channel;
 mod hls_channel_restart;
 mod hls_direct;
+mod hls_relay_taken;
+mod hls_ts_late_sound;
+mod hls_ts_open;
 #[cfg(unix)]
 mod hls_isolation;
 // Its one test installs examples/zero-dep, a shell plugin whose platforms
@@ -22,6 +30,7 @@ mod hls_isolation;
 mod home;
 #[cfg(unix)]
 mod isolation;
+mod late_sound;
 mod many;
 #[cfg(unix)]
 mod orphans;

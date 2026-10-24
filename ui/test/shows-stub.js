@@ -1,6 +1,6 @@
 // A stand in for a station with several shows, in the shapes of
 // dev/plans/wave3-contract.md: show.list, show.add, show.rename, show.remove,
-// show.start and show.stop, event/show.changed and event/show.removed, and
+// show.start, show.stop, show.close and show.open, event/show.changed and event/show.removed, and
 // each show's own output.list, source.list and rendition.plan behind
 // `linkShow(id)`, which is how the routing view reaches a show that is not
 // the page's. Built on the renditions stub, so channels and their plans are
@@ -78,6 +78,15 @@ export function showStub(opts = {}) {
     },
     "show.start": ({ id }) => { const s = find(id); s.state = "running"; changed(s); return s; },
     "show.stop": ({ id }) => { const s = find(id); s.state = "stopped"; s.on_air = null; changed(s); return s; },
+    "show.close": ({ id, keep_running }) => {
+      const s = find(id);
+      if (!stub.shows.some((x) => x.id !== id && !x.closed)) throw Object.assign(new Error(`show ${id} is the only open show, and a page needs one to stand on.`), { code: -32001, data: { show: id } });
+      s.closed = true;
+      if (!keep_running) Object.assign(s, { state: "stopped", on_air: null });
+      changed(s);
+      return s;
+    },
+    "show.open": ({ id }) => { const s = find(id); s.closed = false; if (s.state === "stopped") s.state = "running"; changed(s); return s; },
   };
   const inner = stub.call;
   stub.call = async (method, params = {}) => {

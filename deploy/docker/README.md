@@ -74,6 +74,7 @@ docker run --rm ghcr.io/psmux/godwinmix ctl --url https://mixer.example.com --to
 | `WITH_X264` | `1` | Installs `gstreamer1.0-plugins-ugly` and keeps only `libgstx264.so` and `libgsta52dec.so` out of it. An image built with `0` encodes with `openh264enc` instead, and decodes AC-3 with libav. Build with `0` where that package's licensing is a problem. |
 | `WITH_LIBAV` | `1` | Installs `gstreamer1.0-libav` as a fallback. The codec catalogue takes everything it can from the other plugin sets first, so an image built with `0` has no FFmpeg in it and still mixes and streams; E-AC-3, interlaced H.264 and ProRes clips then do not decode. |
 | `WITH_CEF` | `1` | Builds and ships the Chromium browser sidecar and its runtime. Web pages run outside the mixer process. |
+| `CEF_CODECS` | `on` | Builds the sidecar against GodwinMix's own CEF, which plays H.264 and AAC inside a page, from the `psmux/godwinmix-cef` release for the version `browser/Cargo.lock` pins, checked by SHA-256. The same CEF the desktop packages carry. `off` takes the official CEF, which plays neither. |
 | `WITH_WPE` | `0` | Installs `gstreamer1.0-wpe` and the X and Mesa pieces it needs, so a `web+` source renders through WPE WebKit with no sidecar. Costs about 120 MB. Used only when no CEF sidecar is installed. |
 
 ```sh
@@ -81,10 +82,9 @@ docker build -f deploy/docker/Dockerfile --build-arg WITH_CEF=0 --build-arg WITH
 ```
 
 What is deliberately not in the image: `gstreamer1.0-plugins-ugly` as a whole
-(only the x264 element survives the install), and the CEF browser sidecar. The
-sidecar carries a Chromium distribution of about a gigabyte and is moving to
-its own repository as `gmx-browser`; installing it next to the binary and
-naming it under `[browser] sidecar` is how it joins this image.
+(only the x264 element survives the install). The CEF browser sidecar is in it,
+at `/opt/godwinmix/browser/` with `godwinmix-browser` on the PATH, where the
+mixer finds it without a `[browser] sidecar` line.
 
 ## GPU
 

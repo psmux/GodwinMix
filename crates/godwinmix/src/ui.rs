@@ -236,6 +236,62 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/routing/model.js", include_str!("../../../ui/panels/routing/model.js")),
     ("panels/routing/routing.css", include_str!("../../../ui/panels/routing/routing.css")),
     ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
+    ("panels/headend/act.js", include_str!("../../../ui/panels/headend/act.js")),
+    ("panels/headend/band.js", include_str!("../../../ui/panels/headend/band.js")),
+    ("panels/headend/channel-parts.js", include_str!("../../../ui/panels/headend/channel-parts.js")),
+    ("panels/headend/channels.js", include_str!("../../../ui/panels/headend/channels.js")),
+    ("panels/headend/charts.js", include_str!("../../../ui/panels/headend/charts.js")),
+    ("panels/headend/conv.js", include_str!("../../../ui/panels/headend/conv.js")),
+    ("panels/headend/data.js", include_str!("../../../ui/panels/headend/data.js")),
+    ("panels/headend/drawer.js", include_str!("../../../ui/panels/headend/drawer.js")),
+    ("panels/headend/editor.js", include_str!("../../../ui/panels/headend/editor.js")),
+    ("panels/headend/form.js", include_str!("../../../ui/panels/headend/form.js")),
+    ("panels/headend/gpu.js", include_str!("../../../ui/panels/headend/gpu.js")),
+    ("panels/headend/grid.js", include_str!("../../../ui/panels/headend/grid.js")),
+    ("panels/headend/groups.js", include_str!("../../../ui/panels/headend/groups.js")),
+    ("panels/headend/headend.css", include_str!("../../../ui/panels/headend/headend.css")),
+    ("panels/headend/import-report.js", include_str!("../../../ui/panels/headend/import-report.js")),
+    ("panels/headend/import.js", include_str!("../../../ui/panels/headend/import.js")),
+    ("panels/headend/machine.js", include_str!("../../../ui/panels/headend/machine.js")),
+    ("panels/headend/model.js", include_str!("../../../ui/panels/headend/model.js")),
+    ("panels/headend/parts.js", include_str!("../../../ui/panels/headend/parts.js")),
+    ("panels/headend/player.js", include_str!("../../../ui/panels/headend/player.js")),
+    ("panels/headend/profiles.js", include_str!("../../../ui/panels/headend/profiles.js")),
+    ("panels/headend/scan.js", include_str!("../../../ui/panels/headend/scan.js")),
+    ("panels/headend/setup.css", include_str!("../../../ui/panels/headend/setup.css")),
+    ("panels/headend/setup.js", include_str!("../../../ui/panels/headend/setup.js")),
+    ("panels/headend/sheet.js", include_str!("../../../ui/panels/headend/sheet.js")),
+    ("panels/headend/station.js", include_str!("../../../ui/panels/headend/station.js")),
+    ("panels/headend/tile.js", include_str!("../../../ui/panels/headend/tile.js")),
+    ("panels/headend/tiles.css", include_str!("../../../ui/panels/headend/tiles.css")),
+    ("panels/headend/tools.js", include_str!("../../../ui/panels/headend/tools.js")),
+    ("panels/headend/totals.js", include_str!("../../../ui/panels/headend/totals.js")),
+    ("panels/headend/view.js", include_str!("../../../ui/panels/headend/view.js")),
+    ("panels/flowmap/act.js", include_str!("../../../ui/panels/flowmap/act.js")),
+    ("panels/flowmap/data.js", include_str!("../../../ui/panels/flowmap/data.js")),
+    ("panels/flowmap/dots.js", include_str!("../../../ui/panels/flowmap/dots.js")),
+    ("panels/flowmap/flowmap.css", include_str!("../../../ui/panels/flowmap/flowmap.css")),
+    ("panels/flowmap/frame.js", include_str!("../../../ui/panels/flowmap/frame.js")),
+    ("panels/flowmap/geom.js", include_str!("../../../ui/panels/flowmap/geom.js")),
+    ("panels/flowmap/graph-direct.js", include_str!("../../../ui/panels/flowmap/graph-direct.js")),
+    ("panels/flowmap/graph-mixed.js", include_str!("../../../ui/panels/flowmap/graph-mixed.js")),
+    ("panels/flowmap/graph.js", include_str!("../../../ui/panels/flowmap/graph.js")),
+    ("panels/flowmap/layout.js", include_str!("../../../ui/panels/flowmap/layout.js")),
+    ("panels/flowmap/map.js", include_str!("../../../ui/panels/flowmap/map.js")),
+    ("panels/flowmap/mixed.js", include_str!("../../../ui/panels/flowmap/mixed.js")),
+    ("panels/flowmap/paint.js", include_str!("../../../ui/panels/flowmap/paint.js")),
+    ("panels/flowmap/path.js", include_str!("../../../ui/panels/flowmap/path.js")),
+    ("panels/flowmap/pointer.js", include_str!("../../../ui/panels/flowmap/pointer.js")),
+    ("panels/flowmap/tip-parts.js", include_str!("../../../ui/panels/flowmap/tip-parts.js")),
+    ("panels/flowmap/tip.js", include_str!("../../../ui/panels/flowmap/tip.js")),
+    ("panels/flowmap/tone.js", include_str!("../../../ui/panels/flowmap/tone.js")),
+    ("panels/flowmap/tools.js", include_str!("../../../ui/panels/flowmap/tools.js")),
+    ("panels/flowmap/view.js", include_str!("../../../ui/panels/flowmap/view.js")),
+    ("panels/flowmap/words.js", include_str!("../../../ui/panels/flowmap/words.js")),
+    // hls.js 1.6.15, light build, Apache-2.0 (ui/vendor/hls.js-LICENSE.txt): the
+    // headend drawer's player where a browser cannot play HLS itself, added
+    // by a <script> the first time a drawer opens a player.
+    ("vendor/hls.light.min.js", include_str!("../../../ui/vendor/hls.light.min.js")),
     ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
     ("panels/wall/bulk-parse.js", include_str!("../../../ui/panels/wall/bulk-parse.js")),
     ("panels/wall/bulk-table.js", include_str!("../../../ui/panels/wall/bulk-table.js")),
@@ -245,6 +301,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/channel-model.js", include_str!("../../../ui/panels/wall/channel-model.js")),
     ("panels/wall/channel-rows.js", include_str!("../../../ui/panels/wall/channel-rows.js")),
     ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
+    ("panels/wall/detail-hls.js", include_str!("../../../ui/panels/wall/detail-hls.js")),
     ("panels/wall/detail-outputs.js", include_str!("../../../ui/panels/wall/detail-outputs.js")),
     ("panels/wall/detail.js", include_str!("../../../ui/panels/wall/detail.js")),
     ("panels/wall/dialogs.css", include_str!("../../../ui/panels/wall/dialogs.css")),
@@ -258,15 +315,18 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/virtual.js", include_str!("../../../ui/panels/wall/virtual.js")),
     ("panels/wall/wall.css", include_str!("../../../ui/panels/wall/wall.css")),
     ("panels/renditions/custom.js", include_str!("../../../ui/panels/renditions/custom.js")),
+    ("panels/renditions/custom-advanced.js", include_str!("../../../ui/panels/renditions/custom-advanced.js")),
     ("panels/renditions/format-step.js", include_str!("../../../ui/panels/renditions/format-step.js")),
     ("panels/renditions/hls-add.js", include_str!("../../../ui/panels/renditions/hls-add.js")),
     ("panels/renditions/hls-card.js", include_str!("../../../ui/panels/renditions/hls-card.js")),
+    ("panels/renditions/hls-settings.js", include_str!("../../../ui/panels/renditions/hls-settings.js")),
     ("panels/renditions/ladder.js", include_str!("../../../ui/panels/renditions/ladder.js")),
     ("panels/renditions/model.js", include_str!("../../../ui/panels/renditions/model.js")),
     ("panels/renditions/plan-feed.js", include_str!("../../../ui/panels/renditions/plan-feed.js")),
     ("panels/renditions/refusal.js", include_str!("../../../ui/panels/renditions/refusal.js")),
     ("panels/renditions/renditions.css", include_str!("../../../ui/panels/renditions/renditions.css")),
     ("panels/renditions/resources.js", include_str!("../../../ui/panels/renditions/resources.js")),
+    ("panels/renditions/rung-advanced.js", include_str!("../../../ui/panels/renditions/rung-advanced.js")),
     ("panels/renditions/shared.js", include_str!("../../../ui/panels/renditions/shared.js")),
     ("panels/renditions/usage.js", include_str!("../../../ui/panels/renditions/usage.js")),
     ("panels/renditions/words.js", include_str!("../../../ui/panels/renditions/words.js")),
@@ -394,8 +454,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/settings.js", include_str!("../../../ui/shell/settings.js")),
     ("shell/show-tabs.js", include_str!("../../../ui/shell/show-tabs.js")),
     ("shell/show-actions.js", include_str!("../../../ui/shell/show-actions.js")),
+    ("shell/direct-page.js", include_str!("../../../ui/shell/direct-page.js")),
     ("shell/show-file.js", include_str!("../../../ui/shell/show-file.js")),
     ("shell/show-remove.js", include_str!("../../../ui/shell/show-remove.js")),
+    ("shell/show-close.js", include_str!("../../../ui/shell/show-close.js")),
+    ("shell/show-rename.js", include_str!("../../../ui/shell/show-rename.js")),
     ("shell/shows.css", include_str!("../../../ui/shell/shows.css")),
     ("shell/settings-dialog.js", include_str!("../../../ui/shell/settings-dialog.js")),
     ("shell/shell.js", include_str!("../../../ui/shell/shell.js")),
@@ -452,6 +515,11 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 /// puts it back at `/test/`, which is what a developer running the harness
 /// sets and what CI sets.
 const DEV_ASSETS: &[(&str, &str)] = &[
+    ("test/headend-advanced.js", include_str!("../../../ui/test/headend-advanced.js")),
+    ("test/outputs-edit.js", include_str!("../../../ui/test/outputs-edit.js")),
+    ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
+    ("test/headend-setup.js", include_str!("../../../ui/test/headend-setup.js")),
+    ("test/headend-stub.js", include_str!("../../../ui/test/headend-stub.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/store.js", include_str!("../../../ui/test/store.js")),
@@ -526,6 +594,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // Show tabs and the routing view against a stub of the wave 3 contract,
     // as tests and as a page to look at: /test/shows.html?scene=routing.
     ("test/shows.js", include_str!("../../../ui/test/shows.js")),
+    ("test/shows-switch.js", include_str!("../../../ui/test/shows-switch.js")),
+    ("test/shows-close.js", include_str!("../../../ui/test/shows-close.js")),
     ("test/shows-stub.js", include_str!("../../../ui/test/shows-stub.js")),
     ("test/shows-preview.js", include_str!("../../../ui/test/shows-preview.js")),
     ("test/shows.html", include_str!("../../../ui/test/shows.html")),
@@ -540,6 +610,12 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
     ("test/wall.js", include_str!("../../../ui/test/wall.js")),
+    // The flow map against a station of every kind of thing:
+    // /test/flowmap.html?n=48, ?mixed=1, ?n=200.
+    ("test/flowmap.js", include_str!("../../../ui/test/flowmap.js")),
+    ("test/flowmap-stub.js", include_str!("../../../ui/test/flowmap-stub.js")),
+    ("test/flowmap-preview.js", include_str!("../../../ui/test/flowmap-preview.js")),
+    ("test/flowmap.html", include_str!("../../../ui/test/flowmap.html")),
     // This browser's camera: the publisher's parts and the browser channel,
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
@@ -989,11 +1065,15 @@ mod tests {
     /// panels through `import()` as well, but unconditionally and before it
     /// mounts the shell, so those are seeded in: they are eager in the only
     /// sense that matters, which is what a browser waits for on a first paint.
+    /// Only the `PANELS` list is seeded. A later `import()` in `boot.js` that
+    /// runs on some pages only, like the headend station's view, is lazy.
     fn eager_set() -> std::collections::BTreeSet<&'static str> {
         let mut seen = std::collections::BTreeSet::new();
         let mut stack: Vec<&'static str> = vec!["boot.js"];
         let boot = source_of("boot.js").unwrap_or("");
-        for line in boot.lines() {
+        let panels = boot.split("const PANELS = [").nth(1).and_then(|rest| rest.split("];").next()).unwrap_or("");
+        assert!(panels.contains("./panels/"), "boot.js has no PANELS list to seed the eager set from");
+        for line in panels.lines() {
             if let Some(path) = quoted(line).filter(|p| p.starts_with("./panels/")) {
                 if let Some(found) = known(&path[2..]) {
                     stack.push(found);
@@ -1076,7 +1156,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_396_kb() {
+    fn the_page_a_volunteer_opens_stays_under_398_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1089,6 +1169,24 @@ mod tests {
         // eager set is what is measured here, the whole directory is measured
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
+        //
+        // Raised to 398 kB in 0.3.17, by 1 kB more, for closing a show from
+        // its tab: the × on every tab and its styles (visible on the chosen
+        // tab, under the pointer, and always under a finger), a middle click,
+        // closed shows kept out of the row, and Ctrl+Shift+T for Reopen
+        // closed show. What closing asks and does loads only when a show is
+        // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
+        // them for this.
+        //
+        // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
+        // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
+        // and Cmd+Shift+] step through the shows, which needs a key listener
+        // on the page before show-actions.js has loaded, and a redraw keeps the
+        // keyboard on its tab (991 bytes). The rest is the Flow map and the
+        // Flussonic import in the menus and the one line that sends a headend
+        // station's page to its view. The headend view, the flow map and the
+        // station check itself all load only when opened: measured at 405683
+        // bytes, 1413 over 0.3.16.
         //
         // Down to 379 kB with the backup source in, by taking a tile's icon,
         // colour and kind out of client/kinds.js (client/kind-look.js), so
@@ -1124,8 +1222,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 396 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 396 kB budget",
+            bytes < 398 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 398 kB budget",
             eager.len()
         );
     }
@@ -1149,7 +1247,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_504_kb() {
+    fn the_page_with_the_composer_open_stays_under_507_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1163,8 +1261,12 @@ mod tests {
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
-        // Raised to 504 kB with the page's own budget, for the same four.
-        assert!(bytes < 504 * 1024, "the page with the composer open is {bytes} bytes, over the 504 kB budget");
+        // Raised to 504 kB with the page's own budget, for the same four, and
+        // to 505 kB with it in 0.3.17, for the show tabs' keys: the composer's
+        // own files did not grow. Measured at 516509 bytes. Raised to 507 kB
+        // with the page's own budget, for closing a show from its tab, and
+        // again the composer's files did not grow: measured at 518135 bytes.
+        assert!(bytes < 507 * 1024, "the page with the composer open is {bytes} bytes, over the 507 kB budget");
     }
 
     #[test]
@@ -1241,6 +1343,8 @@ mod tests {
         reachable.extend(closure_of("shell/project-open.js"));
         // The show tabs' work, the first time a tab is clicked, and New show.
         reachable.extend(closure_of("shell/show-actions.js"));
+        // A station's page on a direct show: its outputs, read from the station.
+        reachable.extend(closure_of("shell/direct-page.js"));
         reachable.extend(closure_of("shell/show-file.js"));
         // View > Routing, and what its cells open.
         reachable.extend(closure_of("panels/routing/view.js"));
@@ -1250,6 +1354,23 @@ mod tests {
         reachable.extend(closure_of("panels/wall/view.js"));
         reachable.extend(closure_of("panels/wall/bulk.js"));
         reachable.extend(closure_of("panels/wall/detail.js"));
+        // A headend station's page, which boot.js opens on the headend view.
+        reachable.extend(closure_of("panels/headend/station.js"));
+        // View > Headend, or Headend view on the wall.
+        reachable.extend(closure_of("panels/headend/view.js"));
+        // File > Import a Flussonic config, or the button on the headend's band.
+        reachable.extend(closure_of("panels/headend/import.js"));
+        // The headend's setup: Add a channel, Scan a multicast feed, the
+        // channel list and the profiles, each fetched by import() from the
+        // band, the empty grid, the drawer or the channel list.
+        for entry in ["panels/headend/editor.js", "panels/headend/scan.js", "panels/headend/channels.js", "panels/headend/profiles.js"] {
+            reachable.extend(closure_of(entry));
+        }
+        // View > Flow map, or its button on the headend view's bar.
+        reachable.extend(closure_of("panels/flowmap/view.js"));
+        // Not imported: the headend player adds it with a <script>, when a
+        // browser that cannot play HLS opens a channel's drawer.
+        reachable.insert("vendor/hls.light.min.js");
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // The REC button in the header, or Outputs > Stop recording.
         reachable.extend(closure_of("panels/outputs/record-stop.js"));
@@ -1319,6 +1440,10 @@ mod tests {
         let eager = eager_set();
         for (path, who) in [
             ("panels/composer/composer.js", "a double tap on a scene tile"),
+            ("panels/headend/station.js", "a headend station's page"),
+            ("shell/direct-page.js", "a station's page on a direct show"),
+            ("panels/headend/view.js", "View > Headend"),
+            ("panels/flowmap/view.js", "View > Flow map"),
             ("shell/dock-menu.js", "workspace or panel actions"),
             ("shell/phone.js", "a screen 760px wide or less"),
             ("shell/picker.js", "adding a source or dropping a URI"),
@@ -1377,6 +1502,16 @@ mod tests {
             ("panels/routing/data.js", "View > Routing"),
             ("panels/routing/model.js", "View > Routing"),
             ("panels/wall/view.js", "View > Monitoring wall"),
+            ("panels/headend/view.js", "View > Headend"),
+            ("panels/flowmap/view.js", "View > Flow map"),
+            ("panels/flowmap/map.js", "View > Flow map"),
+            ("panels/headend/tile.js", "View > Headend"),
+            ("panels/headend/editor.js", "Add a channel or Edit channel in the headend view"),
+            ("panels/headend/scan.js", "Scan a multicast feed in the headend view"),
+            ("panels/headend/channels.js", "the channel list in the headend view"),
+            ("panels/headend/profiles.js", "Profiles in the headend view"),
+            ("panels/headend/setup.js", "the headend's setup dialogs"),
+            ("vendor/hls.light.min.js", "a channel's drawer in the headend view"),
             ("panels/wall/data.js", "View > Monitoring wall"),
             ("panels/wall/task.js", "View > Monitoring wall"),
             ("panels/wall/rows.js", "View > Monitoring wall"),

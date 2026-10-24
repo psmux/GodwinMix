@@ -87,7 +87,7 @@ fn amount(c: &Cost, short: &[&str]) -> String {
     let mut parts = Vec::new();
     for s in short {
         parts.push(match *s {
-            "cpu" => format!("{:.1} cores", f64::from(c.cpu_millicores) / 1000.0),
+            "cpu" => cores(c.cpu_millicores),
             "device" => format!("{}% of the GPU encoder", c.device_millis / 10),
             "sessions" if c.device_sessions == crate::headroom::UNLIMITED => "any number of encoder sessions".into(),
             "sessions" => format!("{} encoder sessions", c.device_sessions),
@@ -96,9 +96,21 @@ fn amount(c: &Cost, short: &[&str]) -> String {
         });
     }
     if parts.is_empty() {
-        parts.push(format!("{:.1} cores", f64::from(c.cpu_millicores) / 1000.0));
+        parts.push(cores(c.cpu_millicores));
     }
     parts.join(" and ")
+}
+
+/// Thousandths of a core in words. Below a tenth, in hundredths: a sound
+/// encode or a hardware encoder's feeding share costs a few hundredths, and
+/// to one place "needs 0.0 cores and 0.0 cores is free" read as a refusal of
+/// nothing for nothing, where it was 0.02 asked of none.
+fn cores(millicores: u32) -> String {
+    match millicores {
+        0 => "0 cores".into(),
+        1..=99 => format!("{:.2} cores", f64::from(millicores.max(10)) / 1000.0),
+        m => format!("{:.1} cores", f64::from(m) / 1000.0),
+    }
 }
 
 pub fn codec_name(c: VideoCodec) -> &'static str {

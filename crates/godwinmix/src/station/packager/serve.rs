@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct PackagerDoor {
-    outputs: Arc<Outputs>,
+    pub(super) outputs: Arc<Outputs>,
     tokens: Arc<Tokens>,
     secret: Arc<str>,
 }
@@ -30,7 +30,7 @@ impl PackagerDoor {
         PackagerDoor { outputs, tokens, secret: secret.into() }
     }
 
-    fn station(&self, headers: &HeaderMap) -> bool {
+    pub(super) fn station(&self, headers: &HeaderMap) -> bool {
         let presented = crate::control::rest::bearer(headers).unwrap_or_default();
         constant_time_eq(presented.as_bytes(), self.secret.as_bytes())
     }
@@ -53,7 +53,7 @@ impl Door for PackagerDoor {
 
 pub fn router(door: PackagerDoor) -> Router {
     let outputs = Router::new().route(OUTPUTS, get(reports).put(take)).with_state(door.clone());
-    crate::control::hls::router(door.clone()).with_state(door).merge(outputs).layer(middleware::from_fn(peer))
+    crate::control::hls::router(door.clone()).with_state(door.clone()).merge(outputs).merge(super::ts_serve::router(door)).layer(middleware::from_fn(peer))
 }
 
 /// A request the station forwarded comes from the station's loopback
@@ -67,7 +67,7 @@ async fn peer(mut req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
-fn not_the_station() -> Response {
+pub(super) fn not_the_station() -> Response {
     let message = "this port is the station's HLS packager and answers the station alone".to_string();
     refuse(StatusCode::UNAUTHORIZED, message, json!({ "needs": "the packager's secret" }))
 }

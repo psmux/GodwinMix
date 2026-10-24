@@ -38,7 +38,7 @@ export function outFormat(o, st) {
   return v.height ? `${v.height}p${v.bitrate_kbps ? ` ${kbps(v.bitrate_kbps)}` : ""}` : "Re-encode";
 }
 
-const PLATFORMS = { youtube: "YouTube", facebook: "Facebook", twitch: "Twitch", linkedin: "LinkedIn", kick: "Kick", x: "X" };
+const PLATFORMS = { youtube: "YouTube", facebook: "Facebook", twitch: "Twitch", linkedin: "LinkedIn", kick: "Kick", x: "X", hls: "HLS" };
 
 export function outName(o) {
   if (o.platform) return PLATFORMS[o.platform] || o.platform.charAt(0).toUpperCase() + o.platform.slice(1);

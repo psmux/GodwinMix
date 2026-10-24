@@ -24,8 +24,9 @@ pub fn apart(config: &Path, codecs: Option<&Path>) -> Option<Apart> {
 pub fn run(config: &Path, codecs: Option<&Path>, dir: &Path) -> Result<()> {
     let cfg = Config::load(config).ok();
     godwinmix_core::catalogue::init(cfg.as_ref(), codecs).context("reading the codec catalogue")?;
-    let pin = cfg.map(|c| c.hardware.encode).unwrap_or_default();
-    match Station::calibrate_here(pin, dir) {
+    let pin = cfg.as_ref().map(|c| c.hardware.encode).unwrap_or_default();
+    let governor = cfg.map(|c| c.governor).unwrap_or_default();
+    match Station::calibrate_here(pin, governor, dir) {
         true => Ok(()),
         false => anyhow::bail!("the calibration was not kept in {}; the station measures again on its next start", dir.display()),
     }

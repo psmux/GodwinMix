@@ -141,9 +141,10 @@ class HeaderPanel extends HTMLElement {
   render(s) {
     // A multi item scene puts nothing in `program`, so reading that alone
     // said "black" over a live programme.
-    const on = !!(s.program || s.scene);
+    const d = s.direct;
+    const on = d ? d.tally.on : !!(s.program || s.scene);
     this.tally.classList.toggle("on", on);
-    this.tally.lastChild.textContent = programLabel(s) || "black";
+    this.tally.lastChild.textContent = d ? d.tally.label : programLabel(s) || "black";
     document.body.classList.toggle("onair", on);
     if (s.uptime_secs !== this.uptimeSaid) {
       this.uptimeSaid = s.uptime_secs;

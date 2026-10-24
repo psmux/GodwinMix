@@ -23,6 +23,7 @@ pub fn encoded(codec: VideoCodec, width: u32, height: u32, fps: u32, kbps: u32) 
             bitrate_kbps: 128,
         }),
         encoded: true,
+        ..StreamInfo::default()
     }
 }
 
@@ -48,6 +49,7 @@ pub fn raw(width: u32, height: u32, fps: u32) -> StreamInfo {
             bitrate_kbps: 0,
         }),
         encoded: false,
+        ..StreamInfo::default()
     }
 }
 

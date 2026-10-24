@@ -1,0 +1,105 @@
+/* The headend's setup dialogs: the channel editor, the channel list, the
+   scan and the profiles. They are dialogs, so outside .he. Theme tokens
+   only. Under 600px every table turns into one card per row. */
+
+.hs-dialog { max-width: min(900px, 96vw) !important; }
+.hs-dialog.hs-wide { max-width: min(1180px, 96vw) !important; }
+.hs-editor, .hs-list, .hs-scan, .hs-pman { display: grid; gap: 12px; min-width: 0; }
+
+.hs-group { border: var(--border) solid var(--line-soft); border-radius: var(--radius); padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; background: color-mix(in srgb, var(--panel2) 40%, var(--panel)); }
+.hs-group > legend { padding: 0 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.hs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 12px; align-items: start; }
+.hs-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hs-field[hidden] { display: none; }
+.hs-field > .lbl { color: var(--dim); font-size: var(--fs-sm); }
+.hs-field > .hint { color: var(--faint); font-size: 11px; line-height: 1.3; }
+.hs-field input[type=color] { width: 100%; height: 30px; padding: 2px; border: var(--border) solid var(--line); border-radius: var(--radius-sm); background: var(--bg); }
+.hs-tick { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); cursor: pointer; }
+.hs-note { margin: 0; font-size: var(--fs-sm); line-height: 1.4; }
+.hs-sub { margin: 4px 0 0; font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+.hs-uri { font-family: var(--mono, ui-monospace, monospace); color: var(--text); word-break: break-all; }
+.hs-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hs-row.hs-end { justify-content: flex-end; }
+.hs-more { font-size: var(--fs-sm); }
+.hs-more > summary { cursor: pointer; color: var(--dim); margin-bottom: 6px; }
+.hs-backup { padding-left: 10px; border-left: 2px solid var(--line); }
+.hs-backup[hidden], .hs-customslot[hidden] { display: none; }
+.hs-custom { display: grid; gap: 8px; }
+
+.hs-warn { margin: 0; padding: 8px 10px; border-left: 3px solid var(--warn); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); font-size: var(--fs-sm); line-height: 1.4; }
+.hs-warn p { margin: 0 0 6px; }
+.hs-detached { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.hs-why { padding: 8px 10px; border-left: 3px solid var(--bad); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--bad) 10%, var(--panel)); color: var(--text); font-size: var(--fs-sm); }
+.hs-why[hidden] { display: none; }
+.hs-why p { margin: 0; }
+.hs-why p + p { margin-top: 4px; }
+
+.hs-outs { display: grid; gap: 6px; }
+.hs-out { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.hs-outbox { display: grid; gap: 8px; }
+
+/* The channel list and the scan's programs. */
+.hs-listtop input[type=search] { width: 300px; max-width: 100%; }
+.hs-bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: var(--radius); background: var(--select-fill); border: var(--border) solid var(--accent); }
+.hs-bulk[hidden] { display: none; }
+.hs-bulk select { width: auto; max-width: 220px; }
+.hs-bulk input[type=text] { width: 90px; }
+.hs-count { font-weight: 600; margin-right: auto; }
+.hs-scroll { max-height: 58vh; overflow: auto; border: var(--border) solid var(--line-soft); border-radius: var(--radius); }
+.hs-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.hs-table th { text-align: left; font-weight: 600; color: var(--faint); padding: 5px 8px; border-bottom: var(--border) solid var(--line); }
+.hs-table td { padding: 6px 8px; border-bottom: var(--border) solid var(--line-soft); white-space: nowrap; vertical-align: top; }
+.hs-table .he-sub { color: var(--dim); font-size: 11px; }
+.hs-table tr.picked td { background: var(--select-fill); }
+.hs-table thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.hs-wrap { white-space: normal !important; min-width: 160px; }
+.hs-acts { display: flex; gap: 4px; justify-content: flex-end; }
+.hs-whyrow td { color: var(--bad); white-space: normal !important; background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.hs-state, .hs-from, .hs-flag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; border: var(--border) solid var(--line); color: var(--dim); white-space: nowrap; }
+.hs-state.st-live, .hs-state.st-on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+.hs-state.st-off, .hs-state.st-offline { color: var(--faint); }
+.hs-state.st-black, .hs-state.st-nopicture, .hs-flag.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
+.hs-state.st-frozen, .hs-state.st-silent { color: var(--warn); }
+.hs-from.from-file, .hs-from.from-taken { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.hs-none { padding: 24px 12px; text-align: center; color: var(--dim); }
+.hs-none[hidden] { display: none; }
+.hs-flag + .hs-flag { margin-left: 4px; }
+
+.hs-progress { display: grid; gap: 8px; padding: 18px 4px; }
+.hs-progress[hidden] { display: none; }
+.hs-saying { color: var(--dim); font-size: var(--fs-sm); }
+.hs-bar { height: 6px; border-radius: 3px; background: var(--raise); overflow: hidden; }
+.hs-bar span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+.hs-bar span.go { animation: hs-fill linear forwards; }
+@keyframes hs-fill { to { transform: scaleX(1); } }
+.hs-scanout { display: grid; gap: 10px; }
+.hs-scanout[hidden] { display: none; }
+.hs-scansum { margin: 0; font-weight: 600; }
+.hs-scanpick { align-items: end; }
+
+/* Profiles. */
+.hs-profiles { display: grid; gap: 8px; }
+.hs-profiles[hidden], .hs-ppane[hidden] { display: none; }
+.hs-ppane { display: grid; gap: 10px; }
+.hs-pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.hs-pcard { display: grid; gap: 6px; align-content: start; padding: 10px 12px; border: var(--border) solid var(--line-soft); border-radius: var(--radius); background: var(--panel2); }
+.hs-pcard.builtin { background: transparent; }
+.hs-ptop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hs-ptop code { margin-left: auto; font-size: 11px; }
+.hs-move { display: grid; gap: 6px; }
+
+@media (prefers-reduced-motion: reduce) { .hs-bar span.go { animation: none; transform: scaleX(0.5); } }
+
+@media (max-width: 600px) {
+  .hs-grid { grid-template-columns: minmax(0, 1fr); }
+  .hs-out { grid-template-columns: minmax(0, 1fr) auto; }
+  .hs-out .hs-tick { grid-column: 1; }
+  .hs-listtop input[type=search] { width: 100%; }
+  .hs-table thead { display: none; }
+  .hs-table, .hs-table tbody, .hs-table tr, .hs-table td { display: block; width: 100%; }
+  .hs-table tr { padding: 6px 0; border-bottom: var(--border) solid var(--line-soft); }
+  .he-table.hs-table td { padding: 2px 8px; border: 0; min-width: 0; white-space: normal; }
+  .hs-table td[data-label]::before { content: attr(data-label) ": "; color: var(--faint); font-size: 11px; }
+  .hs-acts { justify-content: flex-start; flex-wrap: wrap; }
+  .hs-bulk select { max-width: 100%; }
+}

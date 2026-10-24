@@ -60,7 +60,7 @@ fn with_seen<T>(st: &Station, id: &str, f: impl FnOnce(&mut Seen) -> T) -> T {
 
 fn input(st: &Arc<Station>, v: &Value) {
     let id = v["show"].as_str().unwrap_or_default().to_string();
-    if !known(st, &id) {
+    if st.direct.probes.take_input(&id, v) || !known(st, &id) {
         return;
     }
     let moved = with_seen(st, &id, |s| s.take_input(v));
@@ -85,7 +85,17 @@ fn output(st: &Arc<Station>, v: &Value) {
     if !on {
         return;
     }
-    if with_seen(st, &id, |s| s.take_output(&out, v)) {
+    let moved = with_seen(st, &id, |s| {
+        let was = s.outputs.get(&out).map(|(l, _)| l.clone());
+        let moved = s.take_output(&out, v);
+        if moved {
+            if let Some((now, _)) = s.outputs.get(&out) {
+                super::seen::log_output(&id, &out, was.as_ref(), now);
+            }
+        }
+        moved
+    });
+    if moved {
         st.announce(&id);
         st.direct.announce_health(st, &id);
     }

@@ -60,6 +60,11 @@ impl Judge {
         self.last_peak = Some(peak_db);
     }
 
+    /// The last sound burst's peak in dBFS, for a wall's meter.
+    pub fn peak_db(&self) -> Option<f64> {
+        self.last_peak
+    }
+
     /// The input's running totals of continuity errors and lost packets.
     pub fn counters(&mut self, cc_errors: u64, lost: u64, now: u64) {
         let window = (self.limits.window_secs * 1000.0) as u64;

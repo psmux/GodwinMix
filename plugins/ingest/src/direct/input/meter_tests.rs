@@ -2,7 +2,7 @@ use super::*;
 use std::sync::Arc;
 
 fn tag(kind: TagKind, ms: u32, keyframe: bool, body: &[u8]) -> MediaTag {
-    MediaTag { kind, timestamp_ms: ms, keyframe, sequence_header: false, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ms, keyframe, sequence_header: false, payload: Arc::from(body) }
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! A track's side of keeping a stream's tracks in step (`ring_align.rs`):
 //! each call takes the ring's lock for a few comparisons and never waits.
 
-use super::super::ring::Place;
+use super::super::ring::{Cut, Place};
 use super::Track;
 
 impl Track {
@@ -43,5 +43,15 @@ impl Track {
     /// Where a follower's fragment goes: see `Ring::place`.
     pub fn place(&self, at_ns: u64, min_ns: u64) -> Place {
         self.ring.lock().place(at_ns, min_ns)
+    }
+
+    /// What a keyframe at `at_ns` is to the TS cutter: see `Ring::cut_at`.
+    pub fn cut_at(&self, at_ns: u64, min_ns: u64, tol_ns: u64) -> Cut {
+        self.ring.lock().cut_at(at_ns, min_ns, tol_ns)
+    }
+
+    /// Segment `msn`'s discontinuity and wall clock: see `Ring::meta`.
+    pub fn meta(&self, msn: u64) -> Option<(u32, i64)> {
+        self.ring.lock().meta(msn)
     }
 }

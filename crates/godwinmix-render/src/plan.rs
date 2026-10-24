@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use godwinmix_protocol::rendition::{
-    AudioCodec, AudioShape, RenditionRequest, StreamInfo, VideoCodec,
+    AudioCodec, AudioShape, RenditionRequest, StreamInfo, Tracks, VideoCodec,
 };
 
 use crate::audio::{resolve_audio, AudioDecision};
@@ -28,6 +28,9 @@ pub struct Resolved<'a> {
     pub info: &'a StreamInfo,
     pub video: VideoDecision,
     pub audio: AudioDecision,
+    /// Each further sound track and what it gets, for a request that wants
+    /// every track; empty otherwise.
+    pub tracks: Vec<(u8, AudioShape, AudioDecision)>,
 }
 
 impl Resolved<'_> {
@@ -93,13 +96,40 @@ fn resolve<'a>(
             request: request.id.clone(),
         });
     }
+    let tracks = more_tracks(request, source, info, audio_codecs)?;
     Ok(Resolved {
         request,
         source,
         info,
         video,
         audio,
+        tracks,
     })
+}
+
+/// The further sound tracks a request converts: every one the source has
+/// when it asks for all, each decided alone, at its own channel count unless
+/// the request names one.
+fn more_tracks(
+    request: &RenditionRequest,
+    source: &str,
+    info: &StreamInfo,
+    audio_codecs: &[AudioCodec],
+) -> Result<Vec<(u8, AudioShape, AudioDecision)>, PlanError> {
+    let all = request.audio.as_ref().and_then(|a| a.tracks) == Some(Tracks::All);
+    if !all || request.no_audio {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for t in &info.tracks {
+        let one = StreamInfo {
+            audio: Some(t.shape),
+            encoded: info.encoded,
+            ..StreamInfo::default()
+        };
+        out.push((t.track, t.shape, resolve_audio(request, source, &one, audio_codecs)?));
+    }
+    Ok(out)
 }
 
 /// The audio codecs this machine can encode, asked once per plan.

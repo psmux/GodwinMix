@@ -70,3 +70,22 @@ export async function detailTests(test, eq, ok) {
   test("alarm thresholds go with show.set, in milliseconds", () => eq(sent(stub, "show.set")[1].params.alarms.black_ms, 3000));
   d.close();
 }
+
+export async function playlistTests(test, eq, ok) {
+  const { playlists, playlistLinks } = await import("../panels/wall/detail-hls.js");
+  const hls = { id: "viewers", uri_host: "hls://viewers", playback: { master_url_path: "/hls/viewers/master.m3u8?show=ch101&key=k1", segments: "both" } };
+  test("a direct show's HLS output names its CMAF and MPEG-TS playlists, key and show kept", () => {
+    eq(playlists(hls, "http://box:8080").map((p) => [p.kind, p.url, p.made]), [
+      ["CMAF", "http://box:8080/hls/viewers/master.m3u8?show=ch101&key=k1", true],
+      ["MPEG-TS", "http://box:8080/hls/viewers/master-ts.m3u8?show=ch101&key=k1", true],
+    ]);
+    eq(playlists({ ...hls, playback: { ...hls.playback, segments: "cmaf" } }).map((p) => p.made), [true, false]);
+    eq(playlists({ ...hls, playback: { ...hls.playback, segments: "ts" } }).map((p) => p.made), [false, true]);
+    eq(playlists({ id: "off", uri_host: "hls://off" }), null, "an output that is off has no links yet");
+  });
+  test("each playlist made has a Copy button in the row", () => {
+    const node = playlistLinks(hls, "http://box:8080");
+    eq([...node.querySelectorAll("button")].map((b) => b.getAttribute("aria-label")), ["Copy the CMAF playlist link", "Copy the MPEG-TS playlist link"]);
+    ok(node.textContent.includes("master-ts.m3u8"), node.textContent);
+  });
+}

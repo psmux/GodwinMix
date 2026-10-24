@@ -33,7 +33,9 @@ function title(show) {
   const word = STATE_WORD[show.state] || show.state || "";
   return el("span.wl-title", {}, [
     el("span.wl-name", {}, [el(`span.wl-health.${h.state}`, { "aria-label": h.state }), el("span.wl-nametext", { text: show.name })]),
-    el("span.wl-sub", { text: [word, show.on_air ? `on air: ${show.on_air}` : "", show.input && show.input.program ? `TS program ${show.input.program}` : ""].filter(Boolean).join(" · ") }),
+    el("span.wl-sub", { text: [show.closed ? "closed" : "", word, show.on_air ? `on air: ${show.on_air}` : "", show.input && show.input.program ? `TS program ${show.input.program}` : ""].filter(Boolean).join(" · ") }),
+    // Closed from its tab, and kept: Open puts it back in the tab row.
+    show.closed ? el("button.btn.wl-open", { type: "button", "data-id": show.id, text: "Open", title: `Open ${show.name} again, in its tab` }) : null,
   ]);
 }
 

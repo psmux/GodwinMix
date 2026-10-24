@@ -212,6 +212,9 @@ impl Ring {
 #[path = "ring_align.rs"]
 mod align;
 pub use align::Place;
+#[path = "ring_cut.rs"]
+mod cut;
+pub use cut::Cut;
 
 #[cfg(test)]
 #[path = "ring_tests.rs"]

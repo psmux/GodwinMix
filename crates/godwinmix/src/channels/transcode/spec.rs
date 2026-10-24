@@ -12,43 +12,47 @@
 
 use std::collections::BTreeMap;
 
-use godwinmix_core::catalogue::apply::{cpu_count, Vars};
+use godwinmix_core::catalogue::apply::Vars;
 use godwinmix_core::catalogue::model::PropValue;
-use godwinmix_protocol::rendition::{AudioShape, Fps, StreamInfo, VideoShape};
+use godwinmix_protocol::rendition::{AudioShape, Fps, StreamInfo};
 use godwinmix_render::container::{audio_slug, video_slug};
 use godwinmix_render::{Node, NodeKind, Plan, Track};
 use serde_json::{json, Map, Value};
 
 use super::machine::Machine;
+use super::spec_video::{scale, video_encoder};
 
 /// The nodes of `plan` that read `stream`, in start order, as the listener
 /// builds them. Sources, copies and muxes are not built: a copy is the
-/// stream's own tags and a mux is the restreamer's.
+/// stream's own tags and a mux is the restreamer's. Pictures stay in the
+/// GPU's memory from decode to encode where every step can run there
+/// (`gpu.rs`).
 pub fn stream_nodes(plan: &Plan, stream: &str, info: &StreamInfo, machine: &Machine) -> Vec<Value> {
-    plan.nodes.iter().filter_map(|n| node(n, stream, info, plan, machine)).collect()
+    let mut nodes: Vec<Value> = plan.nodes.iter().filter_map(|n| node(n, stream, info, plan, machine)).collect();
+    super::gpu::keep_on_gpu(&mut nodes, machine);
+    nodes
 }
 
 fn node(n: &Node, stream: &str, info: &StreamInfo, plan: &Plan, machine: &Machine) -> Option<Value> {
     let input = n.inputs.first().cloned().unwrap_or_default();
     let mut v = match &n.kind {
-        NodeKind::Decode { source, track } if source == stream => decode(*track, info, machine)?,
-        NodeKind::Scale { source, width, height, fps } if source == stream => {
-            json!({"kind": "scale", "input": input, "width": width, "height": height, "fps": fps_pair(*fps)})
-        }
-        NodeKind::Encode { source, shape, encoder } if source == stream => {
+        NodeKind::Decode { source, track, index } if source == stream => decode(*track, *index, info, machine)?,
+        NodeKind::Scale { source, .. } if source == stream => scale(&n.kind, &input, info),
+        NodeKind::Encode { source, shape, encoder, preset, bframes } if source == stream => {
             let keyframe_ms = plan.keyframe_ms.get(source).copied().unwrap_or(shape.keyframe_ms);
-            let mut v = video_encoder(&encoder.id, shape, keyframe_ms, machine)?;
+            let mut v = video_encoder(&encoder.id, shape, keyframe_ms, preset.as_deref(), *bframes, machine)?;
             v["kind"] = json!("encode");
             v["input"] = json!(input);
             v
         }
-        NodeKind::AudioConvert { source, channels, sample_rate } if source == stream => {
-            json!({"kind": "aconvert", "input": input, "channels": channels, "sample_rate": sample_rate})
+        NodeKind::AudioConvert { source, channels, sample_rate, index } if source == stream => {
+            json!({"kind": "aconvert", "input": input, "channels": channels, "sample_rate": sample_rate, "index": index})
         }
-        NodeKind::AudioEncode { source, shape } if source == stream => {
+        NodeKind::AudioEncode { source, shape, index } if source == stream => {
             let mut v = audio_encoder(shape, machine)?;
             v["kind"] = json!("aencode");
             v["input"] = json!(input);
+            v["index"] = json!(index);
             v
         }
         _ => return None,
@@ -57,24 +61,30 @@ fn node(n: &Node, stream: &str, info: &StreamInfo, plan: &Plan, machine: &Machin
     Some(v)
 }
 
-fn decode(track: Track, info: &StreamInfo, machine: &Machine) -> Option<Value> {
+fn decode(track: Track, index: u8, info: &StreamInfo, machine: &Machine) -> Option<Value> {
     match track {
         Track::Video => {
             let codec = info.video?.codec;
             let e = machine.decoder(codec)?;
-            let mut v = json!({"kind": "decode", "track": "video", "codec": video_slug(codec), "element": e.decoder, "hardware": e.accel != "software"});
+            let mut v = json!({"kind": "decode", "track": "video", "codec": video_slug(codec), "element": e.decoder, "hardware": e.accel != "software", "accel": e.accel});
             if let Some(p) = &e.parser {
                 v["parser"] = json!(p);
             }
             if let Some(d) = &e.download {
                 v["download"] = json!(d);
             }
+            if !e.decode_properties.is_empty() {
+                v["props"] = json!(resolve(&e.decode_properties, &Vars::default()));
+            }
             Some(v)
         }
         Track::Audio => {
-            let codec = info.audio?.codec;
-            let e = machine.audio_decoder(codec)?;
-            let mut v = json!({"kind": "decode", "track": "audio", "codec": audio_slug(codec), "element": e.decoder});
+            let shape = match index {
+                0 => info.audio?,
+                n => info.tracks.iter().find(|t| t.track == n)?.shape,
+            };
+            let e = machine.audio_decoder(shape.codec)?;
+            let mut v = json!({"kind": "decode", "track": "audio", "index": index, "codec": audio_slug(shape.codec), "element": e.decoder});
             if let Some(p) = &e.parser {
                 v["parser"] = json!(p);
             }
@@ -88,39 +98,19 @@ pub fn fps_pair(fps: Fps) -> Value {
     json!([fps.num, fps.den.max(1)])
 }
 
-fn video_encoder(id: &str, shape: &VideoShape, keyframe_ms: u32, machine: &Machine) -> Option<Value> {
-    let e = machine.encoder(id)?;
-    let fps = shape.fps.as_f64().max(1.0);
-    let frames = ((f64::from(keyframe_ms) * fps / 1000.0).round() as i64).max(1);
-    let vars = Vars {
-        video_bitrate_kbps: i64::from(shape.bitrate_kbps),
-        keyframe_frames: frames,
-        keyframe_secs: (i64::from(keyframe_ms) / 1000).max(1),
-        fps: fps.round() as i64,
-        cpu_count: cpu_count(),
-        ..Vars::default()
-    };
-    let mut props = resolve(&e.properties, &vars);
-    if let Some(kf) = &e.keyframe {
-        let value = if kf.unit == "seconds" { vars.keyframe_secs } else { frames };
-        props.insert(kf.property.clone(), json!(value));
-    }
-    let mut v = json!({
-        "encoder": id, "element": e.encoder, "props": props, "hardware": e.accel != "software",
-        "codec": video_slug(shape.codec), "width": shape.width, "height": shape.height,
-        "fps": fps_pair(shape.fps), "bitrate_kbps": shape.bitrate_kbps, "keyframe_ms": keyframe_ms,
-    });
-    if let Some(p) = &e.parser {
-        v["parser"] = json!(p);
-    }
-    Some(v)
-}
-
 fn audio_encoder(shape: &AudioShape, machine: &Machine) -> Option<Value> {
-    let e = machine.audio_encoder(shape.codec)?;
+    let e = machine.audio_encoder_for(shape.codec, shape.channels)?;
     let vars = Vars { audio_bitrate_kbps: i64::from(shape.bitrate_kbps), ..Vars::default() };
+    let mut props = resolve(&e.properties, &vars);
+    // A converted stream's sound keeps the times it came with. Stamped by
+    // counting samples, as the programme's encoder is, a gap in the input
+    // (whole GOPs a slow reader lost) left every frame after it seconds
+    // early against the picture.
+    if props.contains_key("perfect-timestamp") {
+        props.insert("perfect-timestamp".into(), json!(false));
+    }
     let mut v = json!({
-        "encoder": e.id(), "element": e.encoder, "props": resolve(&e.properties, &vars),
+        "encoder": e.id(), "element": e.encoder, "props": props,
         "codec": audio_slug(shape.codec), "channels": shape.channels,
         "sample_rate": shape.sample_rate, "bitrate_kbps": shape.bitrate_kbps,
     });
@@ -131,7 +121,7 @@ fn audio_encoder(shape: &AudioShape, machine: &Machine) -> Option<Value> {
 }
 
 /// A catalogue property table with every derived value worked out.
-fn resolve(props: &BTreeMap<String, PropValue>, vars: &Vars) -> Map<String, Value> {
+pub fn resolve(props: &BTreeMap<String, PropValue>, vars: &Vars) -> Map<String, Value> {
     let mut out = Map::new();
     for (name, value) in props {
         let v = match value {

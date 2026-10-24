@@ -21,15 +21,22 @@
 
 mod build;
 mod caps;
+mod cuda;
+mod cuda_ctx;
+mod build_video;
 mod graph;
 pub(crate) mod input;
+mod meta;
 mod router;
 mod session;
 mod sink;
 mod spec;
+mod tee;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_fit;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
@@ -43,6 +50,17 @@ pub use spec::{specs, stream_specs, StreamSpec};
 /// The name a pair is published under on the renditions hub.
 pub fn output_key(stream: &str, video: Option<&str>, audio: Option<&str>) -> String {
     format!("{stream}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"))
+}
+
+/// The same for a pair that carries further sound tracks: `|` and their
+/// nodes, comma separated, after the pair's own key. With none it is the
+/// key it always was.
+pub fn output_key_with(stream: &str, video: Option<&str>, audio: Option<&str>, tracks: &[String]) -> String {
+    let key = output_key(stream, video, audio);
+    if tracks.is_empty() {
+        return key;
+    }
+    format!("{key}|{}", tracks.join(","))
 }
 
 /// Every stream being converted.
@@ -104,10 +122,25 @@ impl Transcoders {
     /// Why a converting destination has nothing to send, when a node it
     /// reads would not run.
     pub fn error(&self, w: &Wanted) -> Option<String> {
-        let Feed::Rendition { video, audio } = &w.feed else { return None };
+        let Feed::Rendition { video, audio, tracks } = &w.feed else { return None };
         let running = self.lock();
         let session = running.get(&(w.app.clone(), w.stream.clone()))?;
-        [video, audio].into_iter().flatten().find_map(|node| session.failed(node).or_else(|| session.failed("*")))
+        [video, audio].into_iter().flatten().chain(tracks).find_map(|node| session.failed(node).or_else(|| session.failed("*")))
+    }
+}
+
+impl Drop for Transcoders {
+    /// Stop every stream and give their threads a moment to take their
+    /// pipelines down. NVIDIA's decoder library waits at the process's exit
+    /// for every decoder to be closed, so a process that left one running on
+    /// another thread never exited.
+    fn drop(&mut self) {
+        let running = std::mem::take(&mut *self.lock());
+        running.values().for_each(Session::stop);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while running.values().any(|s| !s.ended()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
     }
 }
 
@@ -115,11 +148,12 @@ impl Transcoders {
 fn outputs(s: &StreamSpec, wanted: &[Wanted]) -> Vec<Output> {
     let mut out: Vec<Output> = Vec::new();
     for w in wanted.iter().filter(|w| w.app == s.app && w.stream == s.stream) {
-        let Feed::Rendition { video, audio } = &w.feed else { continue };
+        let Feed::Rendition { video, audio, tracks } = &w.feed else { continue };
         if video.is_none() && audio.is_none() {
             continue;
         }
-        let o = Output { key: output_key(&w.stream, video.as_deref(), audio.as_deref()), video: video.clone(), audio: audio.clone() };
+        let key = output_key_with(&w.stream, video.as_deref(), audio.as_deref(), tracks);
+        let o = Output { key, video: video.clone(), audio: audio.clone(), tracks: tracks.clone() };
         if !out.contains(&o) {
             out.push(o);
         }

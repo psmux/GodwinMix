@@ -120,3 +120,5 @@
   .wl-summary { order: 9; flex-basis: 100%; }
 }
 .wl-tile .wl-in .wl-sub { display: none; }
+/* A show closed from its tab: its one action, under its name. */
+.wl-open { justify-self: start; padding: 1px 8px; }

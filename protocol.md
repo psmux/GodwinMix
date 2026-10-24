@@ -103,9 +103,23 @@ Keys accepted on every method, handled before a method runs.
 | `gallery.show` | `POST /api/v1/gallery/show` | operate |  | 1 | Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. |
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
+| `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `headend.channel.add` | `POST /api/v1/headend/channel/add` | admin |  | 1 | Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. |
+| `headend.channel.bulk` | `POST /api/v1/headend/channel/bulk` | admin |  | 1 | The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. |
+| `headend.channel.follow` | `POST /api/v1/headend/channel/follow` | admin |  | 1 | Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. |
+| `headend.channel.list` | `GET /api/v1/headend/channel/list` | read |  | 1 | Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has. |
+| `headend.channel.remove` | `POST /api/v1/headend/channel/remove` | admin | yes | 1 | Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back. |
+| `headend.channel.update` | `POST /api/v1/headend/channel/update` | admin |  | 1 | Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow. |
+| `headend.export` | `POST /api/v1/headend/export` | read |  | 1 | The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for. |
+| `headend.import` | `POST /api/v1/headend/import` | admin |  | 1 | Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. |
+| `headend.profile.remove` | `POST /api/v1/headend/profile/remove` | admin | yes | 1 | Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead. |
+| `headend.profile.save` | `POST /api/v1/headend/profile/save` | admin |  | 1 | Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change. |
+| `headend.scan` | `POST /api/v1/headend/scan` | admin |  | 1 | Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add. |
+| `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
+| `machine.status` | `GET /api/v1/machine/status` | read |  | 1 | The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. |
 | `media.convert` | `POST /api/v1/media/{id}/convert` | operate |  | 1 | Transcode a library file to a web safe copy, in the background. |
 | `media.folder.add` | `POST /api/v1/media/folder/add` | operate |  | 1 | Make a folder in the media library, inside another when the name has a / in it. |
 | `media.folder.list` | `GET /api/v1/media/folder/list` | read |  | 1 | Every folder in the media library with how many files are in it, and every tag in use. |
@@ -222,7 +236,9 @@ Keys accepted on every method, handled before a method runs.
 | `setup.start` | `POST /api/v1/setup/start` | operate |  | 1 | Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. |
 | `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
 | `show.add_many` | `POST /api/v1/shows/add_many` | admin |  | 1 | Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. |
+| `show.close` | `POST /api/v1/shows/{id}/close` | admin |  | 1 | Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back. |
 | `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
+| `show.open` | `POST /api/v1/shows/{id}/open` | admin |  | 1 | Put a closed show back in the tab row. One that closing stopped starts again. |
 | `show.output.add` | `POST /api/v1/shows/{id}/output/add` | admin |  | 1 | Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. |
 | `show.output.remove` | `POST /api/v1/shows/{id}/output/remove` | admin | yes | 1 | Stop one output of a show without compositing and forget it, key and all. |
 | `show.output.set` | `POST /api/v1/shows/{id}/output` | admin |  | 1 | Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition. |
@@ -1432,6 +1448,233 @@ MCP tool `governor_status` in the `search` profile: readOnlyHint true, destructi
 }
 ```
 
+#### `gpu.status`
+
+Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
+
+MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GpuStatusRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GpuStatus"
+  }
+}
+```
+
+#### `headend.channel.add`
+
+Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
+
+MCP tool `add_headend_channels` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelAddRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.bulk`
+
+The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.
+
+MCP tool `bulk_edit_headend_channels` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelBulkRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.follow`
+
+Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.
+
+MCP tool `follow_flussonic_again` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelNames"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.list`
+
+Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has.
+
+MCP tool `headend_channels` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendSetup"
+  }
+}
+```
+
+#### `headend.channel.remove`
+
+Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back.
+
+MCP tool `remove_headend_channels` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelNames"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.update`
+
+Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow.
+
+MCP tool `update_headend_channel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelUpdateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.export`
+
+The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for.
+
+MCP tool `export_flussonic` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendExport"
+  }
+}
+```
+
+#### `headend.import`
+
+Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
+
+MCP tool `import_flussonic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/HeadendImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendImportReport"
+  }
+}
+```
+
+#### `headend.profile.remove`
+
+Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead.
+
+MCP tool `remove_transcode_profile` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ProfileRemoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ProfileChange"
+  }
+}
+```
+
+#### `headend.profile.save`
+
+Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.
+
+MCP tool `save_transcode_profile` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ProfileSaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ProfileChange"
+  }
+}
+```
+
+#### `headend.scan`
+
+Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.
+
+MCP tool `scan_feed` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScanRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ScanResult"
+  }
+}
+```
+
+#### `headend.status`
+
+Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.
+
+MCP tool `headend_status` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendStatus"
+  }
+}
+```
+
 #### `log.gst`
 
 Raise GStreamer's own debug categories for a while, then let them fall back on their own.
@@ -1475,6 +1718,25 @@ Change one instance's or one module's log level while the mixer runs.
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `machine.status`
+
+The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
+
+MCP tool `machine_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/MachineStatus"
   }
 }
 ```
@@ -3379,6 +3641,21 @@ MCP tool `add_shows` in the `headend` profile: readOnlyHint false, destructiveHi
 }
 ```
 
+#### `show.close`
+
+Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowCloseRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
 #### `show.list`
 
 Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
@@ -3394,6 +3671,21 @@ MCP tool `list_shows` in the `headend` profile: readOnlyHint true, destructiveHi
   },
   "result": {
     "$ref": "#/$defs/ShowList"
+  }
+}
+```
+
+#### `show.open`
+
+Put a closed show back in the tab row. One that closing stopped starts again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
   }
 }
 ```
@@ -4224,10 +4516,12 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `POST /whip/{channel}/{stream}` | WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location. |
 | `DELETE /whip/{channel}/{stream}/{session}` | ends a WHIP session, as the WHIP client does when it stops publishing |
 | `PATCH /whip/{channel}/{stream}/{session}` | 405: every candidate is in the answer, and none are taken later |
-| `GET /hls/{output}/master.m3u8` | an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read |
+| `GET /hls/{output}/master.m3u8` | an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read, or with nothing from loopback and private networks when params.access is open |
 | `GET /hls/{output}/manifest.mpd` | the same segments as a DASH MPD, dynamic, with a SegmentTimeline per representation; the same keys as the playlists |
 | `GET /hls/{output}/{rung}/index.m3u8` | one rung's media playlist; _HLS_msn and _HLS_part hold it until that part exists (LL-HLS blocking reload) |
-| `GET /hls/{output}/{rung}/{file}` | init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory |
+| `GET /hls/{output}/{rung}/{file}` | init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, or an MPEG-TS segment {start_ms}.ts, from memory |
+| `GET /hls/{output}/master-ts.m3u8` | an hls/output's MPEG-TS multivariant playlist, with params.segments ts or both: main carries the picture and the first sound, each further sound is its own rendition. The same keys as master.m3u8 |
+| `GET /hls/{output}/{rung}/ts.m3u8` | an MPEG-TS media playlist, main or audio<n>; segments named by their UTC start in ms |
 
 ## The ext table
 

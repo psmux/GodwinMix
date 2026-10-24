@@ -204,7 +204,13 @@ means a new file.
 | Key | Type | Meaning |
 |---|---|---|
 | `reserve_cores` | number | Advanced. Cores to keep free, in place of the worked out reserve |
+| `nvenc_session_probe` | count, 1 to 256 | Advanced. Sessions the calibration opens on a hardware encoder before it calls the device unlimited. 8 when left out, which finds a consumer NVIDIA card's limit; a card with that limit lifted sets it higher to find the real one |
+| `nvenc_sessions` | count | Advanced. The session limit of the NVIDIA device, in place of what calibration found |
 | `uplink_kbps` | integer | The uplink, when known. Without it nothing is refused for bandwidth |
+
+All four are in **File > Mixer settings**. The two NVENC keys are under
+**Advanced** there, closed until opened, and every one of them waits for a
+restart.
 
 ## Load sampling
 

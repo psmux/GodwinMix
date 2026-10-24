@@ -61,7 +61,7 @@ export function watchRunning(client, pill) {
     const state = client.state || {};
     const items = runningThings(state, channels);
     const out = outgoing(items);
-    const base = destinationsPill(state.outputs || []);
+    const base = destinationsPill(state.direct ? state.direct.outputs : state.outputs || []);
     const sent = out.filter((i) => i.key.startsWith("channel:"));
     let text = base.text;
     if (sent.length) text = base.kind === "none" ? `${sent.length} sent on from channels` : `${base.text}, ${sent.length} from channels`;

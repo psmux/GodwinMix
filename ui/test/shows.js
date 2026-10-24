@@ -1,5 +1,5 @@
 // Show tabs and the routing view against shows-stub.js: the tab row in its
-// three shapes, switching, rename, the menu, remove, New show, and the
+// three shapes, switching, closing, rename, the menu, remove, New show, and the
 // routing model and view with only what is on screen fetched. No core and
 // no station needed; the shapes are dev/plans/wave3-contract.md.
 
@@ -23,6 +23,10 @@ async function row(stub) {
 
 export async function showTests(test, eq, ok) {
   await tabTests(test, eq, ok);
+  const { switchTests } = await import("./shows-switch.js");
+  await switchTests(test, eq, ok, { row, key, until, wait });
+  const { closeTests } = await import("./shows-close.js");
+  await closeTests(test, eq, ok, { row, until, wait, dialogs, button, closeAll, sent });
   await actionTests(test, eq, ok);
   await modelTests(test, eq, ok);
   await viewTests(test, eq, ok);
@@ -33,7 +37,7 @@ async function tabTests(test, eq, ok) {
   const calm = await row(one);
   test("one show is its name and a +, drawn as plainly as a label", () => {
     ok(!calm.hidden && calm.classList.contains("one"), "shown, as one");
-    eq([...calm.querySelectorAll(".showtab")].map((t) => t.textContent), ["Sunday service"]);
+    eq([...calm.querySelectorAll(".showtab-name")].map((t) => t.textContent), ["Sunday service"]);
     ok(calm.querySelector(".shows-add"), "a + for a new show");
   });
   calm.remove();
@@ -53,7 +57,7 @@ async function tabTests(test, eq, ok) {
   stub.shows[1].name = "Kids hall";
   stub.emit("event", { name: "show.changed", params: { show: stub.shows[1] } });
   await wait(60);
-  test("a show.changed event redraws the row", () => eq(tabs()[1].textContent, "Kids hall"));
+  test("a show.changed event redraws the row", () => eq(tabs()[1].querySelector(".showtab-name").textContent, "Kids hall"));
 
   tabs()[0].focus();
   key(tabs()[0], "ArrowRight");
@@ -74,10 +78,6 @@ async function actionTests(test, eq, ok) {
   const node = await row(stub);
   const tab = (id) => node.querySelector(`[data-show="${id}"]`);
 
-  tab("kids").click();
-  await until(() => went.length);
-  test("a click on another show loads the page on that show", () => ok(/[?&]show=kids\b/.test(went[0] || ""), went[0]));
-
   key(tab("main"), "F2");
   await until(() => node.querySelector(".showtab-input"));
   const input = node.querySelector(".showtab-input");
@@ -91,7 +91,7 @@ async function actionTests(test, eq, ok) {
   const menu = document.querySelector(".menu");
   test("a click on this show's own tab opens its menu", () => {
     const items = [...menu.querySelectorAll("button")].map((b) => b.firstChild.textContent);
-    eq(items, ["Rename", "Stop show", "Remove show…"]);
+    eq(items, ["Rename", "Stop show", "Close show", "Remove show…"]);
   });
   closeAll();
 

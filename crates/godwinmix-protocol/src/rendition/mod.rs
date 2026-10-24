@@ -62,6 +62,33 @@ pub struct VideoWant {
     /// Keyframe interval. Renditions in one ladder share it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyframe_ms: Option<u32>,
+    /// Keyframe interval in frames of the source's own rate, as Flussonic's
+    /// `gop` is written. Taken over `keyframe_ms` when both are set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyframe_frames: Option<u32>,
+    /// How a picture of another shape goes into the size asked for. Pad when
+    /// left out, in black, which is what scaling has always done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fit: Option<Fit>,
+    /// The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pad_color: Option<String>,
+    /// Off when left out: an interlaced picture is scaled as it comes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deinterlace: Option<Deinterlace>,
+    /// The encoder's speed and quality preset in its own words (`p4` on
+    /// NVENC, `veryfast` on x264). The catalogue's when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
+    /// B frames between references. The catalogue's (none, for live) when
+    /// left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bframes: Option<u8>,
+    /// Only a GPU encoder, or only one on the CPU. Left out, the planner
+    /// takes a GPU encoder first and the CPU when the GPU is full or has
+    /// none of this codec.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<EncoderPick>,
 }
 
 /// The audio an output wants. Every field left out is taken from the source.
@@ -75,6 +102,11 @@ pub struct AudioWant {
     pub sample_rate: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bitrate_kbps: Option<u32>,
+    /// The first sound track alone (when left out), or every one the source
+    /// carries, each converted on its own at its own channel count unless
+    /// `channels` says otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracks: Option<Tracks>,
 }
 
 /// What a source actually carries, as the hub or a decoder reports it.
@@ -87,6 +119,24 @@ pub struct StreamInfo {
     /// Encoded (can be copied) or already raw frames (a camera, the
     /// programme), which must be encoded for any output.
     pub encoded: bool,
+    /// Sound tracks after the first (`audio`), numbered from 1, as a
+    /// headend input carries them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tracks: Vec<SoundTrack>,
+    /// The video is interlaced, as far as the source says.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub interlaced: bool,
+}
+
+/// One further sound track of a source.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SoundTrack {
+    /// 1, 2, 3: the hub tag's `track`.
+    pub track: u8,
+    pub shape: AudioShape,
+    /// ISO 639 code from the PMT, `eng`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 /// One encoder this machine has, as the codec catalogue names it.

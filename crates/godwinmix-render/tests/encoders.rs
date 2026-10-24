@@ -179,3 +179,20 @@ fn an_inherited_codec_this_machine_cannot_encode_falls_back_to_the_container_def
     );
     assert_eq!(err.unwrap_err().code(), "no-encoder");
 }
+
+#[test]
+fn an_encoder_pick_keeps_a_rendition_on_the_cpu_or_on_the_gpu() {
+    let src = sources(&[("cam", h264_1080p30())]);
+    let want = |pick| VideoWant { height: Some(720), bitrate_kbps: Some(1500), encoder: Some(pick), ..VideoWant::default() };
+    let reqs = on("cam", vec![with_video(request("a", Container::Flv), want(EncoderPick::Cpu)), with_video(request("b", Container::Flv), want(EncoderPick::Gpu))]);
+    let plan = plan(&src, &reqs, &with_gpu()).unwrap();
+    let chosen: Vec<(&str, bool)> = plan.encodes().map(|n| (encoder_of(n).id.as_str(), encoder_of(n).hardware)).collect();
+    assert_eq!(chosen.len(), 2, "the same shape on two encoders is two encodes: {chosen:?}");
+    assert!(chosen.contains(&("h264-software-x264", false)) && chosen.contains(&("h264-nvidia", true)), "{chosen:?}");
+    let only_gpu = on("cam", vec![with_video(request("a", Container::Flv), want(EncoderPick::Gpu))]);
+    assert_eq!(plan_err(&src, &only_gpu, &software()), "no-encoder", "no GPU and the GPU asked for is refused, not done on the CPU");
+}
+
+fn plan_err(src: &[(SourceId, StreamInfo)], reqs: &[(SourceId, RenditionRequest)], model: &StaticCostModel) -> String {
+    plan(src, reqs, model).map(|_| String::new()).unwrap_or_else(|e| e.code().to_string())
+}

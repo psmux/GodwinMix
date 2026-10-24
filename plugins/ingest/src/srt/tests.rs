@@ -6,7 +6,7 @@ use crate::hub::Hub;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use serde_json::json;
-use std::sync::{OnceLock, RwLock};
+use std::sync::RwLock;
 
 const KEY_ONE: &str = "first-key-0123456789";
 const KEY_TWO: &str = "second-key-0123456789";
@@ -20,7 +20,7 @@ fn gate() -> Arc<ChannelGate> {
         hub: Hub::new(),
         table: Arc::new(RwLock::new(table)),
         open_app: String::new(),
-        relay: OnceLock::new(),
+        relay: RwLock::default(),
         reporter: None,
         on_air: Default::default(),
     })

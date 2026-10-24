@@ -44,6 +44,10 @@ pub struct Meter {
     /// Windows measured before `measured`.
     windows: u32,
     pub total_bytes: u64,
+    /// The sound tracks after the first, for an input that carries them.
+    tracks: super::tracks::Tracks,
+    /// What an MPEG-2 sequence says of its scan: `Some(true)` interlaced.
+    interlaced: Option<bool>,
 }
 
 impl Meter {
@@ -70,6 +74,8 @@ impl Meter {
             measured: false,
             windows: 0,
             total_bytes: 0,
+            tracks: Default::default(),
+            interlaced: None,
         }
     }
 
@@ -80,6 +86,9 @@ impl Meter {
         self.last_tag = now;
         let len = tag.payload.len() as u64;
         self.total_bytes += len;
+        if tag.track != 0 {
+            return self.tracks.record(tag, now);
+        }
         // The first window starts with the first frame: a publisher whose
         // media came more than a second after it connected measured an empty
         // first second, which read as 0 kbit/s measured.
@@ -92,6 +101,11 @@ impl Meter {
                 let read = codec::read_video(tag);
                 news = self.video.as_ref() != Some(&read);
                 self.video = Some(read);
+                // The SPS's own timing says the rate the source runs at, which
+                // an arrival count on a busy machine does not.
+                if let Some(fps) = codec::declared_rate(tag).filter(|f| self.declared_fps != Some(*f)) {
+                    (self.declared_fps, news) = (Some(fps), true);
+                }
             }
             TagKind::Audio if tag.sequence_header => {
                 let read = codec::read_audio(tag);
@@ -101,6 +115,11 @@ impl Meter {
             TagKind::Video => {
                 self.video_bytes += len;
                 self.frames += 1;
+                // MPEG-2 has no sequence start tag: its keyframes say it.
+                if let Some((read, fps, progressive)) = super::tracks::mpeg2(tag) {
+                    news = self.video.as_ref() != Some(&read) || self.declared_fps != Some(fps);
+                    (self.video, self.declared_fps, self.interlaced) = (Some(read), Some(fps), Some(!progressive));
+                }
             }
             TagKind::Audio => {
                 self.audio_bytes += len;
@@ -198,6 +217,9 @@ impl Meter {
             if let Some(declared) = self.declared_fps {
                 video["frame_rate"] = json!(declared);
             }
+            if let Some(i) = self.interlaced {
+                video["interlaced"] = json!(i);
+            }
             video
         });
         let audio = self.audio.as_ref().map_or(Value::Null, |a| {
@@ -207,5 +229,22 @@ impl Meter {
             })
         });
         (video, audio)
+    }
+
+    /// Every track carried: the video and the first sound as track 0, then
+    /// each further sound, `{track, kind, codec, ...}` with the members of
+    /// `describe` beside them.
+    pub fn tracks(&self) -> Vec<Value> {
+        let (video, audio) = self.describe();
+        let mut out = Vec::new();
+        for (kind, mut v) in [("video", video), ("audio", audio)] {
+            if v.is_object() {
+                v["track"] = json!(0);
+                v["kind"] = json!(kind);
+                out.push(v);
+            }
+        }
+        out.extend(self.tracks.describe(self.last_tag.elapsed() > WINDOW * 3));
+        out
     }
 }

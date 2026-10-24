@@ -95,6 +95,13 @@ pub struct VideoEntry {
     pub encoder: Option<String>,
     #[serde(default)]
     pub decoder: Option<String>,
+    /// The decoder's rank when a stream is converted for a rendition, in
+    /// place of `rank`. The converter builds the decoder on its own, with no
+    /// `decodebin` to fall back on, so a decoder that takes only part of a
+    /// codec (openh264: 4:2:0, 8 bit, progressive) goes after one that takes
+    /// all of it, or a stream it refuses fails to convert.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub convert_rank: Option<i32>,
     /// Element that pulls frames from this backend's memory back into system
     /// memory. Hardware decoders hand out GPU surfaces and most of the graph
     /// works in system memory.
@@ -103,6 +110,11 @@ pub struct VideoEntry {
     /// The parser that goes between the encoder and a muxer.
     #[serde(default)]
     pub parser: Option<String>,
+    /// The H.264 or HEVC profile asked of the encoder through the caps after
+    /// it (`high`, `main`). Left out, the encoder picks, which NVENC does as
+    /// Baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     /// The memory type this encoder accepts on its sink pad.
     #[serde(default = "system")]
     pub memory: String,
@@ -110,6 +122,10 @@ pub struct VideoEntry {
     pub requires: Vec<String>,
     #[serde(default)]
     pub properties: BTreeMap<String, PropValue>,
+    /// Properties set on the decoder, where `properties` are the encoder's:
+    /// a hardware decoder's surface count, for one.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub decode_properties: BTreeMap<String, PropValue>,
     /// Properties for one CPU architecture, laid over `properties` when the
     /// catalogue is loaded, keyed by Rust's name for it (`x86_64`,
     /// `aarch64`). For an element that behaves differently on two kinds of
@@ -137,6 +153,11 @@ pub struct VideoEntry {
 pub const ARCHES: &[&str] = &["x86_64", "aarch64"];
 
 impl VideoEntry {
+    /// The rank a converter ranks this decoder by.
+    pub fn convert_rank(&self) -> i32 {
+        self.convert_rank.unwrap_or(self.rank)
+    }
+
     /// Lay this machine's `arch_properties` over `properties`. Running it
     /// twice changes nothing, so every catalogue that is loaded can run it.
     pub fn resolve_arch(&mut self, arch: &str) {
@@ -180,6 +201,10 @@ pub struct AudioEntry {
     pub container: Vec<String>,
     #[serde(default)]
     pub license: Option<String>,
+    /// The most channels this encoder takes; any when left out. voaacenc
+    /// encodes mono and stereo only, and a 5.1 track goes to the next one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_channels: Option<u8>,
     /// Encoder delay this encoder does not take out of its own timestamps, so
     /// audio leaves it that much late relative to video. The programme holds
     /// the video back by it.

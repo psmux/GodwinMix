@@ -18,7 +18,8 @@ fn picture(video: &Value) -> Value {
     json!([video["codec"], video["width"], video["height"]])
 }
 
-/// What a plan is made from, without the rates that move every second.
+/// What a plan is made from, without the rates that move every second: the
+/// state, the picture, the sound, every further track, and where it is read.
 fn shape(input: &Value) -> Value {
     let steady = |v: &Value| {
         let mut v = v.clone();
@@ -27,7 +28,8 @@ fn shape(input: &Value) -> Value {
         }
         v
     };
-    json!([input["state"], steady(&input["video"]), steady(&input["audio"]), input["relay"], input["stream"]])
+    let tracks: Vec<Value> = input["tracks"].as_array().into_iter().flatten().map(steady).collect();
+    json!([input["state"], steady(&input["video"]), steady(&input["audio"]), tracks, input["relay"], input["stream"]])
 }
 
 impl Seen {

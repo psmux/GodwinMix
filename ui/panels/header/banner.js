@@ -2,6 +2,11 @@
 // recording or receiving: left running in the background earlier, or started
 // from another device. It says what, for how long, and offers Stop all and
 // Keep. The header's pill stays red and counting either way.
+//
+// Once answered, it does not come back for the same things. Switching show
+// tabs loads the page again, and the banner came back over the tab row on
+// every switch until Keep was pressed again. What was answered is kept for
+// this tab's session, by the running item's key.
 
 import { el, fmtDuration } from "../../shell/dom.js";
 import { toast } from "../../shell/toast.js";
@@ -18,9 +23,34 @@ export function bannerText(items) {
   return `${lead}: ${summary(items, fmtDuration)}`;
 }
 
-export function showBanner(client, items) {
+const ANSWERED = "gmx.running.answered";
+
+function answered() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(ANSWERED) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+/** Remember that the person answered the banner about these. */
+export function answer(items) {
+  const keys = answered();
+  for (const i of items) keys.add(i.key);
+  try {
+    sessionStorage.setItem(ANSWERED, JSON.stringify([...keys]));
+  } catch {
+    // No storage: the banner may ask again on the next page, as it did.
+  }
+}
+
+/** The banner, about what it has not been answered about yet; null when that is nothing. */
+export function showBanner(client, all) {
+  const seen = answered();
+  const items = all.filter((i) => !seen.has(i.key));
+  if (!items.length) return null;
   document.querySelector(".still-running")?.remove();
-  const close = () => bar.remove();
+  const close = () => (answer(items), bar.remove());
   const stop = el("button.btn.danger", {
     text: outgoing(items).length ? "Stop all" : "See what is running",
     onclick: async () => {

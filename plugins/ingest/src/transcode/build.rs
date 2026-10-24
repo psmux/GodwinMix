@@ -1,11 +1,11 @@
 //! The GStreamer elements for one node, made and linked among themselves.
 //!
 //! ```text
-//!   decode   appsrc ─ parser ─ decoder [─ download] ─ tee
-//!   scale    queue(leaky) ─ videorate ─ videoscale ─ caps ─ tee
-//!   encode   queue(leaky) ─ videoconvert ─ encoder ─ parser ─ caps ─ appsink
+//!   decode   appsrc ─ [parser] ─ decoder ─ [download | caps(CUDA memory)] ─ tee
+//!   scale    queue(leaky) ─ [videorate] ─ [deinterlace] ─ [crop] ─ videoscale | cudaconvertscale ─ caps ─ tee
+//!   encode   queue(leaky) ─ [videoconvert] ─ encoder ─ parser ─ caps ─ appsink
 //!   aconvert queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ tee
-//!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ encoder [─ parser] ─ caps ─ appsink
+//!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ encoder [─ parser] ─ caps ─ appsink
 //! ```
 //!
 //! Every branch off a tee starts with a small leaky queue on its own thread,
@@ -13,6 +13,10 @@
 //! up the decoder or the other encoders. The catalogue's properties arrive
 //! already in the element's own units; one this element version does not
 //! have, or cannot read, is skipped with a warning and never fatal.
+//!
+//! A node marked `"memory": "cuda"` keeps its pictures on the GPU: the
+//! decoder hands them on in CUDA memory, the scale is `cudaconvertscale`,
+//! and the encoder takes them as they are (`build_video.rs`).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -34,12 +38,14 @@ pub struct Built {
     pub appsink: Option<AppSink>,
 }
 
-/// Frames or buffers a branch holds before it drops its oldest.
-const BRANCH_BUFFERS: u32 = 3;
+/// Frames a branch holds before it drops its oldest. A multiplex hands its
+/// pictures over in bursts, and fifty channels on one decoder make them
+/// burstier: with three, a 720p60 channel lost a few frames now and then.
+const BRANCH_BUFFERS: u32 = 8;
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 
-fn make(factory: &str) -> Result<gst::Element, String> {
+pub(super) fn make(factory: &str) -> Result<gst::Element, String> {
     let n = SERIAL.fetch_add(1, Ordering::Relaxed);
     gst::ElementFactory::make(factory)
         .name(format!("xc{n}-{factory}"))
@@ -47,14 +53,14 @@ fn make(factory: &str) -> Result<gst::Element, String> {
         .map_err(|_| format!("this machine has no GStreamer element `{factory}`, which the plan chose; install its plugin set or ask for another rendition"))
 }
 
-fn caps(text: &str) -> Result<gst::Element, String> {
+pub(super) fn caps(text: &str) -> Result<gst::Element, String> {
     let filter = make("capsfilter")?;
     let caps: gst::Caps = text.parse().map_err(|_| format!("the caps `{text}` do not parse"))?;
     filter.set_property("caps", caps);
     Ok(filter)
 }
 
-fn leaky_queue() -> Result<gst::Element, String> {
+pub(super) fn leaky_queue() -> Result<gst::Element, String> {
     let q = make("queue")?;
     q.set_property_from_str("leaky", "downstream");
     q.set_property("max-size-buffers", BRANCH_BUFFERS);
@@ -63,7 +69,20 @@ fn leaky_queue() -> Result<gst::Element, String> {
     Ok(q)
 }
 
-fn tee() -> Result<gst::Element, String> {
+/// Sound arrives in bursts as a multiplex interleaves it, many frames at a
+/// time: a branch of three buffers dropped a third of them, and an encoder
+/// that stamps its frames by counting samples then ran ahead of the picture.
+/// So a sound branch holds up to two seconds before it drops its oldest.
+fn audio_queue() -> Result<gst::Element, String> {
+    let q = make("queue")?;
+    q.set_property_from_str("leaky", "downstream");
+    q.set_property("max-size-buffers", 0u32);
+    q.set_property("max-size-bytes", 0u32);
+    q.set_property("max-size-time", 2_000_000_000u64);
+    Ok(q)
+}
+
+pub(super) fn tee() -> Result<gst::Element, String> {
     let t = make("tee")?;
     t.set_property("allow-not-linked", true);
     Ok(t)
@@ -72,15 +91,15 @@ fn tee() -> Result<gst::Element, String> {
 pub fn build(node: &NodeSpec) -> Result<Built, String> {
     match node.kind.as_str() {
         "decode" => decode(node),
-        "scale" => scale(node),
-        "encode" => encode(node),
+        "scale" => super::build_video::scale(node),
+        "encode" => super::build_video::encode(node),
         "aconvert" => aconvert(node),
         "aencode" => aencode(node),
         other => Err(format!("the plan asked for a `{other}` node, which this listener does not know")),
     }
 }
 
-fn element(node: &NodeSpec, key: &str) -> Result<gst::Element, String> {
+pub(super) fn element(node: &NodeSpec, key: &str) -> Result<gst::Element, String> {
     let factory = node.text(key).ok_or_else(|| format!("node {} names no {key}", node.id))?;
     make(factory)
 }
@@ -91,56 +110,38 @@ fn decode(node: &NodeSpec) -> Result<Built, String> {
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);
     }
-    elements.push(element(node, "element")?);
-    if let Some(d) = node.text("download") {
-        elements.push(make(d)?);
+    let decoder = element(node, "element")?;
+    set_all(&decoder, node.raw.get("props"));
+    elements.push(decoder);
+    match node.text("download") {
+        _ if node.cuda() => elements.push(caps("video/x-raw(memory:CUDAMemory)")?),
+        Some(d) => elements.push(make(d)?),
+        None => {}
     }
     let tee = tee()?;
     elements.push(tee.clone());
     Ok(Built { elements, head: None, tee: Some(tee), appsrc: Some(src), appsink: None })
 }
 
-fn scale(node: &NodeSpec) -> Result<Built, String> {
-    let (num, den) = node.fps().unwrap_or((30, 1));
-    let rate = make("videorate")?;
-    rate.set_property("skip-to-first", true);
-    let text = format!("video/x-raw,width={},height={},framerate={num}/{den},pixel-aspect-ratio=1/1", node.number("width"), node.number("height"));
-    let tee = tee()?;
-    let elements = vec![leaky_queue()?, rate, make("videoscale")?, caps(&text)?, tee.clone()];
-    Ok(Built { head: Some(elements[0].clone()), elements, tee: Some(tee), appsrc: None, appsink: None })
-}
-
-fn encode(node: &NodeSpec) -> Result<Built, String> {
-    let enc = element(node, "element")?;
-    set_all(&enc, node.raw.get("props"));
-    let mut elements = vec![leaky_queue()?, make("videoconvert")?, enc];
-    if let Some(p) = node.text("parser") {
-        elements.push(make(p)?);
-    }
-    // The framing FLV carries each codec in: AVC and HEVC with their
-    // configuration record as codec_data, AV1 as OBUs a temporal unit at a time.
-    let framing = match node.text("codec").unwrap_or("h264") {
-        "h265" => "video/x-h265,stream-format=hvc1,alignment=au",
-        "av1" => "video/x-av1,stream-format=obu-stream,alignment=tu",
-        _ => "video/x-h264,stream-format=avc,alignment=au",
-    };
-    elements.push(caps(framing)?);
-    let sink = appsink()?;
-    elements.push(sink.clone().upcast());
-    Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
-}
-
 fn aconvert(node: &NodeSpec) -> Result<Built, String> {
     let text = format!("audio/x-raw,rate={},channels={}", node.number("sample_rate"), node.number("channels"));
     let tee = tee()?;
-    let elements = vec![leaky_queue()?, make("audioconvert")?, make("audioresample")?, caps(&text)?, tee.clone()];
+    let elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?, caps(&text)?, tee.clone()];
     Ok(Built { head: Some(elements[0].clone()), elements, tee: Some(tee), appsrc: None, appsink: None })
 }
 
 fn aencode(node: &NodeSpec) -> Result<Built, String> {
     let enc = element(node, "element")?;
     set_all(&enc, node.raw.get("props"));
-    let mut elements = vec![leaky_queue()?, make("audioconvert")?, make("audioresample")?, enc];
+    let mut elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?];
+    // A broadcast switches between 5.1 and stereo at a programme's edge; the
+    // encoder keeps the count it was planned at, and the sound is mixed to it,
+    // since an AAC encoder does not take a new layout mid stream.
+    let (channels, rate) = (node.number("channels"), node.number("sample_rate"));
+    if channels > 0 && rate > 0 {
+        elements.push(caps(&format!("audio/x-raw,channels={channels},rate={rate}"))?);
+    }
+    elements.push(enc);
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);
     }
@@ -150,7 +151,7 @@ fn aencode(node: &NodeSpec) -> Result<Built, String> {
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
 }
 
-fn appsink() -> Result<AppSink, String> {
+pub(super) fn appsink() -> Result<AppSink, String> {
     let sink = make("appsink")?.downcast::<AppSink>().map_err(|_| "appsink is not an AppSink".to_string())?;
     sink.set_sync(false);
     sink.set_property("async", false);

@@ -47,7 +47,18 @@ export async function menubarTests(test, eq, ok) {
     const owners = { "tray.add": "core/sources", "scenes.new": "core/scenes", "program.take-armed": "core/program", "program.cut-armed": "core/program", "output.add-destination": "core/outputs", "channel.add": "core/channels" };
     for (const [id, panel] of Object.entries(owners)) eq(items.find((it) => it.command === id)?.panel, panel, id);
   });
-  const { runItem, runNative } = await import("../shell/menu-actions.js");
+  const { runItem, runNative, handled, addOfKind } = await import("../shell/menu-actions.js");
+  const asked = [];
+  await addOfKind(stub, "test", () => ({ addSource: (opts) => asked.push(opts) }));
+  test("Sources > Test pattern adds through the tray, which puts the source in the scene on screen", () => eq(asked, [{ category: "test" }]));
+  test("every menu item done in menu-actions.js is registered, so a click on it does something", () => {
+    // View > Headend was in menus.json and in menu-actions.js but never
+    // registered, so run() found no command and the click did nothing.
+    const done = new Set(handled());
+    const missing = items.filter((it) => it.command && done.has(it.command) && !command(it.command)).map((it) => it.command);
+    eq(missing, []);
+    ok(command("view.headend"), "View > Headend is registered");
+  });
   let ran = null;
   setTimeout(() => registerAll([{ id: "test.late-panel", title: "Late", run: (arg) => { ran = arg; } }]), 150);
   const late = await runItem(stub, { command: "test.late-panel", arg: 7, panel: "core/none" });

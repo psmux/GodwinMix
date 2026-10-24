@@ -26,12 +26,39 @@ fn secrets() -> &'static godwinmix_core::secrets::Secrets {
     crate::control::methods::plugins::secrets()
 }
 
+/// Outputs whose address the store could not give back, by show and output.
+static UNREADABLE: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+
+/// An output whose address could not be unsealed, as failed with the reason,
+/// so the wall and show.stats say so and the show raises an output alarm,
+/// rather than waiting for ever on an output that sends nothing.
+pub fn unreadable(show: &str, output: &str) -> Option<godwinmix_protocol::destination::DestinationLive> {
+    let known = UNREADABLE.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(s, o)| s == show && o == output);
+    known.then(|| godwinmix_protocol::destination::DestinationLive {
+        state: godwinmix_protocol::destination::DestinationState::Failed,
+        error: Some("this output's address could not be read from the secret store, whose key is not the one it was written with. Keep GODWINMIX_HOME across restarts, and add the output again".into()),
+        ..Default::default()
+    })
+}
+
 /// The outputs with their addresses and keys unsealed.
 pub fn stored(show: &str, records: &[OutputRecord]) -> Vec<StoredDestination> {
     records
         .iter()
         .map(|o| {
-            let sealed: Sealed = secrets().get(&scope(show), &o.id).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+            let sealed: Sealed = secrets().get(&scope(show), &o.id).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| {
+                // The address is only in the store, so a store opened with
+                // another key (a container whose home was not kept) leaves
+                // every output with none, and the host leaves them all out.
+                let mut said = UNREADABLE.lock().unwrap_or_else(|e| e.into_inner());
+                if said.iter().any(|(s, i)| s == show && i == &o.id) {
+                    return Sealed::default();
+                }
+                said.push((show.to_string(), o.id.clone()));
+                tracing::error!(show, output = %o.id, "this output's address could not be read from the secret store, so it sends nothing; \
+                    the store's key is not the one it was written with. Keep GODWINMIX_HOME across restarts, and add the output again");
+                Sealed::default()
+            });
             StoredDestination {
                 id: o.id.clone(),
                 platform: o.platform.clone(),

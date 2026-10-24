@@ -32,6 +32,10 @@ pub struct Live {
     pub measured: Option<bool>,
     /// Why the mixer refused to make this stream a source, until it takes it.
     pub source_error: Option<String>,
+    /// Sound tracks after the first, from `tracks` (a headend input's).
+    pub more_audio: Vec<godwinmix_protocol::rendition::SoundTrack>,
+    /// The video says it is interlaced.
+    pub interlaced: bool,
 }
 
 fn text(v: &Value, key: &str) -> String {
@@ -68,6 +72,8 @@ impl Live {
             declared_fps: None,
             measured: None,
             source_error: None,
+            more_audio: Vec::new(),
+            interlaced: false,
         };
         live.absorb(v);
         Some(live)
@@ -97,6 +103,10 @@ impl Live {
         self.video = video(&v["video"]).or(self.video.take());
         self.audio = audio(&v["audio"]).or(self.audio.take());
         self.dropped_gops = number(v, "dropped_gops");
+        if v.get("tracks").is_some() {
+            self.more_audio = super::tracks::more_audio(&v["tracks"]);
+        }
+        self.interlaced = v["video"]["interlaced"].as_bool().unwrap_or(self.interlaced);
     }
 
     pub fn view(&self) -> ChannelStream {

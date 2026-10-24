@@ -70,7 +70,7 @@ fn a_four_rung_ladder_is_packaged_with_aligned_segments_and_parts() {
     }
     // A third of a second at 30 fps is the part that does not divide into
     // nanoseconds, which is what once made two second segments 2.67 s long.
-    let params = HlsParams { segment_ms: 1000, part_ms: 333, window_s: 6 };
+    let params = HlsParams { segment_ms: 1000, part_ms: 333, window_s: 6, ..HlsParams::default() };
     let stream = Arc::new(Stream::new("ladder", params, "k".repeat(24).as_str()));
     let pipeline = running(&stream, &small_ladder());
     let whole = |t: &Arc<Track>| t.view().segments.iter().filter(|s| s.complete).count();
@@ -115,7 +115,7 @@ fn a_part_is_served_within_a_part_of_its_keyframe() {
     if !crate::probe::have_or_skip("cmafmux") {
         return;
     }
-    let params = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6 };
+    let params = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6, ..HlsParams::default() };
     let stream = Arc::new(Stream::new("edge", params, "k".repeat(24).as_str()));
     let pipeline = running(&stream, &small_ladder()[..1]);
     let track = stream.track("360p").unwrap();
@@ -150,7 +150,7 @@ fn a_plain_segment_is_served_as_soon_as_it_is_whole() {
     if !crate::probe::have_or_skip("cmafmux") {
         return;
     }
-    let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6 };
+    let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6, ..HlsParams::default() };
     let stream = Arc::new(Stream::new("plain", params, "k".repeat(24).as_str()));
     let pipeline = running(&stream, &small_ladder()[..1]);
     let track = stream.track("360p").unwrap();
@@ -183,7 +183,7 @@ fn a_rung_leaves_and_the_others_carry_on() {
     if !crate::probe::have_or_skip("cmafmux") {
         return;
     }
-    let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6 };
+    let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6, ..HlsParams::default() };
     let stream = Arc::new(Stream::new("leave", params, "k".repeat(24).as_str()));
     gst::init().unwrap();
     let pipeline = gst::Pipeline::new();

@@ -124,7 +124,8 @@ pub async fn start_alone(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
 
 async fn launch(dir: PathBuf, port: u16, extra: &[&str], env: &[(&str, &str)], turn: Turn) -> Running {
     let mut cmd = Command::new(BIN);
-    cmd.arg("--config").arg(dir.join("godwinmix.toml")).args(extra).args(["--log-format", "json"]);
+    // The log format first: a subcommand in `extra` takes no global flag after it.
+    cmd.arg("--config").arg(dir.join("godwinmix.toml")).args(["--log-format", "json"]).args(extra);
     cmd.envs(env.iter().copied());
     cmd.env("GODWINMIX_RUNTIME_DIR", dir.join("runtime")).env_remove("GODWINMIX_TOKEN");
     // Its own secret store, so an output key a test seals stays in its folder.
@@ -136,6 +137,11 @@ async fn launch(dir: PathBuf, port: u16, extra: &[&str], env: &[(&str, &str)], t
     let started = Instant::now();
     loop {
         if get(&running, "/api/v1/core/status").await.get("uptime_secs").is_some() {
+            return running;
+        }
+        // A headend starts no show, and the station answers for it.
+        let info = get(&running, "/api/v1/core/info").await;
+        if info["features"].as_array().is_some_and(|f| f.contains(&json!("headend"))) {
             return running;
         }
         assert!(started.elapsed() < Duration::from_secs(90), "not up after 90 s; see {}", running.dir.join("log.jsonl").display());

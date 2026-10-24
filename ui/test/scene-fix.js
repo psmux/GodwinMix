@@ -54,6 +54,10 @@ export async function sceneFixTests(test, eq, ok) {
   note.fillNote(box, client, ids, () => ({}), "The take goes ahead without them.");
   const button = box.querySelector("button");
   note.fillNote(box, client, ids, () => ({}), "The take goes ahead without them.");
+  test("one source that is gone is called gone, not not running", () => {
+    eq(note.summaryLine(client, ["slides"]), "slides is no longer in this mixer");
+    eq(note.summaryLine(client, ["cam1"]), "Camera 1 is not running");
+  });
   test("the note counts them and keeps its Fix button across redraws", () => {
     ok(box.textContent.startsWith("3 sources here are not running"), box.textContent);
     ok(button && box.querySelector("button") === button, "the button was swapped out under a click");

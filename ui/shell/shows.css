@@ -1,4 +1,5 @@
-/* The show tabs' rename box, and the New show dialog. Loaded with them. */
+/* The show tabs' rename box, the New show dialog and the question before a
+   live show closes. Loaded with them. */
 .showtab-input[type=text] { width: auto; padding: 1px 6px; font: inherit; }
 .show-new { display: grid; gap: 10px; min-width: min(420px, 80vw); }
 .show-new .field { display: grid; gap: 4px; }
@@ -7,3 +8,4 @@
 .show-from:has(input:checked) { border-color: var(--accent); background: var(--select-fill); }
 .show-from input { margin-top: 3px; accent-color: var(--accent); }
 .show-from > span { display: grid; gap: 2px; }
+.show-close ul { margin: 0 0 10px; padding-left: 20px; }

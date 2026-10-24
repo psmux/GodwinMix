@@ -61,6 +61,16 @@ pub struct HlsOutputParams {
     /// 16 characters or more.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_key: Option<String>,
+    /// `cmaf` (the default), `ts` or `both`: which segments are made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segments: Option<String>,
+    /// `keyed` (the default) or `open`: whether a player needs the viewer key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
+    /// With `access = "open"`, answer players outside loopback and the
+    /// private networks too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_public: Option<bool>,
 }
 
 /// `show.output.add`.
@@ -136,6 +146,18 @@ pub struct ShowOutputSetRequest {
 
 fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionChoice>>, D::Error> {
     Option::<RenditionChoice>::deserialize(d).map(Some)
+}
+
+/// `show.close`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ShowCloseRequest {
+    pub id: String,
+    /// true: it leaves the tab row and carries on, on air and sending, the
+    /// way the desktop app keeps running in the background. Left out or
+    /// false: it stops as well, and stays stopped across a restart of the
+    /// station until `show.open`.
+    #[serde(default)]
+    pub keep_running: bool,
 }
 
 /// `show.output.remove`.
