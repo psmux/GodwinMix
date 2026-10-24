@@ -10,6 +10,7 @@ import { choice, field, num, text } from "./form.js";
 const FIT = [["pad", "Pad with bars"], ["crop", "Crop to fill"], ["stretch", "Stretch to fill"]];
 const DEINT = [["auto", "Only pictures marked interlaced"], ["on", "Every picture"], ["off", "Off"]];
 const TRACKS = [["first", "The first track only"], ["all", "Every track, each on its own"]];
+export const STARTER = { video: { codec: "h264", width: 1280, height: 720, fit: "pad", bitrate_kbps: 1500, keyframe_ms: 2000, deinterlace: "auto" }, audio: { codec: "aac", bitrate_kbps: 128 } };
 const AUDIO = [["copy", "As it comes"], ["aac", "AAC"], ["opus", "Opus"], ["mp3", "MP3"], ["ac3", "AC-3"]];
 
 /** The encoder choices this machine has: Auto always, GPU when there is one. */
@@ -105,7 +106,10 @@ export function convPicker(setup, channel, opts = {}) {
     const id = pick.value;
     if (id === "custom") {
       if (!custom) {
-        custom = customForm((channel && channel.custom) || profiles.find((p) => p.id === current) || { video: { codec: "h264", width: 1280, height: 720, fit: "pad", bitrate_kbps: 1500, keyframe_ms: 2000, deinterlace: "auto" }, audio: { codec: "aac", bitrate_kbps: 128 } }, setup && setup.encoders);
+        // Custom starts from the channel's own settings, else the profile it
+        // took when that one converts, else 720p H.264 with AAC sound.
+        const was = profiles.find((p) => p.id === current);
+        custom = customForm((channel && channel.custom) || (was && (was.video || was.audio) ? was : STARTER), setup && setup.encoders);
         slot.replaceChildren(custom.node);
       }
       slot.hidden = false;

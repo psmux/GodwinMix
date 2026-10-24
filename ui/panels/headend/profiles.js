@@ -10,7 +10,7 @@ import { toast } from "../../shell/toast.js";
 import { sheet } from "./sheet.js";
 import { profileWords, readSetup, slug } from "./setup.js";
 import { choice, field, said, text, whyBox } from "./form.js";
-import { customForm } from "./conv.js";
+import { STARTER, customForm } from "./conv.js";
 
 export async function manageProfiles(client, opts = {}) {
   sheet("headend");
@@ -122,7 +122,7 @@ export async function manageProfiles(client, opts = {}) {
     const b = e.target.closest("[data-p]");
     if (!b) return;
     const p = setup.profiles.find((x) => x.id === (b.closest("[data-id]") || {}).dataset?.id);
-    if (b.dataset.p === "new") return edit({ video: { codec: "h264", width: 1280, height: 720, fit: "pad", bitrate_kbps: 1500, keyframe_ms: 2000, deinterlace: "auto" }, audio: { codec: "aac", bitrate_kbps: 128, tracks: "all" } }, true);
+    if (b.dataset.p === "new") return edit(structuredClone(STARTER), true);
     if (!p) return;
     if (b.dataset.p === "edit") return edit(p, false);
     if (b.dataset.p === "copy") return edit({ ...structuredClone(p), id: `${p.id}-copy`, name: `${p.name || p.id} (copy)`, builtin: false }, true);
