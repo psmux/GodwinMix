@@ -61,7 +61,9 @@ export function watchRunning(client, pill) {
     const state = client.state || {};
     const items = runningThings(state, channels);
     const out = outgoing(items);
-    const base = destinationsPill(state.outputs || []);
+    // A direct show's outputs are the station's, not in the status.
+    const direct = window.gmxDirect;
+    const base = destinationsPill(direct ? direct.outputs : state.outputs || []);
     const sent = out.filter((i) => i.key.startsWith("channel:"));
     let text = base.text;
     if (sent.length) text = base.kind === "none" ? `${sent.length} sent on from channels` : `${base.text}, ${sent.length} from channels`;
@@ -87,6 +89,7 @@ export function watchRunning(client, pill) {
     load();
   };
   window.addEventListener("godwinmix-shown", shown);
+  window.addEventListener("gmx-direct", paint);
   const timer = setInterval(paint, 1000);
   const offs = [
     client.onRender(() => paint()),
@@ -99,6 +102,7 @@ export function watchRunning(client, pill) {
     release();
     clearInterval(timer);
     window.removeEventListener("godwinmix-shown", shown);
+    window.removeEventListener("gmx-direct", paint);
     for (const off of offs) off();
   };
 }

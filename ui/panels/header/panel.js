@@ -79,9 +79,13 @@ class HeaderPanel extends HTMLElement {
     );
 
     addView("header", "program", this.meter, "h", this.peak);
+    // A direct show's input and outputs, from `shell/direct-page.js`.
+    const direct = () => this.render(this.client.state);
+    window.addEventListener("gmx-direct", direct);
     this.offs = [
       this.client.onRender((s) => this.render(s)),
       this.client.on("meters", (p) => takeMeters(p)),
+      () => window.removeEventListener("gmx-direct", direct),
     ];
     // What is running, counted and timed on the pill, fetched once the page
     // has drawn: it is not what a first paint waits for.
@@ -141,9 +145,11 @@ class HeaderPanel extends HTMLElement {
   render(s) {
     // A multi item scene puts nothing in `program`, so reading that alone
     // said "black" over a live programme.
-    const on = !!(s.program || s.scene);
+    // A direct show has no programme: its tally is its input.
+    const d = window.gmxDirect;
+    const on = d ? d.tally.on : !!(s.program || s.scene);
     this.tally.classList.toggle("on", on);
-    this.tally.lastChild.textContent = programLabel(s) || "black";
+    this.tally.lastChild.textContent = d ? d.tally.label : programLabel(s) || "black";
     document.body.classList.toggle("onair", on);
     if (s.uptime_secs !== this.uptimeSaid) {
       this.uptimeSaid = s.uptime_secs;

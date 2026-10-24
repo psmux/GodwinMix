@@ -9,6 +9,7 @@ import {
 import { ratesFrom, openRunning } from "../panels/header/running.js";
 import { bannerText, showBanner } from "../panels/header/banner.js";
 import { destinationsPill } from "../panels/header/destinations.js";
+import { directOutputs, directTally } from "../shell/direct-page.js";
 import { fmtDuration } from "../shell/dom.js";
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
@@ -178,6 +179,27 @@ export async function runningTests(test, eq, ok) {
   });
   again.remove();
   document.querySelectorAll(".toast").forEach((t) => t.remove());
+
+  // A direct show's page has no mixer and no outputs in its status: its
+  // outputs come from show.list and show.stats.
+  const ch = {
+    id: "ch101", name: "CH101", state: "running", compositing: false, health: { state: "ok", alarms: [] },
+    outputs: [
+      { id: "viewers", label: "viewers", uri_host: "hls://viewers", enabled: true, state: "live", kbps: 0, error: null, has_key: false },
+      { id: "spare", label: "spare", uri_host: "udp://10.0.0.9:5000", enabled: false, state: "off", error: null, has_key: false },
+    ],
+  };
+  const chStats = { id: "ch101", input: { kbps: 2400 }, outputs: [{ id: "viewers", state: "live", kbps: 2100 }] };
+  test("a direct show's HLS output counts as a destination live", () => {
+    const outs = directOutputs(ch, chStats);
+    eq(outs.map((o) => [o.id, o.state, o.kbps]), [["viewers", "live", 2100], ["spare", "stopped", 0]]);
+    eq(destinationsPill(outs).text, "1 destination live");
+  });
+  test("a direct show's tally is its input, not black", () => {
+    eq(directTally(ch, chStats), { on: true, label: "direct, input live" });
+    const down = { ...ch, health: { state: "alarm", alarms: [{ kind: "no-input", since_ms: 1 }] } };
+    eq(directTally(down, { ...chStats, input: { kbps: 0 } }), { on: false, label: "direct, no input" });
+  });
 
   // Stop streaming and Start streaming on an Outputs row.
   window.godwinmixPanels ||= [];

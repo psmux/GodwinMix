@@ -103,6 +103,8 @@ async function main() {
   await mountShell(client);
   // A headend station's page opens on the headend view; no other fetches it.
   if (info?.features?.includes("headend")) await import("./panels/headend/station.js").then((m) => m.openIfHeadend(client)).catch(console.error);
+  // A station with no mixer behind this page: a direct show's outputs, read from the station.
+  if (info?.features?.includes("station")) import("./shell/direct-page.js").then((m) => m.followDirect(client)).catch(console.error);
 
   if (client.legacy) {
     console.info("this mixer has no /rpc yet, so the page is talking to the REST API through the legacy adapter");

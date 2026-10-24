@@ -445,6 +445,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/settings.js", include_str!("../../../ui/shell/settings.js")),
     ("shell/show-tabs.js", include_str!("../../../ui/shell/show-tabs.js")),
     ("shell/show-actions.js", include_str!("../../../ui/shell/show-actions.js")),
+    ("shell/direct-page.js", include_str!("../../../ui/shell/direct-page.js")),
     ("shell/show-file.js", include_str!("../../../ui/shell/show-file.js")),
     ("shell/show-remove.js", include_str!("../../../ui/shell/show-remove.js")),
     ("shell/show-rename.js", include_str!("../../../ui/shell/show-rename.js")),
@@ -1319,6 +1320,8 @@ mod tests {
         reachable.extend(closure_of("shell/project-open.js"));
         // The show tabs' work, the first time a tab is clicked, and New show.
         reachable.extend(closure_of("shell/show-actions.js"));
+        // A station's page on a direct show: its outputs, read from the station.
+        reachable.extend(closure_of("shell/direct-page.js"));
         reachable.extend(closure_of("shell/show-file.js"));
         // View > Routing, and what its cells open.
         reachable.extend(closure_of("panels/routing/view.js"));
@@ -1409,6 +1412,7 @@ mod tests {
         for (path, who) in [
             ("panels/composer/composer.js", "a double tap on a scene tile"),
             ("panels/headend/station.js", "a headend station's page"),
+            ("shell/direct-page.js", "a station's page on a direct show"),
             ("panels/headend/view.js", "View > Headend"),
             ("panels/flowmap/view.js", "View > Flow map"),
             ("shell/dock-menu.js", "workspace or panel actions"),
