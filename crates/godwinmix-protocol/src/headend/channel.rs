@@ -34,9 +34,29 @@ pub struct ChannelInput {
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub params: Map<String, Value>,
     /// A second input, taken when this one stops and let go when it comes
-    /// back. A backup has no backup of its own.
+    /// back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backup: Option<Box<ChannelInput>>,
+    pub backup: Option<ChannelBackup>,
+}
+
+/// A channel's backup input: an input with no backup of its own.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChannelBackup {
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub params: Map<String, Value>,
+}
+
+impl ChannelBackup {
+    /// As an input, for what reads both the same way.
+    pub fn as_input(&self) -> ChannelInput {
+        ChannelInput { uri: self.uri.clone(), program: self.program, interface: self.interface.clone(), params: self.params.clone(), backup: None }
+    }
 }
 
 /// The channel's HLS output, which every channel has.

@@ -33,10 +33,7 @@ pub fn channel(c: &HeadendChannel, profiles: &[TranscodeProfile]) -> Result<(), 
     name(&c.name)?;
     input(&c.input, "input")?;
     if let Some(b) = &c.input.backup {
-        input(b, "backup input")?;
-        if b.backup.is_some() {
-            return Err("a backup input has no backup of its own. Give the main input one backup.".into());
-        }
+        input(&b.as_input(), "backup input")?;
     }
     super::compile::profile_of(c, profiles)?;
     if c.profile == CUSTOM {

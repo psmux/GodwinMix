@@ -91,7 +91,7 @@ fn stream(c: &HeadendChannel, profiles: &[TranscodeProfile], notes: &mut Vec<Str
     }
     let _ = writeln!(s, "  input {};", input(&c.input));
     if let Some(b) = &c.input.backup {
-        let _ = writeln!(s, "  input {};", input(b));
+        let _ = writeln!(s, "  input {};", input(&b.as_input()));
     }
     if let Some(line) = compile::profile_of(c, profiles).ok().and_then(|p| transcoder(p, notes, &c.name)) {
         let _ = writeln!(s, "  transcoder {line};");

@@ -6,7 +6,7 @@
 
 use godwinmix_flussonic::import::{ShowPlan, HLS_OUTPUT};
 use godwinmix_protocol::headend::profile::{builtins, COPY, CUSTOM};
-use godwinmix_protocol::headend::{ChannelHls, ChannelInput, ChannelOutput, HeadendChannel, TranscodeProfile};
+use godwinmix_protocol::headend::{ChannelBackup, ChannelHls, ChannelInput, ChannelOutput, HeadendChannel, TranscodeProfile};
 use godwinmix_protocol::rendition::{AudioWant, VideoWant};
 use serde_json::{json, Map, Value};
 
@@ -61,7 +61,7 @@ pub fn input_spec(i: &ChannelInput) -> Value {
         spec.insert("params".into(), Value::Object(params));
     }
     if let Some(b) = &i.backup {
-        spec.insert("backup".into(), input_spec(b));
+        spec.insert("backup".into(), input_spec(&b.as_input()));
     }
     Value::Object(spec)
 }
@@ -101,7 +101,10 @@ fn input_of(v: &Value) -> ChannelInput {
         program: v["program"].as_u64().and_then(|p| u16::try_from(p).ok()),
         interface,
         params,
-        backup: v.get("backup").filter(|b| b.is_object()).map(|b| Box::new(input_of(b))),
+        backup: v.get("backup").filter(|b| b.is_object()).map(|b| {
+            let i = input_of(b);
+            ChannelBackup { uri: i.uri, program: i.program, interface: i.interface, params: i.params }
+        }),
     }
 }
 
