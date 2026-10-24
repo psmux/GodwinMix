@@ -108,12 +108,16 @@ view's band; for an agent it is `import_flussonic`, behind `search_tools`.
 | `shows` | `show.add_many`'s answer for these shows: what would be made, what it costs and what would be refused, or on `dry_run: false` what was |
 | `following` | the file this station follows, when it follows one |
 
-A stream whose show is there already, by its id or its name, is refused
-with that reason rather than made a second time. A `disabled` stream is made
-and stopped, and a `title` becomes its show's name, as the headend's own
-apply does. Nothing follows the config afterwards and no Flussonic port is
-opened: for that, run `godwinmix headend`. A config that does not parse is
-refused with `data.line`.
+A stream whose show or channel is there already, by its id or its name, is
+refused with that reason rather than made a second time. A `disabled`
+stream is made and stopped, and a `title` becomes its show's name, as the
+headend's own apply does. With `dry_run: false` each stream the dry run
+passed becomes a headend channel the station keeps (`headend.channel.*`,
+[the reference](headend-channels.md)), with `origin` `import of <source>`:
+it is edited on the headend screen like a channel set up there, and it is
+kept across restarts. Nothing follows the config afterwards and no
+Flussonic port is opened: for that, run `godwinmix headend`. A config that
+does not parse is refused with `data.line`.
 
 `headend.status` (read scope, `headend_status` for an agent) says whether
 the station follows a Flussonic config:
@@ -125,8 +129,27 @@ the station follows a Flussonic config:
 ```
 
 On a station started without `headend`, `following` is false and `note`
-says how to import or follow a file. The headend view's band shows the file
-and the listeners.
+says how to import or follow a file. On one started as `godwinmix headend`
+with no file, `following` is false, `listeners` has the `--port` asked for,
+and `shows` counts the channels kept by the station. The headend view's band
+shows the file and the listeners.
+
+## Channels kept by the station
+
+The facade serves the station's own headend channels beside the file's
+streams: `/<name>/index.m3u8` and the rest of the playback paths, and
+`/streamer/api/v3/streams`, where each appears as the stream it would be in
+Flussonic's language (`headend.export`). A stream of the file that was
+edited or removed on the headend screen is the station's from then on: the
+API shows the station's version of it, or none, until
+`headend.channel.follow` gives it back. `PUT` and `DELETE` still edit the
+file; an edit to a stream the station holds is written to the file and not
+applied.
+
+`godwinmix headend --port 8090` with no `--flussonic` answers on that port
+for the station's own channels alone. There is no file to edit, so `PUT`
+and `DELETE` answer 409. With neither a file nor a port, no Flussonic port
+is opened.
 
 ## Changes to the file
 

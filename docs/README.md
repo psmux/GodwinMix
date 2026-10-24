@@ -135,6 +135,7 @@ Start here if you have never run it.
 * [Customize the workspace](how-to/customize-the-workspace.md)
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
 * [Install the control page as an app](how-to/install-as-an-app.md): on a phone or a desktop, and the certificate a phone needs for it
+* [Set up a headend in GodwinMix](how-to/set-up-a-headend.md): channels, a scan of a multiplex and transcode profiles, with no Flussonic needed
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
 * [Replace Flussonic with GodwinMix](how-to/replace-flussonic.md)
 * [Convert broadcast feeds on the GPU](how-to/convert-broadcast-feeds-on-the-gpu.md)
@@ -212,6 +213,7 @@ Start here if you have never run it.
 * [The channel methods](reference/channels.md)
 * [Reference: what a direct show takes in](reference/direct-inputs.md)
 * [Reference: the Flussonic facade](reference/flussonic-facade.md)
+* [Reference: headend channels, profiles and the scan](reference/headend-channels.md)
 * [Direct shows: the host's table, events and calls](reference/direct-shows.md)
 * [Reference: the resource governor](reference/governor.md)
 * [Media upload](reference/media-upload.md)

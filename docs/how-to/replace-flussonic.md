@@ -154,6 +154,14 @@ Edit `flussonic.conf` as before, by hand or through the API (`PUT` and
 and restarts only the streams that changed. A file with a mistake changes
 nothing, and the log says which line.
 
+You can also edit a stream on the headend screen. That takes it out of the
+file's hands: the station keeps it from then on, and later edits to that
+stream in the file are not applied until you press Follow the file again
+on it. The screen says so before you save. To leave Flussonic's file behind
+altogether, import it once (File > Import a Flussonic config) on a station
+that does not follow it, and set the channels up on the screen from then
+on, as [Set up a headend in GodwinMix](set-up-a-headend.md) describes.
+
 The headend view's band says which file the station follows and where
 Flussonic's URLs answer, from `headend.status`:
 

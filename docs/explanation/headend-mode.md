@@ -1,6 +1,6 @@
 # Headend mode
 
-Status: shipped in 0.3.17.
+Status: shipped in 0.3.17. Setting a headend up on the station itself, with no Flussonic file, is unreleased.
 
 ## Why
 
@@ -16,9 +16,14 @@ So the headend is a mode of GodwinMix, not a second product. A mixer user
 never sees any of it. A headend user turns mixing off and gets a channel
 server, and the same station can still mix a show beside its channels.
 
-Many headends run Flussonic today. Headend mode reads Flussonic's config and
-answers Flussonic's URLs and API, so a site can move to GodwinMix without
-changing the gateways, caches, players and monitoring that sit around it.
+A headend is set up on its own screen, View > Headend: add a channel by
+hand, scan a multiplex and tick its programmes, give many channels one
+transcode profile. Nothing outside GodwinMix is needed for any of it.
+
+Many headends run Flussonic today, so importing a Flussonic config is one
+more way in. Headend mode can also follow Flussonic's config and answer
+Flussonic's URLs and API, so a site can move to GodwinMix without changing
+the gateways, caches, players and monitoring that sit around it.
 
 ## The job it has to do
 
@@ -57,7 +62,7 @@ unchanged:
 
 ## What changes in GodwinMix
 
-Six pieces, each on its own branch off `feat/headend`, merged back here.
+Seven pieces. The first six were built on their own branches off `feat/headend` and shipped in 0.3.17; the seventh came after.
 
 ### 1. Carriage: MPEG-2 video and every sound track
 
@@ -131,9 +136,9 @@ hub. Other transports keep their current inputs.
   from `edit_auth`; `PUT` and `DELETE` edit the config through the lossless
   writer.
 * Log lines in Flussonic's format when asked.
-* `headend.import` makes a config's streams into shows once, from the page
-  or an agent, with the report first; `headend.status` says which file a
-  station follows.
+* `headend.import` makes a config's streams into channels once, from the
+  page or an agent, with the report first; `headend.status` says which
+  file a station follows.
 
 ### 6. The headend wall
 
@@ -152,6 +157,47 @@ channel's sound level is the silence check's peak, now in `show.stats` as
 `audio_peak_db`. The view reads `input.tracks` and `input.scrambled` from
 `show.stats` when the carriage work sends them, and until then shows the
 one video and one sound track a station carries today.
+
+### 7. Set up on the station itself
+
+The first six pieces made a headend out of a Flussonic file. A headend
+whose operator never ran Flussonic needs no file at all: the station keeps
+its own channels (`headend.channel.*`, [the reference](../reference/headend-channels.md)).
+
+* A channel is a name, an input with a backup, a profile, its HLS output
+  and any pushes. It compiles to the same plan an imported stream does, and
+  one piece of code, the keeper, runs either list of plans as direct shows,
+  restarting only what changed. So everything downstream reads a channel
+  made here exactly as it reads an imported one: the tiles, health, the
+  Flussonic compatible paths and API. A test makes the same channel both
+  ways and compares the two shows.
+* Transcode profiles are rendition wants with a name, five built in and the
+  rest saved on the station. A channel names one, or carries its own.
+  Changing a profile changes every channel that takes it.
+* A rendition can pin its encoder to the GPU or the CPU (`encoder`), which
+  the planner honours by leaving the other kind out of its choice.
+* `headend.scan` reads what a multiplex carries through the same input a
+  channel uses: the station puts probe rows in the direct host's table,
+  rows with no outputs that no list shows, reads their numbers, and takes
+  them out again. No second demuxer was written for it.
+* An import makes channels the station keeps, editable afterwards like any
+  other.
+* `godwinmix headend` runs with no `--flussonic`, and answers Flussonic's
+  paths for its own channels when given `--port`.
+
+When a station follows a Flussonic file and someone edits one of its
+streams on the screen, the two disagree. The rule: the edit wins, and it
+takes that stream out of the file's hands. The station keeps the channel
+from then on, the show moves from the file's keeper to the station's
+without a restart, and the file's later edits to that stream are not
+applied, until Follow the file again gives it back. A removal on the screen
+hides the stream the same way. The file itself is never written by the
+screen, so Flussonic can still read it, and the screen says all of this
+before the edit is saved. The other choices were worse: writing the edit
+back into the file loses whatever GodwinMix can say that Flussonic cannot
+(an encoder pin, a push that copies while the channel converts), and
+letting the file win silently undoes the operator's edit on the next save of
+the file.
 
 ## How it is checked
 
