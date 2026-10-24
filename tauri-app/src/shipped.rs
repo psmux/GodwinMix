@@ -16,19 +16,23 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use crate::plugins::{copy_tree, stamp_of, STAMP};
+use crate::plugins::{copy_tree, stamp_of, theirs_beside, STAMP};
 
 /// Refresh every installed plugin that came from `shipped`, the app's
 /// `resources/plugins` folder, in `dest`, the operator's plugins directory.
-pub fn refresh(shipped: &Path, dest: &Path) -> io::Result<()> {
-    let Ok(entries) = fs::read_dir(shipped) else { return Ok(()) };
+/// Answers a line for each installed copy that came from somewhere else,
+/// which is left alone and runs in place of the one the app carries.
+pub fn refresh(shipped: &Path, dest: &Path) -> io::Result<Vec<String>> {
+    let mut notes = Vec::new();
+    let Ok(entries) = fs::read_dir(shipped) else { return Ok(notes) };
     for entry in entries.flatten() {
         let from = entry.path();
         let Some(version) = version_of(&from) else { continue };
         let name = entry.file_name().to_string_lossy().into_owned();
         refresh_one(&name, &version, &from, &dest.join(&name))?;
+        notes.extend(theirs_beside(&name, &version, &dest.join(&name), |dir| came_from(dir, &from)));
     }
-    Ok(())
+    Ok(notes)
 }
 
 fn refresh_one(name: &str, version: &str, from: &Path, name_dir: &Path) -> io::Result<()> {
@@ -156,7 +160,10 @@ mod tests {
         plugin(&theirs, "0.1.0", "their build");
         fs::write(theirs.join(".gmx-trust.json"), r#"{"source":"C:\\mine\\udp"}"#).unwrap();
 
-        refresh(&shipped, &dest).unwrap();
+        let notes = refresh(&shipped, &dest).unwrap();
+        assert_eq!(notes.len(), 1, "one line, for the udp installed by hand: {notes:?}");
+        assert!(notes[0].starts_with("udp 0.1.0 at "), "{}", notes[0]);
+        assert!(notes[0].contains("is not used"), "{}", notes[0]);
         assert!(!old.exists(), "the old version went");
         let new = dest.join("ndi").join("0.2.0");
         assert_eq!(fs::read_to_string(new.join("bin").join("x")).unwrap(), "new build");
