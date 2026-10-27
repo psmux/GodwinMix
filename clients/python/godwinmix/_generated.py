@@ -4756,6 +4756,51 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+# What an alarm is about.
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
+
+# The nine alignment keywords, used to place content inside its frame.
+Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
+
+AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
+
+# OBS's blend enum, so an import carries across unchanged.
+Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
+
+# How the bytes leave. Decides which codecs are allowed: FLV carries H.264 (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 'dash', 'rtp', 'webrtc']
+
+ConversionPhase = Literal['running', 'done', 'failed']
+
+# Copied as it arrives, or converted.
+DestinationMode = Literal['copy', 'transcode']
+
+# Which of the three a channel has.
+FeedKind = Literal['programme', 'encoder', 'pull']
+
+# The one word [`GpuPick`] takes.
+GpuWord = Literal['auto']
+
+ItemEdge = Literal['left', 'right', 'top', 'bottom']
+
+ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe', 'hold']
+
+# A mouse button.
+PageButton = Literal['left', 'middle', 'right']
+
+ResponseFormat = Literal['concise', 'detailed']
+
+# What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
+Scope = Literal['plugin', 'read', 'operate', 'admin']
+
+# For the user, in their home folder, or for one project folder.
+SetupScope = Literal['user', 'project']
+
+TaskState = Literal['running', 'completed', 'failed', 'cancelled']
+
+# Which sound tracks a rendition converts.
+Tracks = Literal['first', 'all']
+
 # What a write does to a file.
 Action = Literal['create', 'merge', 'update', 'unchanged']
 
@@ -4768,19 +4813,11 @@ AgentExt = Union[bool, Dict[str, Any]]
 # The agent tools this mixer knows how to set up.
 AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
-# What an alarm is about.
-AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
-
-# The nine alignment keywords, used to place content inside its frame.
-Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
-
 # When a change to a key takes effect.
 Applies = Literal['live', 'next_source', 'restart']
 
 # Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
 Audio = Literal['follow', 'always', 'never']
-
-AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
 
 # Where a source with a backup stands.
 BackupPhase = Literal['ready', 'lost', 'on_backup', 'returning', 'main_back']
@@ -4788,25 +4825,14 @@ BackupPhase = Literal['ready', 'lost', 'on_backup', 'returning', 'main_back']
 # Where a binding writes. One of three shapes.
 BindingTarget = Dict[str, Any]
 
-# OBS's blend enum, so an import carries across unchanged.
-Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
-
 # How media crosses between a node and the core.
 BridgeTransport = Literal['rtp', 'srt', 'whip']
 
 # A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart because it has a port of its own.
 ChannelProtocol = Literal['rtmp', 'srt', 'whip']
 
-# How the bytes leave. Decides which codecs are allowed: FLV carries H.264 (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
-Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 'dash', 'rtp', 'webrtc']
-
-ConversionPhase = Literal['running', 'done', 'failed']
-
 # Whether an interlaced picture is made progressive.
 Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
-
-# Copied as it arrives, or converted.
-DestinationMode = Literal['copy', 'transcode']
 
 # Where a destination has got to.
 DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
@@ -4819,9 +4845,6 @@ EncoderPick = Literal['gpu', 'cpu']
 
 # How the body is read. `auto` decides from the content type and the first byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
 FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Literal['text'], Literal['sse']]
-
-# Which of the three a channel has.
-FeedKind = Literal['programme', 'encoder', 'pull']
 
 # The three ways a channel is fed, as `channel.add` and `channel.set` take them: `{"kind": "programme"}`, `{"kind": "encoder"}` or `{"kind": "pull", "url": "rtmp://..."}`.
 FeedRequest = Dict[str, Any]
@@ -4856,18 +4879,11 @@ GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 't
 # Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA device index (0 is the first card), or `"auto"`, the card with the least work when the channel starts. All three steps stay on that one card, so a picture never crosses from one card's memory to another's.
 GpuPick = Union[int, GpuWord]
 
-# The one word [`GpuPick`] takes.
-GpuWord = Literal['auto']
-
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
-
-ItemEdge = Literal['left', 'right', 'top', 'bottom']
-
-ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe', 'hold']
 
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
@@ -4891,9 +4907,6 @@ OutputState = Union[Literal['connecting', 'live', 'reconnecting', 'failed'], Lit
 # Where `source.page.navigate` goes.
 PageAction = Union[Literal['back', 'forward', 'reload'], Literal['go']]
 
-# A mouse button.
-PageButton = Literal['left', 'middle', 'right']
-
 # One thing the operator did to the page.
 PageEvent = Dict[str, Any]
 
@@ -4909,19 +4922,11 @@ ProgrammeExt = Union[bool, Dict[str, Any]]
 # What an output asks for: a whole request, or a preset by id. A request's `id` is replaced by the output's own id (a ladder's rungs get `<output>-<rung>`), so a client may send any slug there.
 RenditionChoice = Union[PresetRef, LadderRef, RenditionRequest]
 
-ResponseFormat = Literal['concise', 'detailed']
-
 # How a core that exits gets started again.
 RestartHow = Literal['supervised', 'none']
 
 # How the programme goes back to a source that came back.
 ReturnMode = Literal['auto', 'manual']
-
-# What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
-Scope = Literal['plugin', 'read', 'operate', 'admin']
-
-# For the user, in their home folder, or for one project folder.
-SetupScope = Literal['user', 'project']
 
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
@@ -4942,8 +4947,6 @@ ShowWork = Literal['mix', 'transcode', 'copy']
 
 SourceState = Literal['connecting', 'live', 'stalled', 'failed']
 
-TaskState = Literal['running', 'completed', 'failed', 'cancelled']
-
 # `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
 TelemetryExt = Union[bool, Dict[str, Any]]
 
@@ -4952,9 +4955,6 @@ TemplateFormat = Literal['svg', 'html']
 
 # Where a template comes from.
 TemplateOrigin = Literal['pack', 'library']
-
-# Which sound tracks a rendition converts.
-Tracks = Literal['first', 'all']
 
 # A name, or an object.
 Transition = Union[str, TransitionRequest]
