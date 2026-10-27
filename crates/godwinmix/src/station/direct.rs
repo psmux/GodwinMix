@@ -61,6 +61,8 @@ pub struct Direct {
     plugins: OnceLock<Arc<Supervisor>>,
     /// What the host last said about each show.
     pub(crate) seen: Mutex<BTreeMap<String, Seen>>,
+    /// Shows removed since the last table (`forget`).
+    gone: Mutex<std::collections::BTreeSet<String>>,
     /// Inputs opened for `headend.scan` only.
     pub(crate) probes: probe::Probes,
     /// The renditions of direct outputs, planned and admitted like a
@@ -80,6 +82,7 @@ impl Direct {
         Direct {
             plugins: OnceLock::new(),
             seen: Mutex::new(BTreeMap::new()),
+            gone: Mutex::default(),
             probes: probe::Probes::default(),
             transcode: Transcode::new(data_dir),
             hls: hls::Packagers::default(),
@@ -148,8 +151,23 @@ impl Direct {
         self.handed.notify_all();
     }
 
-    /// Forget what the host said about a show that went.
+    /// Forget what the host said about a show that went, once the host is
+    /// told it went. A show removed and made again under the same id before
+    /// the next table is built (a headend remaking a channel) is never gone
+    /// as the host sees it: its row comes back the same, its input runs on
+    /// and says nothing new, so what was said of it is kept. Dropped at
+    /// once, the channel waited for ever for an input that was already live.
     pub fn forget(&self, id: &str) {
-        self.seen.lock().remove(id);
+        self.gone.lock().insert(id.to_string());
+    }
+
+    /// Drop what was said of every show that went and is not in the table
+    /// being handed over now.
+    fn settle_gone(&self, ids: &[&str]) {
+        let gone = std::mem::take(&mut *self.gone.lock());
+        let mut seen = self.seen.lock();
+        for id in gone.iter().filter(|id| !ids.contains(&id.as_str())) {
+            seen.remove(id);
+        }
     }
 }

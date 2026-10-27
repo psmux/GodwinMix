@@ -111,3 +111,28 @@ fn an_alarm_keeps_the_time_it_began_on_every_read_until_it_clears() {
     take_event(&st, "direct.health", &cc(3_000));
     assert_eq!(at(&st.direct.health_of(&st, "feed")), Some(3_000), "a new alarm after it cleared has its own start");
 }
+
+/// A headend remakes a channel by removing its show and adding it again
+/// under the same id. When both happen before the next table, the host
+/// never sees the show go: its input runs on and says nothing new. What it
+/// said must still be there, or the channel waits for ever for an input
+/// that is live.
+#[test]
+fn a_show_made_again_before_the_next_table_keeps_what_its_input_said() {
+    let (st, _heard) = station("remade");
+    let live = json!({"show": "feed", "state": "live", "since_ms": 1, "relay": "127.0.0.1:1", "stream": "~feed/main",
+                      "video": {"codec": "mpeg2", "width": 1920, "height": 1080, "fps": 29.97, "kbps": 6000}});
+    take_event(&st, "direct.input", &live);
+    st.direct.forget("feed");
+    let _ = st.direct.table(&st);
+    assert!(st.direct.seen.lock().get("feed").is_some_and(|s| s.input.is_some()), "still in the table, so the host still runs it");
+
+    let record = st.registry.lock().get("feed").cloned().unwrap();
+    st.direct.forget("feed");
+    st.registry.lock().records.retain(|r| r.id != "feed");
+    let _ = st.direct.table(&st);
+    assert!(st.direct.seen.lock().get("feed").is_none(), "gone from the table: the host stops it, and a new one starts from nothing");
+    st.registry.lock().records.push(record);
+    take_event(&st, "direct.input", &live);
+    assert!(st.direct.seen.lock().get("feed").is_some_and(|s| s.input.is_some()));
+}
