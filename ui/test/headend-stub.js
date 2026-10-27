@@ -43,7 +43,7 @@ export const SCAN = {
 };
 
 /**
- * @param {{channels?: Array, saved?: Array, gpu?: boolean, n?: number}} opts
+ * @param {{channels?: Array, saved?: Array, gpu?: boolean, gpus?: number[], n?: number}} opts
  */
 export function headendStub(opts = {}) {
   const channels = opts.channels || [];
@@ -53,6 +53,7 @@ export function headendStub(opts = {}) {
     profiles: [...BUILTINS, ...(opts.saved || [{ id: "lobby", name: "Lobby 576p", video: h264(1024, 576, 1200), audio: { codec: "aac", bitrate_kbps: 96 } }])],
     encoders: opts.gpu === false ? [{ id: "x264", codec: "h264", on: "cpu" }] : [{ id: "h264-nvidia", codec: "h264", on: "gpu" }, { id: "hevc-nvidia", codec: "h265", on: "gpu" }, { id: "x264", codec: "h264", on: "cpu" }],
     following: channels.some((e) => e.follows) ? "/etc/flussonic/flussonic.conf" : undefined,
+    gpus: opts.gpus || [],
   };
   stub.scanMs = opts.scanMs ?? 150;
   const own = methods(stub);
@@ -126,6 +127,10 @@ function methods(stub) {
       if (p.custom) e.channel.custom = p.custom;
       if (p.enabled !== undefined) e.channel.enabled = p.enabled;
       if (p.interface !== undefined) e.channel.input.interface = p.interface || undefined;
+      if (p.gpu !== undefined) {
+        if (p.gpu === "auto") delete e.channel.gpu;
+        else e.channel.gpu = p.gpu;
+      }
       return null;
     }),
     "headend.channel.remove": ({ names }) => {

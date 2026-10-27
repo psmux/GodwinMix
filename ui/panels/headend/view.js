@@ -58,7 +58,7 @@ export function openHeadend(client) {
   const opts = prefs();
   const view = { client, opts, selected: null };
   const top = band((what) => act(view, what));
-  const gpu = gpuStrip();
+  const gpu = gpuStrip(client);
   const grps = groupStrip();
   const tools = toolBar(opts, (what, value) => act(view, what, value));
   const body = el("div.he-body");
@@ -92,7 +92,7 @@ export function openHeadend(client) {
       const { rows, all } = channels(data.shows, data.stats, data.series, opts);
       const g = groups(data.shows, data.stats, data.series);
       top.draw(totals(all, data, box));
-      gpu.draw(box);
+      gpu.draw(box, (id) => { const s = data.shows.find((x) => x.id === id); return (s && (s.name || s.title)) || id; });
       grps.draw(g, data.stats, opts.group);
       tools.draw(opts, counts(all), g.shared.map((x) => x.key));
       grid.layout(narrow ? 150 : 236);

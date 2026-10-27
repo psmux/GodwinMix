@@ -1,6 +1,7 @@
 // The channel editor: add a channel, edit one, or start a new one from a
 // copy. Its name (the public path), title and whether it runs; the input
-// with an optional backup; the conversion, a profile or custom settings;
+// with an optional backup; the conversion, a profile or custom settings,
+// and on a machine with several NVIDIA cards the card it runs on;
 // the HLS output every channel has and any outputs beside it. Add sends
 // headend.channel.add (Check sends it with dry_run first), Save sends
 // headend.channel.update. What the station refuses is said in the dialog.
@@ -20,6 +21,20 @@ import { convPicker } from "./conv.js";
 
 const SEGMENTS = [["both", "MPEG-TS and CMAF"], ["ts", "MPEG-TS only"], ["cmaf", "CMAF only"]];
 const ACCESS = [["open", "Open on the local network, no key"], ["keyed", "A viewer key in every link"]];
+
+/**
+ * Which NVIDIA card the conversion runs on: Auto, the card with the least
+ * work when it starts, or one card. Offered on a machine with more than
+ * one card, or when the channel already names one.
+ */
+function gpuPicker(gpus, current) {
+  const rows = [["", "Auto, the card with the least work (recommended)"], ...gpus.map((g) => [String(g), `GPU ${g}`])];
+  if (current != null && !gpus.includes(current)) rows.push([String(current), `GPU ${current} (not on this machine, placed as Auto)`]);
+  const select = choice(rows, current == null ? "" : String(current), "GPU");
+  const node = field("GPU", select, "Auto keeps the channel on its card while it runs. Spread across GPUs on the channel list evens the cards out again.");
+  node.hidden = gpus.length < 2 && current == null;
+  return { select, node };
+}
 
 const BLANK = { name: "", enabled: true, input: { uri: "udp://@239.0.0.1:5000" }, profile: "copy", hls: { segments: "both", access: "open", segment_ms: 3400 }, outputs: [] };
 
@@ -45,6 +60,7 @@ export async function editChannel(client, opts = {}) {
   const backup = inputBox((ch.input && ch.input.backup) || { uri: "" }, "Backup");
   const hasBackup = tick(!!(ch.input && ch.input.backup), "A backup input, taken when the main one stops");
   const conv = convPicker(setup, ch);
+  const gpu = gpuPicker(setup.gpus || [], ch.gpu);
   const seg = choice(SEGMENTS, hls.segments, "Segments");
   const access = choice(ACCESS, hls.access, "Who may play it");
   const segLen = num(String(hls.segment_ms / 1000), "3.4", "Segment length, seconds", { min: "0.5", max: "20", step: "0.1" });
@@ -71,7 +87,7 @@ export async function editChannel(client, opts = {}) {
       el("p.hs-note.dim", {}, ["Players read it at ", path]), on.node,
     ]),
     group("Input", [main.node, hasBackup.node, backupSlot]),
-    group("Conversion", [conv.node]),
+    group("Conversion", [conv.node, gpu.node]),
     group("HLS output", [el("div.hs-grid", {}, [field("Segments", seg), field("Who may play it", access), field("Segment length, seconds", segLen, "Cut at a keyframe.")])]),
     group("More outputs", [el("p.hs-note.dim", { text: "Each one takes the channel's conversion unless Copy as it comes is ticked." }), outs.node]),
     why.node,
@@ -95,6 +111,7 @@ export async function editChannel(client, opts = {}) {
       outputs: outs.read(),
     };
     if (title.value.trim()) c.title = title.value.trim();
+    if (gpu.select.value !== "") c.gpu = Number(gpu.select.value);
     if (hasBackup.box.checked && backup.uri()) c.input.backup = backup.read();
     return c;
   };

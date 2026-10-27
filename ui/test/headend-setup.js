@@ -24,6 +24,7 @@ export async function headendSetupTests(test, eq, ok) {
   await editorTests(test, eq, ok);
   await scanTests(test, eq, ok);
   await listTests(test, eq, ok);
+  await gpuTests(test, eq, ok);
   await profileTests(test, eq, ok);
   closeDialogs();
 }
@@ -285,6 +286,81 @@ async function listTests(test, eq, ok) {
     eq(m.querySelectorAll("tbody tr[data-name]").length, 1);
   });
   h.dialog.close();
+}
+
+/** A machine with two NVIDIA cards: the editor's GPU, and the list's bulk spread and move. */
+async function gpuTests(test, eq, ok) {
+  const { editChannel } = await import("../panels/headend/editor.js");
+  const one = headendStub({ channels: someChannels() });
+  let h = await editChannel(one, { entry: one.setup.channels[0] });
+  test("one card: the editor asks nothing about GPUs", () => ok(by(h.dialog.el, "GPU").closest("label").hidden));
+  h.dialog.close();
+  const stub = headendStub({ channels: someChannels(), gpus: [0, 1] });
+  stub.setup.channels[0].on_gpu = 1;
+  h = await editChannel(stub, { entry: stub.setup.channels[0] });
+  let m = h.dialog.el;
+  test("two cards: Auto first, then each card", () => {
+    ok(!by(m, "GPU").closest("label").hidden);
+    eq([...by(m, "GPU").options].map((o) => o.value), ["", "0", "1"]);
+    eq(by(m, "GPU").value, "");
+  });
+  put(m, "GPU", "1");
+  button(m, "Save").click();
+  await until(() => sent(stub, "headend.channel.update").length);
+  test("a card chosen is sent as the channel's gpu", () => eq(last(stub, "headend.channel.update").params.channel.gpu, 1));
+  await wait(20);
+  h = await editChannel(stub, { entry: stub.setup.channels[1] });
+  m = h.dialog.el;
+  button(m, "Save").click();
+  await until(() => sent(stub, "headend.channel.update").length > 1);
+  test("Auto sends no gpu, so the station places it", () => ok(!("gpu" in last(stub, "headend.channel.update").params.channel)));
+  await wait(20);
+
+  const { channelList } = await import("../panels/headend/channels.js");
+  const two = headendStub({ channels: someChannels(), gpus: [0, 1] });
+  two.setup.channels[0].on_gpu = 1;
+  const list = await channelList(two, {});
+  const l = list.dialog.el;
+  test("the list says where each channel runs", () => ok(/GPU 1, auto/.test(l.querySelector('tr[data-name="News"]').textContent), l.querySelector('tr[data-name="News"]').textContent));
+  put(l, "Tick News", true);
+  put(l, "Tick CH101", true);
+  button(l, "Spread across GPUs").click();
+  await until(() => sent(two, "headend.channel.bulk").length);
+  test("Spread across GPUs sends gpu auto for the ticked channels", () => eq(last(two, "headend.channel.bulk").params, { names: ["News", "CH101"], gpu: "auto" }));
+  await wait(30);
+  put(l, "GPU for the ticked channels", "1");
+  button(l, "Move to GPU").click();
+  await until(() => sent(two, "headend.channel.bulk").length > 1);
+  test("Move to GPU sends that card", () => eq(last(two, "headend.channel.bulk").params, { names: ["News", "CH101"], gpu: 1 }));
+  list.dialog.close();
+
+  const { gpuStrip } = await import("../panels/headend/gpu.js");
+  const calls = [];
+  const client = { call: async (method, params) => (calls.push({ method, params }), { moved: [{ id: "news", from: 0, to: 1 }], kept: 3, dry_run: !!params.dry_run, gpus: [0, 1] }) };
+  const strip = gpuStrip(client);
+  document.body.append(strip.node);
+  const card = (index, channels) => ({ index, name: "NVIDIA GeForce RTX 3060", now: { at_ms: 1, encoder_pct: 40 }, history: [], channels });
+  strip.draw({ gpu: { gpus: [card(0, ["news", "sport"]), card(1, [])] } }, (id) => ({ news: "News HD", sport: "Sport" })[id] || id);
+  test("each card in the strip says which channels convert on it", () => {
+    const facts = [...strip.node.querySelectorAll(".he-oncard")].map((d) => d.textContent);
+    eq(facts, ["2 News HD, Sport", "none"]);
+    ok(/GPU 1: NVIDIA/.test(strip.node.querySelectorAll(".he-gpuname")[1].textContent));
+  });
+  const even = button(strip.node, "Even out the cards");
+  test("two cards: the strip offers to even them out", () => ok(even && !even.hidden));
+  even.click();
+  await until(() => calls.length);
+  await wait(10);
+  test("the first press only asks what would move, and says it on the button", () => {
+    eq(calls[0], { method: "gpu.rebalance", params: { dry_run: true } });
+    ok(button(strip.node, "Press again to move 1 channel"));
+  });
+  button(strip.node, "Press again to move 1 channel").click();
+  await until(() => calls.length > 1);
+  test("the second press moves them", () => eq(calls[1], { method: "gpu.rebalance", params: {} }));
+  strip.draw({ gpu: { gpus: [card(0, [])] } });
+  test("one card: nothing to even out", () => ok(strip.node.querySelector(".he-gpueven").hidden));
+  strip.node.remove();
 }
 
 async function profileTests(test, eq, ok) {

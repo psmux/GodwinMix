@@ -42,6 +42,8 @@
 .he-gpunote { margin: auto 0; color: var(--dim); font-size: var(--fs-sm); max-width: 280px; }
 .he-gpu { display: grid; gap: 4px; }
 .he-gpuname { font-size: var(--fs-sm); color: var(--dim); white-space: nowrap; }
+.he-gpueven { align-self: center; white-space: nowrap; font-size: var(--fs-sm); }
+.he-oncard span { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .he-gauges { display: flex; gap: 8px; align-items: center; }
 .he-gauge { display: grid; justify-items: center; gap: 2px; }
 .he-facts { display: grid; grid-template-columns: auto auto; gap: 1px 10px; margin: 0 0 0 6px; font-size: var(--fs-sm); align-content: center; }
