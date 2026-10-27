@@ -18,6 +18,7 @@
 //! plugin pump or the runtime.
 
 mod edit;
+mod gone;
 mod health;
 pub mod hls;
 pub mod inputs;
@@ -43,8 +44,7 @@ pub use edit::{add as add_output, set as set_output};
 pub use plan::room;
 pub use seen::Seen;
 
-/// How long a removed show's input is remembered for a show made again.
-const REMADE: Duration = Duration::from_secs(60);
+
 pub use mixed::{hand_alarms, vitals_settings};
 pub use view::{feed_source, INPUT_SOURCE};
 pub use intake::take as take_event;
@@ -153,38 +153,5 @@ impl Direct {
         let mut g = self.gens.lock();
         g.1 = g.1.max(gen);
         self.handed.notify_all();
-    }
-
-    /// Forget what the host said about a show that went, but keep it a
-    /// minute with the input the show had. A show removed and made again
-    /// with the same id and input (a headend remaking a channel) may never
-    /// be gone as the host sees it: tables come faster than it takes them,
-    /// its row comes back the same, its input runs on and says nothing new.
-    /// Dropped for good, the channel waited for ever for an input that was
-    /// already live.
-    pub fn forget(&self, id: &str, input: Option<&godwinmix_protocol::shows::InputSpec>) {
-        let Some(seen) = self.seen.lock().remove(id) else { return };
-        let key = serde_json::to_value(input).unwrap_or_default();
-        self.gone.lock().insert(id.to_string(), (key, seen, std::time::Instant::now()));
-    }
-
-    /// Give a show made again what its input said before, when the host has
-    /// said nothing of it since. Whatever the host says next is taken over it.
-    fn settle_gone(&self, records: &[crate::station::registry::Record]) {
-        let mut gone = self.gone.lock();
-        gone.retain(|_, (_, _, at)| at.elapsed() < REMADE);
-        let mut seen = self.seen.lock();
-        for r in records {
-            let same = |key: &serde_json::Value| *key == serde_json::to_value(&r.input).unwrap_or_default();
-            let Some((_, was, _)) = gone.get(&r.id).filter(|(key, _, _)| same(key)) else { continue };
-            match seen.get_mut(&r.id) {
-                None => {
-                    seen.insert(r.id.clone(), was.clone());
-                }
-                Some(now) if now.input.is_none() => now.input = was.input.clone(),
-                Some(_) => {}
-            }
-            gone.remove(&r.id);
-        }
     }
 }
