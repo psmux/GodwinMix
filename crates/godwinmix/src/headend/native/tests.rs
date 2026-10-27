@@ -25,6 +25,7 @@ fn channel(name: &str) -> HeadendChannel {
         custom: None,
         hls: ChannelHls::default(),
         outputs: Vec::new(),
+        gpu: None,
         origin: None,
     }
 }

@@ -16,6 +16,7 @@
 //! without a restart, and later edits to that stream in the file are not
 //! applied until `headend.channel.follow` gives it back.
 
+mod back;
 pub mod calls;
 mod check;
 pub mod compile;

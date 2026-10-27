@@ -52,6 +52,24 @@ pub fn keep_on_gpu(nodes: &mut [Value], machine: &Machine) {
     }
 }
 
+/// Put every NVIDIA node on card `gpu`: that card's decoder and encoder by
+/// name, and, where the machine has several cards, `"gpu"` on each node so
+/// the listener sets the converters' `cuda-device-id` and hands every
+/// element that card's CUDA context. With one card nothing changes.
+pub fn on_card(nodes: &mut [Value], machine: &Machine, gpu: Option<u32>) {
+    let cards = &machine.cards;
+    for n in nodes.iter_mut().filter(|n| n["accel"] == "nvidia" || n["memory"] == "cuda") {
+        if n["accel"] == "nvidia" {
+            if let Some(e) = n["element"].as_str().map(|e| cards.element(e, gpu)) {
+                n["element"] = json!(e);
+            }
+        }
+        if cards.several() {
+            n["gpu"] = json!(gpu.unwrap_or(0));
+        }
+    }
+}
+
 fn ids(nodes: &[Value], pick: impl Fn(&Value) -> bool) -> Vec<String> {
     nodes.iter().filter(|n| pick(n)).filter_map(|n| n["id"].as_str().map(str::to_string)).collect()
 }

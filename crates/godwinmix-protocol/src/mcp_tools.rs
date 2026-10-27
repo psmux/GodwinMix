@@ -141,6 +141,7 @@ pub fn addresses_one_show(method: &str) -> bool {
         || method.starts_with("governor.")
         || method.starts_with("headend.")
         || method == "gpu.status"
+        || method == "gpu.rebalance"
         || method == "machine.status")
 }
 

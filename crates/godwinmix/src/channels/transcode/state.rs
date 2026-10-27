@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use super::admit::{self, Held};
 use super::model::{rooms, Model};
 use super::outcome::Outcome;
+use super::place::Placed;
 use super::plan::{self, Stream, Want};
 use super::{source, spec, Transcode};
 use crate::channels::{Live, Record};
@@ -23,6 +24,8 @@ pub struct State {
     pub shed: BTreeMap<(String, String), (String, Instant)>,
     /// When refusals were last asked about again.
     pub retried: Option<Instant>,
+    /// The NVIDIA card each channel's conversion is on (`place.rs`).
+    pub placed: BTreeMap<String, Placed>,
 }
 
 #[derive(Default)]
@@ -85,18 +88,20 @@ impl Transcode {
             let ch = state.channels.entry(r.id.clone()).or_default();
             let streams = streams(&r.id, live, &mut ch.snapshots);
             let held_out = shed_refusals(&state.shed, &r.id);
+            let gpu = self.card_for(&mut state, &r.id, &wants);
             let ch = state.channels.get_mut(&r.id).expect("just made");
-            self.plan_channel(&r.id, ch, &wants, &streams, held_out);
+            self.plan_channel(&r.id, ch, &wants, &streams, held_out, gpu);
         }
         state.channels.retain(|id, _| seen.contains(id));
         state.shed.retain(|(c, _), _| seen.contains(c));
+        state.placed.retain(|id, _| seen.contains(id));
     }
 
-    fn plan_channel(&self, id: &str, ch: &mut ChannelState, wants: &[Want], streams: &[Stream], mut held_out: BTreeMap<String, DestinationRefusal>) {
+    fn plan_channel(&self, id: &str, ch: &mut ChannelState, wants: &[Want], streams: &[Stream], mut held_out: BTreeMap<String, DestinationRefusal>, gpu: Option<u32>) {
         let gov = self.governor.get();
         let requests: BTreeMap<String, RenditionRequest> = wants.iter().map(|w| (w.id.clone(), w.request.clone())).collect();
         let planned = loop {
-            let model = Model::new(self.machine(), gov.profile(), rooms(&gov, &ch.held, self.machine()));
+            let model = Model::new(self.machine(), gov.profile(), rooms(&gov, &ch.held, self.machine(), gpu), gpu);
             let planned = plan::plan(wants, streams, &model, &held_out);
             match admit::admit(&gov, id, &planned.plan, &mut ch.held, &requests) {
                 Ok(()) => break planned,
@@ -116,7 +121,7 @@ impl Transcode {
             .sources
             .iter()
             .filter_map(|(name, info)| {
-                let nodes = spec::stream_nodes(&planned.plan, name, info, self.machine());
+                let nodes = spec::stream_nodes(&planned.plan, name, info, self.machine(), gpu);
                 (!nodes.is_empty()).then(|| json!({"stream": name, "nodes": nodes}))
             })
             .collect();

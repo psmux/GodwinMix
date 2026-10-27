@@ -35,8 +35,9 @@ pub struct Model {
 impl Model {
     /// `rooms` is what is left on each hardware device for this plan, with
     /// what the plan being replaced holds already given back.
-    pub fn new(machine: &Machine, profile: Arc<Profile>, rooms: BTreeMap<String, Room>) -> Model {
-        let slots = machine.slots();
+    /// `gpu` is the NVIDIA card the plan is for, when it is put on one.
+    pub fn new(machine: &Machine, profile: Arc<Profile>, rooms: BTreeMap<String, Room>, gpu: Option<u32>) -> Model {
+        let slots = machine.slots_on(gpu);
         let audio = [AudioCodec::Aac, AudioCodec::Opus, AudioCodec::Mp3, AudioCodec::Ac3]
             .into_iter()
             .filter(|c| machine.audio_encoder(*c).is_some())
@@ -94,9 +95,9 @@ impl CostModel for Model {
 /// What is left on each hardware device for this channel's plan, with what
 /// the channel already holds there given back, so a replan does not find the
 /// device full of its own encoders.
-pub fn rooms(gov: &Governor, held: &BTreeMap<String, Held>, machine: &Machine) -> BTreeMap<String, Room> {
+pub fn rooms(gov: &Governor, held: &BTreeMap<String, Held>, machine: &Machine, gpu: Option<u32>) -> BTreeMap<String, Room> {
     let mut out = BTreeMap::new();
-    for device in machine.slots().into_iter().filter_map(|s| s.device) {
+    for device in machine.slots_on(gpu).into_iter().filter_map(|s| s.device) {
         let have = gov.headroom(Some(&device));
         let mine = held.values().filter(|h| h.node.device == device).fold((0, 0), |(m, s), h| {
             (m + h.ticket.cost().device_millis, s + h.ticket.cost().device_sessions)

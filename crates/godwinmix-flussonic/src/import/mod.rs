@@ -66,6 +66,27 @@ impl ShowPlan {
     }
 }
 
+/// What an imported `transcoder deviceid=N` does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceId {
+    /// Every channel is placed on the GPU with the least work (`gpu:
+    /// "auto"`). Flussonic writes `deviceid=0` on every stream unless told
+    /// otherwise, so on a machine with two cards this is what splits the
+    /// channels between them, and on a machine with one it is the same as
+    /// the file. The default.
+    #[default]
+    Spread,
+    /// `deviceid=N` puts the channel on GPU N, as written.
+    File,
+}
+
+/// How a config is read into shows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Options {
+    pub deviceid: DeviceId,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Import {
     pub shows: Vec<ShowPlan>,
@@ -100,7 +121,7 @@ fn hls_params(cfg: &Config, s: &Stream) -> Option<Value> {
     Some(Value::Object(p))
 }
 
-fn plan(cfg: &Config, s: &Stream, notes: &mut Vec<Note>) -> Option<ShowPlan> {
+fn plan(cfg: &Config, s: &Stream, notes: &mut Vec<Note>, opts: &Options) -> Option<ShowPlan> {
     let Some(first) = s.inputs.first() else {
         notes.push(Note::not_carried(s.line, "a stream with no input: nothing to run".into()));
         return None;
@@ -112,7 +133,7 @@ fn plan(cfg: &Config, s: &Stream, notes: &mut Vec<Note>) -> Option<ShowPlan> {
     for extra in s.inputs.iter().skip(2) {
         notes.push(Note::not_carried(s.line, format!("a third input ({}): a show has a main and one backup", redact(&extra.url))));
     }
-    let rendition = s.transcoder.as_ref().and_then(|t| want::rendition(t, s.line, notes));
+    let rendition = s.transcoder.as_ref().and_then(|t| want::rendition(t, s.line, notes, opts));
     let mut hls = json!({ "id": HLS_OUTPUT, "uri": format!("hls://{HLS_OUTPUT}") });
     if let Some(p) = hls_params(cfg, s) {
         hls["params"] = p;
@@ -135,8 +156,13 @@ fn plan(cfg: &Config, s: &Stream, notes: &mut Vec<Note>) -> Option<ShowPlan> {
     Some(ShowPlan { name: s.name.clone(), title: s.title.clone(), disabled: s.disabled, input, outputs, copy })
 }
 
-/// The whole config as shows, with every note.
+/// The whole config as shows, with every note, `deviceid` spread.
 pub fn import(cfg: &Config) -> Import {
+    import_with(cfg, &Options::default())
+}
+
+/// The same, read as `opts` says.
+pub fn import_with(cfg: &Config, opts: &Options) -> Import {
     let mut out = Import::default();
     for u in &cfg.unknown {
         out.notes.push((u.scope.clone(), Note::ignored(u.line, format!("directive '{}'", u.name))));
@@ -146,7 +172,7 @@ pub fn import(cfg: &Config) -> Import {
     }
     for s in &cfg.streams {
         let mut notes = Vec::new();
-        if let Some(p) = plan(cfg, s, &mut notes) {
+        if let Some(p) = plan(cfg, s, &mut notes, opts) {
             out.shows.push(p);
         }
         out.notes.extend(notes.into_iter().map(|n| (format!("stream {}", s.name), n)));

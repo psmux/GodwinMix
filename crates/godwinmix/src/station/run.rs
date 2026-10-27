@@ -176,6 +176,8 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
         channels.set_hooks(sink);
     }
     channels.use_governor(st.render.governor().clone());
+    channels.transcode().set_gpus(cfg.hardware.gpus);
+    st.direct.transcode.set_gpus(cfg.hardware.gpus);
     channels.run_programme_feeds(Arc::new(super::channel_feed::Shows(Arc::downgrade(st))));
     let _ = st.channels.set(channels);
     super::direct::Direct::attach(st, supervisor.clone());

@@ -3,14 +3,16 @@
 //! change here and nowhere else.
 //!
 //! Every field written here is `VideoWant`'s or `AudioWant`'s and acted on.
-//! `hw=nvenc` and `deviceid` have no field: the planner already takes a
-//! hardware encoder first, in catalogue rank order, and a station that must
-//! never encode in software pins it with `[hardware]`. What GodwinMix does
-//! differently is a note: a pad colour other than black, one picture per
-//! field, and deinterlacing, which runs on the CPU.
+//! `hw=nvenc` has no field: the planner already takes a hardware encoder
+//! first, in catalogue rank order, and a station that must never encode in
+//! software pins it with `[hardware]`. `deviceid=N` is `video.gpu`: the card
+//! the decode, the scale and the encode run on, either N as written
+//! ([`DeviceId::File`]) or `auto`, spread by load ([`DeviceId::Spread`]).
+//! What GodwinMix does differently is a note: a pad colour other than
+//! black, one picture per field, and deinterlacing, which runs on the CPU.
 
 use super::codecs::{audio_codec, fps_of, video_codec};
-use super::Note;
+use super::{DeviceId, Note, Options};
 use crate::model::{Bitrate, Deinterlace, DeinterlaceRate, Hw, SizeMode, Transcoder};
 use serde_json::{json, Map, Value};
 
@@ -28,7 +30,7 @@ fn kbps(b: Bitrate) -> Option<u64> {
     }
 }
 
-fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
+fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>, opts: &Options) -> Option<Value> {
     let track = t.video.first()?;
     if t.video.len() > 1 {
         notes.push(Note::not_carried(line, format!("{} video tracks (a ladder): an HLS output of a direct show carries one, the first", t.video.len())));
@@ -90,6 +92,10 @@ fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
     if let Some(b) = track.bframes {
         v.insert("bframes".into(), json!(b));
     }
+    match opts.deviceid {
+        DeviceId::Spread => v.insert("gpu".into(), json!("auto")),
+        DeviceId::File => v.insert("gpu".into(), json!(t.device_id)),
+    };
     if matches!(t.hw, Hw::Qsv | Hw::Other) {
         notes.push(Note::not_carried(line, "hw other than nvenc or cpu: the planner picks the encoder".into()));
     }
@@ -126,11 +132,11 @@ fn audio(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
 
 /// The rendition for one transcoder line. None means a copy, which is
 /// what a line with only `copy` bitrates asks for.
-pub fn rendition(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
+pub fn rendition(t: &Transcoder, line: usize, notes: &mut Vec<Note>, opts: &Options) -> Option<Value> {
     for opt in &t.unused {
         notes.push(Note::ignored(line, format!("transcoder option {opt}")));
     }
-    let (v, a) = (video(t, line, notes), audio(t, line, notes));
+    let (v, a) = (video(t, line, notes, opts), audio(t, line, notes));
     if v.is_none() && a.is_none() {
         return None;
     }

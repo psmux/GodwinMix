@@ -25,11 +25,12 @@ use super::spec_video::{scale, video_encoder};
 /// The nodes of `plan` that read `stream`, in start order, as the listener
 /// builds them. Sources, copies and muxes are not built: a copy is the
 /// stream's own tags and a mux is the restreamer's. Pictures stay in the
-/// GPU's memory from decode to encode where every step can run there
-/// (`gpu.rs`).
-pub fn stream_nodes(plan: &Plan, stream: &str, info: &StreamInfo, machine: &Machine) -> Vec<Value> {
+/// GPU's memory from decode to encode where every step can run there, all
+/// on card `gpu` (`gpu.rs`).
+pub fn stream_nodes(plan: &Plan, stream: &str, info: &StreamInfo, machine: &Machine, gpu: Option<u32>) -> Vec<Value> {
     let mut nodes: Vec<Value> = plan.nodes.iter().filter_map(|n| node(n, stream, info, plan, machine)).collect();
     super::gpu::keep_on_gpu(&mut nodes, machine);
+    super::gpu::on_card(&mut nodes, machine, gpu);
     nodes
 }
 

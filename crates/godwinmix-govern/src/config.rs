@@ -48,9 +48,11 @@ impl GovernorConfig {
     }
 
     /// The session limit of `device` set by hand, which wins over the probe.
-    /// It is NVIDIA's (`nvidia`, as the catalogue names its acceleration).
+    /// It is NVIDIA's (`nvidia`, as the catalogue names its acceleration),
+    /// and holds for each card: the first is `nvidia`, the others
+    /// `nvidia:1`, `nvidia:2`.
     pub fn sessions_on(&self, device: &str) -> Option<u32> {
-        self.nvenc_sessions.filter(|_| device == "nvidia")
+        self.nvenc_sessions.filter(|_| crate::profile::family(device) == "nvidia")
     }
 
     /// The override in thousandths of a core, when there is one.
@@ -84,6 +86,7 @@ mod tests {
         let c: GovernorConfig = toml_like(r#"{"nvenc_session_probe": 128, "nvenc_sessions": 64}"#);
         assert_eq!(c.session_probe(), 128);
         assert_eq!(c.sessions_on("nvidia"), Some(64));
+        assert_eq!(c.sessions_on("nvidia:1"), Some(64));
         assert_eq!(c.sessions_on("videotoolbox"), None);
         assert_eq!(GovernorConfig { nvenc_session_probe: Some(100_000), ..Default::default() }.session_probe(), MAX_SESSION_PROBE);
     }

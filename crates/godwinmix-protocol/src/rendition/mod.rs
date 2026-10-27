@@ -89,6 +89,13 @@ pub struct VideoWant {
     /// none of this codec.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoder: Option<EncoderPick>,
+    /// Which NVIDIA GPU the decode, the scale and the encode run on. Left
+    /// out, the station's `[hardware] gpus` decides: the first card, or
+    /// spread over every card as `auto` is. A channel placed by `auto` stays
+    /// on its card while it runs; `gpu.rebalance` places it again. A card
+    /// this machine does not have is taken as `auto`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<GpuPick>,
 }
 
 /// The audio an output wants. Every field left out is taken from the source.

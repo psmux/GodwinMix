@@ -23,7 +23,7 @@ pub fn headend(st: &Station) -> Option<Arc<Headend>> {
 pub fn file_plans(st: &Station, n: &Native) -> Option<(String, Vec<ShowPlan>)> {
     let h = headend(st)?;
     let owned = n.owned();
-    let plans = import::import(&h.doc.lock().config).shows.into_iter().filter(|p| !owned.contains(&p.name)).collect();
+    let plans = import::import_with(&h.doc.lock().config, &h.import).shows.into_iter().filter(|p| !owned.contains(&p.name)).collect();
     Some((h.file_text(), plans))
 }
 

@@ -12,7 +12,7 @@ use tracing::info;
 pub async fn apply_file(h: &Headend, announce: bool) {
     let (plans, notes) = {
         let doc = h.doc.lock();
-        let i = import::import(&doc.config);
+        let i = import::import_with(&doc.config, &h.import);
         (i.shows, i.notes)
     };
     for (scope, n) in notes.iter().filter(|_| announce) {
