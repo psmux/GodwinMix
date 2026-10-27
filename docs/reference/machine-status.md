@@ -1,4 +1,4 @@
-# The machine: `gpu.status` and `machine.status`
+# The machine: `gpu.status`, `gpu.rebalance` and `machine.status`
 
 Two read methods about the machine a station or a core runs on, for a
 headend view. Both answer on `/rpc` and as `GET /api/v1/gpu/status` and
@@ -38,6 +38,31 @@ waits up to a second and a half for the first reading.
 * A number the driver will not give is left out of a reading rather than
   sent as zero. `encoder_sessions` counts every process's NVENC sessions
   on the card, not only GodwinMix's.
+* `channels`, from a station, is every show and channel whose conversion
+  runs on that card, by id. A core on its own leaves it out. `index` is
+  the CUDA device the planner puts a channel on (`video.gpu`); NVML and
+  CUDA number the cards the same way when `CUDA_DEVICE_ORDER=PCI_BUS_ID`
+  is set, and on a machine of identical cards either way.
+
+## `gpu.rebalance {only?, dry_run?}`
+
+A channel placed by `gpu: "auto"` stays on its card for as long as it
+runs, because a move restarts its encode and its HLS output starts a new
+segment. This is the one thing that moves it. It takes the work the
+governor holds on each card (`nvidia` is card 0, `nvidia:1` card 1), and
+moves the fewest channels from the busiest card to the idlest until one
+more move would not make the gap smaller. A channel set on a card by
+number is never moved.
+
+```json
+{"moved": [{"id": "ch117", "from": 0, "to": 1}, {"id": "ch118", "from": 0, "to": 1}],
+ "kept": 49, "dry_run": false, "gpus": [0, 1]}
+```
+
+* `only`: show or channel ids; the rest stay where they are.
+* `dry_run: true` answers the same and moves nothing.
+* On a machine with fewer than two cards it is refused, with `data.gpus`.
+* Scope `admin`. The agent tool is `rebalance_gpus`, behind `search_tools`.
 
 ## `machine.status {}`
 

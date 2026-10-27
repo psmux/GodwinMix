@@ -46,6 +46,8 @@ starts no thread and touches no GStreamer element.
 | `video.deinterlace` | `off`, `on`, `auto` | `off`: an interlaced picture is scaled as the frame it is, both fields woven |
 | `video.preset` | the encoder's own word, `p1` on NVENC, `veryfast` on x264 | the catalogue's |
 | `video.bframes` | count | the catalogue's (none, for live) |
+| `video.encoder` | `gpu`, `cpu` | a GPU encoder first, the CPU when the GPU is full or has none of the codec |
+| `video.gpu` | a CUDA device index (`0`, `1`), or `auto` | `[hardware] gpus`: card 0, or spread like `auto`. The decode, the scale and the encode all run on that card, in its memory; `auto` is the card with the least work when the channel starts, and it stays there while it runs ([split channels across GPUs](../how-to/split-channels-across-gpus.md)) |
 | `audio.codec` | `aac`, `opus`, `mp3`, `ac3`, `pcm` | as for video |
 | `audio.channels`, `audio.sample_rate` | | the source's |
 | `audio.bitrate_kbps` | kbit/s | 64 per channel for AAC and MP3, 48 for Opus, 96 for AC-3 |

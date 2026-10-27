@@ -101,6 +101,7 @@ on the next start. `core.info` reports what is in force under `tls`.
 |---|---|---|
 | `decode` | `"auto"` | `auto`, `nvidia`, `va`, `videotoolbox`, `mediafoundation`, `d3d11`, `software` |
 | `encode` | `"auto"` | the same set |
+| `gpus` | `"first"` | what a channel's conversion does on a machine with several NVIDIA cards when its rendition names none: `first` keeps it on card 0, `spread` puts it on the card with the least work when it starts, as `video.gpu = "auto"` does. See [split channels across GPUs](../how-to/split-channels-across-gpus.md) |
 
 Decode and encode are chosen independently. `auto` picks the best backend
 present; naming one makes startup fail when it is missing, which is what you

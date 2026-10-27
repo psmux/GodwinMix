@@ -61,13 +61,28 @@ becomes:
 ```json
 {"video": {"codec": "h264", "bitrate_kbps": 1500, "width": 1280, "height": 720,
            "fit": "pad", "pad_color": "#000000", "deinterlace": "off",
-           "keyframe_frames": 50, "preset": "p1"},
+           "keyframe_frames": 50, "preset": "p1", "gpu": "auto"},
  "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}}
 ```
 
-Every field is acted on. `hw=nvenc` and `deviceid` have no field of their
-own: the planner takes a hardware encoder first, and `[hardware]` in the
-GodwinMix config pins it. A line with `hw=nvenc` and no `preset=` gets
+Every field is acted on. `hw=nvenc` has no field of its own: the planner
+takes a hardware encoder first, and `[hardware]` in the GodwinMix config
+pins it. `deviceid` is `video.gpu`, the NVIDIA card the channel's decode,
+scale and encode all run on, read one of two ways:
+
+| `[headend] flussonic_deviceid` | `deviceid=N` becomes | Use it when |
+|---|---|---|
+| `spread` (the default) | `"gpu": "auto"`: the card with the least work when the channel starts | the machine has several cards and the file says `deviceid=0` everywhere, which is what Flussonic writes unless told otherwise. On a machine with one card it is the same as the file |
+| `file` | `"gpu": N`, as written (a line without `deviceid` is card 0, as in Flussonic) | the file was written for this machine and places its channels on purpose |
+
+`headend.import` takes the same choice as `deviceid`, and the import dialog
+offers it on a machine with more than one card, `spread` first. A card the
+machine does not have is placed as `auto`. The API's `transcoder.global.deviceid`
+answers what the file says, whichever way it is read, and `headend.export`
+writes `deviceid=N` for a channel set on a card and none for one on `auto`.
+See [Split channels across GPUs](../how-to/split-channels-across-gpus.md).
+
+A line with `hw=nvenc` and no `preset=` gets
 NVENC's `p1`, which leaves room for many channels on one card. Three things
 are done differently, and `--check` says so as `not carried`: a pad colour
 other than black (the bars are black), `deinterlace_rate=field` (pictures

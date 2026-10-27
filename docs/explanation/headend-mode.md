@@ -107,6 +107,15 @@ hub. Other transports keep their current inputs.
   stay together whatever the encoder's load.
 * One CUDA context per process, shared by every decoder and encoder, and
   decoder surfaces sized for what the codec needs.
+* Several cards: a channel's decode, scale and encode all run on one card
+  (`video.gpu`, a card's number or `auto`), with one CUDA context per card.
+  An imported `deviceid` is read as `auto` unless `[headend]
+  flussonic_deviceid = "file"`, because Flussonic writes `deviceid=0`
+  everywhere and taking it literally leaves the second card idle. `auto`
+  places a channel once, by the work the governor holds on each card, and
+  never moves it while it runs, since a move restarts its encode and
+  breaks its run of HLS segments; `gpu.rebalance` is the explicit way to
+  even the cards out ([split channels across GPUs](../how-to/split-channels-across-gpus.md)).
 
 ### 4. HLS for every player
 
