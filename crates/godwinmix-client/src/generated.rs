@@ -889,6 +889,11 @@ pub struct ChannelBulkRequest {
     pub custom: Option<TranscodeProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// Put every one of them on this GPU, or `"auto"` to spread them over
+    /// every card by load. `auto` places them again at once, which restarts
+    /// the ones that move.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<GpuPick>,
     /// Join every multicast input on this card. Empty: the default route's.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interface: Option<String>,
@@ -926,6 +931,9 @@ pub struct ChannelEntry {
     /// `headend.channel.update`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub follows: Option<String>,
+    /// The GPU its conversion runs on now, once planned on one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_gpu: Option<u32>,
     /// The show it runs as, once made.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show: Option<String>,
@@ -1627,6 +1635,11 @@ pub struct Detected {
     pub name: String,
     pub tool: AgentTool,
 }
+
+/// What an imported `transcoder deviceid=N` does.
+pub type DeviceIdMode = String;
+/// The values api_level 1 knows for [`DeviceIdMode`].
+pub const DEVICE_ID_MODE_VALUES: &[&str] = &["spread", "file"];
 
 /// One device token, without its secret.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3028,6 +3041,9 @@ pub struct GovernorStatus {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GpuDevice {
+    /// The shows and channels whose conversion runs on this card, by id.
+    /// Filled by a station; empty from a core on its own.
+    pub channels: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
     /// One a second, oldest first, the last two minutes at most.
@@ -3036,6 +3052,50 @@ pub struct GpuDevice {
     /// `NVIDIA GeForce RTX 3060`.
     pub name: String,
     pub now: GpuSample,
+}
+
+/// One show or channel `gpu.rebalance` placed.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuMove {
+    /// The card it was on, if it was on one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<u32>,
+    pub id: String,
+    pub to: u32,
+}
+
+/// Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA
+/// device index (0 is the first card), or `"auto"`, the card with the least
+/// work when the channel starts. All three steps stay on that one card, so
+/// a picture never crosses from one card's memory to another's.
+pub type GpuPick = Value;
+
+/// `gpu.rebalance`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuRebalance {
+    pub dry_run: bool,
+    /// The cards placed on, by CUDA device index.
+    pub gpus: Vec<u32>,
+    /// How many were placed and stay where they are.
+    pub kept: u32,
+    /// Each one whose card changes, or would. A move restarts its encode,
+    /// so its HLS output starts a new segment.
+    pub moved: Vec<GpuMove>,
+}
+
+/// `gpu.rebalance`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuRebalanceRequest {
+    /// True: answer where each would go, and move nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Only these shows or channels, by id. Left out: every one placed by
+    /// `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub only: Option<Vec<String>>,
 }
 
 /// One reading of one GPU. A number the driver would not give is left out.
@@ -3103,6 +3163,11 @@ pub struct GpuStatusRequest {
     pub since_ms: Option<u64>,
 }
 
+/// The one word [`GpuPick`] takes.
+pub type GpuWord = String;
+/// The values api_level 1 knows for [`GpuWord`].
+pub const GPU_WORD_VALUES: &[&str] = &["auto"];
+
 /// `scene.graphic.list`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3149,6 +3214,12 @@ pub struct HeadendChannel {
     /// False: kept, and its show stopped.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// The NVIDIA GPU its conversion runs on, a CUDA device index (0 is the
+    /// first card). Left out: placed on the card with the least work when
+    /// it starts, and kept there while it runs. A Flussonic `deviceid` is
+    /// read into it when the import takes the file's numbers as written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hls: Option<ChannelHls>,
     pub input: ChannelInput,
@@ -3219,6 +3290,10 @@ pub struct HeadendImportReport {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HeadendImportRequest {
+    /// What a `transcoder deviceid=N` means. Left out: `[headend]
+    /// flussonic_deviceid`, which is `spread` unless set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deviceid: Option<DeviceIdMode>,
     /// Left out: true. Read the config, price its shows and make nothing.
     /// False makes them.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3243,6 +3318,9 @@ pub struct HeadendSetup {
     /// The Flussonic config this station follows, when it follows one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub following: Option<String>,
+    /// The NVIDIA GPUs a channel may be put on, by CUDA device index. Empty
+    /// on a machine with none.
+    pub gpus: Vec<u32>,
     /// The built in profiles, then the ones saved here.
     pub profiles: Vec<TranscodeProfile>,
 }
@@ -7274,6 +7352,13 @@ pub struct VideoWant {
     pub fit: Option<Fit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fps: Option<Fps>,
+    /// Which NVIDIA GPU the decode, the scale and the encode run on. Left
+    /// out, the station's `[hardware] gpus` decides: the first card, or
+    /// spread over every card as `auto` is. A channel placed by `auto` stays
+    /// on its card while it runs; `gpu.rebalance` places it again. A card
+    /// this machine does not have is taken as `auto`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<GpuPick>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
     /// Keyframe interval in frames of the source's own rate, as Flussonic's
@@ -7589,7 +7674,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 249] = [
+pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -7659,7 +7744,8 @@ pub const METHODS: [MethodInfo; 249] = [
     MethodInfo { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/show")) },
     MethodInfo { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/governor/calibrate")) },
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
-    MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
+    MethodInfo { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gpu/rebalance")) },
+    MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
     MethodInfo { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/add")) },
     MethodInfo { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/bulk")) },
     MethodInfo { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/follow")) },
@@ -8524,7 +8610,12 @@ impl Client {
         self.call("governor.status", &serde_json::json!({})).await
     }
 
-    /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
+    /// Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.
+    pub async fn gpu_rebalance(&self, params: &GpuRebalanceRequest) -> Result<GpuRebalance> {
+        self.call("gpu.rebalance", params).await
+    }
+
+    /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
     pub async fn gpu_status(&self, params: &GpuStatusRequest) -> Result<GpuStatus> {
         self.call("gpu.status", params).await
     }
