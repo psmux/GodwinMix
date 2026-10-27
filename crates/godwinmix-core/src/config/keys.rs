@@ -139,6 +139,7 @@ pub const KEYS: &[Key] = &[
     Key::new("hardware.decode", "Hardware decoding", Restart).choices(ACCEL),
     Key::new("hardware.encode", "Hardware encoding", Restart).choices(ACCEL),
     Key::new("hardware.graphics", "Hardware compositing", Restart).choices(ACCEL),
+    Key::new("hardware.gpus", "Channels across NVIDIA GPUs", Restart).choices(&["first", "spread"]).advanced(),
     Key::new("governor.reserve_cores", "Cores to keep free for other programs", Restart).range(0, 1024).unit("cores"),
     Key::new("governor.uplink_kbps", "Upload speed", Restart).range(0, 100_000_000).unit("kbit/s"),
     Key::new("governor.nvenc_session_probe", "NVENC sessions to probe for", Restart).range(1, 256).unit("sessions").advanced(),

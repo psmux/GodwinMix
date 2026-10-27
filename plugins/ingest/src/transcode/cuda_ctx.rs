@@ -25,9 +25,9 @@ type LoadLibrary = unsafe extern "C" fn() -> i32;
 type Wrap = unsafe extern "C" fn(*mut std::ffi::c_void, i32) -> *mut std::ffi::c_void;
 type NewContext = unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut gst::ffi::GstContext;
 
-/// A GStreamer CUDA context on device 0 that blocks rather than spins, or
-/// why there is none.
-pub fn blocking() -> Result<gst::Context, String> {
+/// A GStreamer CUDA context on card `ordinal` that blocks rather than
+/// spins, or why there is none.
+pub fn blocking(ordinal: u32) -> Result<gst::Context, String> {
     // SAFETY: the libraries stay loaded for the life of the process (they
     // are leaked below), every function is called with the arguments its C
     // declaration takes, and each result is checked before it is used.
@@ -45,8 +45,9 @@ pub fn blocking() -> Result<gst::Context, String> {
             return Err("GStreamer could not load CUDA".into());
         }
         let (mut device, mut ctx) = (0i32, std::ptr::null_mut());
-        if init(0) != 0 || device_get(&mut device, 0) != 0 || create(&mut ctx, BLOCKING_SYNC, device) != 0 {
-            return Err("CUDA would not make a context on device 0".into());
+        let at = i32::try_from(ordinal).map_err(|_| format!("there is no CUDA device {ordinal}"))?;
+        if init(0) != 0 || device_get(&mut device, at) != 0 || create(&mut ctx, BLOCKING_SYNC, device) != 0 {
+            return Err(format!("CUDA would not make a context on device {ordinal}"));
         }
         let mut popped = std::ptr::null_mut();
         pop(&mut popped);

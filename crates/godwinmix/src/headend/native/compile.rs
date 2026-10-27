@@ -5,8 +5,8 @@
 //! show, and everything that reads one reads the other.
 
 use godwinmix_flussonic::import::{ShowPlan, HLS_OUTPUT};
-use godwinmix_protocol::headend::profile::{builtins, COPY, CUSTOM};
-use godwinmix_protocol::headend::{ChannelBackup, ChannelHls, ChannelInput, ChannelOutput, HeadendChannel, TranscodeProfile};
+use godwinmix_protocol::headend::profile::{builtins, CUSTOM};
+use godwinmix_protocol::headend::{ChannelHls, ChannelInput, HeadendChannel, TranscodeProfile};
 use godwinmix_protocol::rendition::{AudioWant, VideoWant};
 use serde_json::{json, Map, Value};
 

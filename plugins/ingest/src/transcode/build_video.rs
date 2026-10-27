@@ -48,6 +48,7 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     }
     let cuda = node.cuda();
     let scaler = make(if cuda { "cudaconvertscale" } else { "videoscale" })?;
+    let scaler = if cuda { super::build::on_card(scaler, node) } else { scaler };
     if scaler.has_property("add-borders") {
         scaler.set_property("add-borders", fit == "pad");
     }
