@@ -116,15 +116,14 @@ pub fn cuda_base(name: &str) -> Option<(String, u32)> {
     Some((format!("{}{}", &name[..at], &rest[digits.len()..]), n))
 }
 
-/// The CUDA device an NVIDIA element runs on, read from its class: the
-/// decoders' and encoders' `cuda-device-id` is fixed per element, so its
-/// default is the device. None for an element without one.
+/// The CUDA device an NVIDIA element runs on: the decoders' and encoders'
+/// `cuda-device-id` is fixed per element, so an instance made and dropped
+/// says it. Making one opens nothing on the card. None for an element
+/// without one.
 fn device_of(factory: &gst::ElementFactory) -> Option<u32> {
-    use gst::glib::object::ObjectClass;
-    let loaded = factory.load().ok()?;
-    let class = ObjectClass::from_type(loaded.element_type())?;
-    let p = class.find_property("cuda-device-id")?;
-    let v = p.default_value();
+    let el = factory.create().build().ok()?;
+    el.find_property("cuda-device-id")?;
+    let v = el.property_value("cuda-device-id");
     v.get::<u32>().ok().or_else(|| v.get::<i32>().ok().and_then(|i| u32::try_from(i).ok()))
 }
 
