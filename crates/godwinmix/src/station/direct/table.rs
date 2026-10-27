@@ -64,7 +64,7 @@ impl Direct {
     /// only feeds the hub its source reads.
     pub(crate) fn table(&self, st: &Station) -> Value {
         let records: Vec<Record> = st.registry.lock().records.iter().filter(|r| !r.stopped && r.input.is_some()).cloned().collect();
-        self.settle_gone(&records.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
+        self.settle_gone(&records);
         let shows: Vec<(Record, Vec<StoredDestination>)> = records
             .into_iter()
             .map(|r| {

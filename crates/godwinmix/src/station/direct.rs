@@ -42,6 +42,9 @@ mod view;
 pub use edit::{add as add_output, set as set_output};
 pub use plan::room;
 pub use seen::Seen;
+
+/// How long a removed show's input is remembered for a show made again.
+const REMADE: Duration = Duration::from_secs(60);
 pub use mixed::{hand_alarms, vitals_settings};
 pub use view::{feed_source, INPUT_SOURCE};
 pub use intake::take as take_event;
@@ -61,8 +64,9 @@ pub struct Direct {
     plugins: OnceLock<Arc<Supervisor>>,
     /// What the host last said about each show.
     pub(crate) seen: Mutex<BTreeMap<String, Seen>>,
-    /// Shows removed since the last table (`forget`).
-    gone: Mutex<std::collections::BTreeSet<String>>,
+    /// Shows removed lately: their input, what the host said of them, and
+    /// when (`forget`).
+    gone: Mutex<BTreeMap<String, (serde_json::Value, Seen, std::time::Instant)>>,
     /// Inputs opened for `headend.scan` only.
     pub(crate) probes: probe::Probes,
     /// The renditions of direct outputs, planned and admitted like a
@@ -151,23 +155,36 @@ impl Direct {
         self.handed.notify_all();
     }
 
-    /// Forget what the host said about a show that went, once the host is
-    /// told it went. A show removed and made again under the same id before
-    /// the next table is built (a headend remaking a channel) is never gone
-    /// as the host sees it: its row comes back the same, its input runs on
-    /// and says nothing new, so what was said of it is kept. Dropped at
-    /// once, the channel waited for ever for an input that was already live.
-    pub fn forget(&self, id: &str) {
-        self.gone.lock().insert(id.to_string());
+    /// Forget what the host said about a show that went, but keep it a
+    /// minute with the input the show had. A show removed and made again
+    /// with the same id and input (a headend remaking a channel) may never
+    /// be gone as the host sees it: tables come faster than it takes them,
+    /// its row comes back the same, its input runs on and says nothing new.
+    /// Dropped for good, the channel waited for ever for an input that was
+    /// already live.
+    pub fn forget(&self, id: &str, input: Option<&godwinmix_protocol::shows::InputSpec>) {
+        let Some(seen) = self.seen.lock().remove(id) else { return };
+        let key = serde_json::to_value(input).unwrap_or_default();
+        self.gone.lock().insert(id.to_string(), (key, seen, std::time::Instant::now()));
     }
 
-    /// Drop what was said of every show that went and is not in the table
-    /// being handed over now.
-    fn settle_gone(&self, ids: &[&str]) {
-        let gone = std::mem::take(&mut *self.gone.lock());
+    /// Give a show made again what its input said before, when the host has
+    /// said nothing of it since. Whatever the host says next is taken over it.
+    fn settle_gone(&self, records: &[crate::station::registry::Record]) {
+        let mut gone = self.gone.lock();
+        gone.retain(|_, (_, _, at)| at.elapsed() < REMADE);
         let mut seen = self.seen.lock();
-        for id in gone.iter().filter(|id| !ids.contains(&id.as_str())) {
-            seen.remove(id);
+        for r in records {
+            let same = |key: &serde_json::Value| *key == serde_json::to_value(&r.input).unwrap_or_default();
+            let Some((_, was, _)) = gone.get(&r.id).filter(|(key, _, _)| same(key)) else { continue };
+            match seen.get_mut(&r.id) {
+                None => {
+                    seen.insert(r.id.clone(), was.clone());
+                }
+                Some(now) if now.input.is_none() => now.input = was.input.clone(),
+                Some(_) => {}
+            }
+            gone.remove(&r.id);
         }
     }
 }

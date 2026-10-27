@@ -105,6 +105,7 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     }
     supervise::stop(st, id).await;
     let direct = st.is_direct(id) || st.registry.lock().get(id).is_some_and(|r| r.input.is_some());
+    let input = st.registry.lock().get(id).and_then(|r| r.input.clone());
     let folder = {
         let mut reg = st.registry.lock();
         let folder = reg.folder_for(id);
@@ -117,7 +118,7 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
         let _ = std::fs::remove_dir_all(&folder);
     }
     super::direct::inputs::forget_show(id);
-    st.direct.forget(id);
+    st.direct.forget(id, input.as_ref());
     if direct {
         st.direct.hand_over();
     }
