@@ -11,10 +11,11 @@ use serde_json::{json, Value};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-// Small conversions: on a runner with no GPU each is x264, priced before
-// it is made, and the governor turns away what does not fit.
+// One small conversion and one copy: on a runner with no GPU the
+// conversion is x264, priced before it is made, and a second one did not
+// fit on a Windows runner.
 const CONFIG: &str = "stream CH1 {\n  input udp://127.0.0.1:9;\n  transcoder deviceid=0 hw=nvenc vb=200k size=320x180:fit:#000000 ab=64k;\n}\n\
-stream CH2 {\n  input udp://127.0.0.1:11;\n  transcoder deviceid=0 hw=nvenc vb=200k size=320x180:fit:#000000 ab=64k;\n}\n";
+stream CH2 {\n  input udp://127.0.0.1:11;\n}\n";
 
 fn ok(answer: &Value) -> &Value {
     assert!(answer.get("error").is_none(), "{answer}");
@@ -31,6 +32,10 @@ fn renditions(list: &Value) -> Vec<(String, String, Value)> {
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
+}
+
+fn has(list: &Value, id: &str) -> bool {
+    list["shows"].as_array().is_some_and(|a| a.iter().any(|s| s["id"] == id))
 }
 
 async fn until(ws: &mut Ws, mut id: u64, test: impl Fn(&Value) -> bool) -> Value {
@@ -80,15 +85,16 @@ async fn an_old_headend_state_directory_starts_under_the_new_version() {
     let first = {
         let st = start_alone(dir.clone(), port, &args).await;
         let mut ws = rpc(&st, "").await;
-        until(&mut ws, 100, |l| renditions(l).len() == 2).await
+        until(&mut ws, 100, |l| renditions(l).len() == 1 && has(l, "ch2")).await
     };
     let made = renditions(&first);
     if made.is_empty() {
         // What is checked here is the folder, not the governor.
-        println!("skipping: this machine had no room for two small conversions, so no show was made to upgrade: {first}");
+        println!("skipping: this machine had no room for a small conversion, so no show was made to upgrade: {first}");
         return;
     }
-    assert_eq!(made.iter().map(|r| (r.0.as_str(), r.1.as_str())).collect::<Vec<_>>(), [("ch1", "flussonic"), ("ch2", "flussonic")], "{first}");
+    assert_eq!(made.iter().map(|r| (r.0.as_str(), r.1.as_str())).collect::<Vec<_>>(), [("ch1", "flussonic")], "{first}");
+    assert!(has(&first, "ch2"), "the copy runs too: {first}");
 
     // The folder as the older version left it.
     for file in ["shows.json", "flussonic-shows.json"] {
@@ -98,9 +104,10 @@ async fn an_old_headend_state_directory_starts_under_the_new_version() {
 
     let st = start_alone(dir.clone(), port, &args).await;
     let mut ws = rpc(&st, "").await;
-    let list = until(&mut ws, 200, |l| renditions(l).iter().all(|r| r.2 == "auto") && renditions(l).len() == 2).await;
+    let list = until(&mut ws, 200, |l| renditions(l).iter().all(|r| r.2 == "auto") && renditions(l).len() == 1 && has(l, "ch2")).await;
     let now = renditions(&list);
-    assert_eq!(now, vec![("ch1".into(), "flussonic".into(), json!("auto")), ("ch2".into(), "flussonic".into(), json!("auto"))], "same shows, same outputs, spread from now on: {list}");
+    assert_eq!(now, vec![("ch1".into(), "flussonic".into(), json!("auto"))], "same show, same output, spread from now on: {list}");
+    assert!(has(&list, "ch2"), "the copy is kept as it was: {list}");
 
     let status = ok(&call(&mut ws, 1, "headend.status", json!({})).await).clone();
     assert_eq!(status["following"], true, "{status}");
@@ -119,6 +126,6 @@ async fn an_old_headend_state_directory_starts_under_the_new_version() {
     drop(st);
     let st = start_alone(dir.clone(), port, &args).await;
     let mut ws = rpc(&st, "").await;
-    let again = until(&mut ws, 300, |l| renditions(l).len() == 2).await;
+    let again = until(&mut ws, 300, |l| renditions(l).len() == 1 && has(l, "ch2")).await;
     assert_eq!(renditions(&again), now, "{again}");
 }
