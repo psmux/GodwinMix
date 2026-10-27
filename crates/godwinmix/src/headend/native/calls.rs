@@ -116,9 +116,12 @@ async fn bulk(st: &Arc<Station>, n: &Native, req: ChannelBulkRequest) -> Result<
         changes.push(Change { was: name.clone(), file, to });
     }
     let mut out = edit::replace(n, st, changes).await?;
-    // Spread: placed by load from now on, and evened out at once.
+    // Spread: placed by load from now on, and evened out at once, once the
+    // channels made again have been planned and placed.
     if req.gpu.is_some_and(|g| g.index().is_none()) {
         let ids: Vec<String> = out.done.iter().filter_map(|name| n.keep.id_of(name).or_else(|| follow::headend(st)?.keep.id_of(name))).collect();
+        let (asked, planned) = (st.direct.hand_over(), st.clone());
+        let _ = tokio::task::spawn_blocking(move || planned.direct.wait_handed(asked, std::time::Duration::from_secs(5))).await;
         st.direct.transcode.unpin(&ids);
         crate::station::gpus::rebalance_these(st, Some(&ids), false);
     }
