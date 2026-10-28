@@ -2,7 +2,7 @@
 //!
 //! ```text
 //!   decode   appsrc ─ [parser] ─ decoder ─ [download | caps(CUDA memory)] ─ tee
-//!   scale    queue(leaky) ─ [videorate] ─ [deinterlace] ─ [crop] ─ videoscale | cudaconvertscale ─ caps ─ tee
+//!   scale    queue(leaky) ─ [deinterlace] ─ [videorate] ─ [crop] ─ videoscale | cudaconvertscale ─ caps ─ tee
 //!   encode   queue(leaky) ─ [videoconvert] ─ encoder ─ parser ─ caps ─ appsink
 //!   aconvert queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ tee
 //!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ encoder [─ parser] ─ caps ─ appsink

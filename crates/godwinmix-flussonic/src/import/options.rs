@@ -1,4 +1,5 @@
-//! How a config is read into shows: what its `deviceid` does.
+//! How a config is read into shows: what its `deviceid` and its
+//! `deinterlace=false` do.
 
 use serde::Serialize;
 
@@ -17,8 +18,25 @@ pub enum DeviceId {
     File,
 }
 
+/// What an imported `transcoder deinterlace=false` does, which is what
+/// Flussonic writes unless told otherwise.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Deinterlacing {
+    /// Deinterlace every picture the stream marks as interlaced
+    /// (`deinterlace: "auto"`). Flussonic's `false` scaled both fields as
+    /// one frame, which combs on every movement in a 1080i or 480i
+    /// picture; a progressive one passes untouched, so this costs nothing
+    /// where there is nothing to do. The default.
+    #[default]
+    Auto,
+    /// `deinterlace=false` is off, as written.
+    File,
+}
+
 /// How a config is read into shows.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Options {
     pub deviceid: DeviceId,
+    pub deinterlace: Deinterlacing,
 }

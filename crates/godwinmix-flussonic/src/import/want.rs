@@ -8,11 +8,12 @@
 //! software pins it with `[hardware]`. `deviceid=N` is `video.gpu`: the card
 //! the decode, the scale and the encode run on, either N as written
 //! ([`DeviceId::File`]) or `auto`, spread by load ([`DeviceId::Spread`]).
-//! What GodwinMix does differently is a note: a pad colour other than
-//! black, one picture per field, and deinterlacing, which runs on the CPU.
+//! `deinterlace=false`, Flussonic's default, is `auto` unless the station
+//! reads it as written ([`Deinterlacing`]). What GodwinMix does differently
+//! is a note: a pad colour other than black, and one picture per field.
 
 use super::codecs::{audio_codec, fps_of, video_codec};
-use super::{DeviceId, Note, Options};
+use super::{Deinterlacing, DeviceId, Note, Options};
 use crate::model::{Bitrate, Deinterlace, DeinterlaceRate, Hw, SizeMode, Transcoder};
 use serde_json::{json, Map, Value};
 
@@ -65,16 +66,13 @@ fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>, opts: &Options) -> 
     if let Some(fps) = track.fps {
         v.insert("fps".into(), fps_of(fps));
     }
-    let deinterlace = match t.deinterlace {
-        Deinterlace::Off => "off",
-        Deinterlace::On => "on",
-        Deinterlace::Auto => "auto",
+    let deinterlace = match (t.deinterlace, opts.deinterlace) {
+        (Deinterlace::Off, Deinterlacing::File) => "off",
+        (Deinterlace::Off | Deinterlace::Auto, _) => "auto",
+        (Deinterlace::On, _) => "on",
     };
     v.insert("deinterlace".into(), json!(deinterlace));
-    if t.deinterlace != Deinterlace::Off {
-        notes.push(Note::not_carried(line, format!("deinterlace={deinterlace}: the deinterlacing runs on the CPU, between the GPU decode and the encode")));
-    }
-    if t.deinterlace_rate == DeinterlaceRate::Field && t.deinterlace != Deinterlace::Off {
+    if t.deinterlace_rate == DeinterlaceRate::Field && deinterlace != "off" {
         notes.push(Note::not_carried(line, "deinterlace_rate=field (one picture per field): pictures are kept at the source's frame rate".into()));
     }
     if let Some(gop) = t.gop {

@@ -11,7 +11,7 @@ mod input;
 mod options;
 mod want;
 
-pub use options::{DeviceId, Options};
+pub use options::{Deinterlacing, DeviceId, Options};
 
 pub use input::redact;
 

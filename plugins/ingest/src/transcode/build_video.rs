@@ -3,8 +3,15 @@
 //!
 //! On the GPU (`"memory": "cuda"`) the scale is `cudaconvertscale`, which
 //! pads with bars itself (`add-borders`), and the encoder takes the CUDA
-//! picture with no conversion in front of it. A deinterlace or a crop has no
-//! CUDA element here, so the core plans those on the CPU.
+//! picture with no conversion in front of it. A crop has no CUDA element
+//! here, so the core plans it on the CPU. Nor has a deinterlace: GStreamer
+//! 1.26 has no CUDA one and its NVDEC decoders always weave, so the
+//! picture goes down for `deinterlace` and comes back up (see
+//! [`deinterlace`]), and everything else stays on the card.
+//!
+//! Both scalers fit by the picture's shape, not its stored size: each
+//! reads `pixel-aspect-ratio` off its input, so an anamorphic 16:9 SD
+//! picture fills a 16:9 frame and a 4:3 one is laid in with bars.
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -16,25 +23,19 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     let (num, den) = node.fps().unwrap_or((30, 1));
     let (width, height) = (node.number("width"), node.number("height"));
     let mut elements = vec![leaky_queue()?];
-    if node.text("deinterlace").is_none_or(|d| d == "off") {
-        weave(&elements[0]);
+    let cuda = node.cuda();
+    match node.text("deinterlace") {
+        Some(mode @ ("on" | "auto")) => elements.extend(deinterlace(node, mode == "on")?),
+        _ => weave(&elements[0]),
     }
     // Only a change of rate needs videorate: at the source's own rate it
-    // could only drop or repeat a picture whose time wobbled.
+    // could only drop or repeat a picture whose time wobbled. After the
+    // deinterlace, which needs the fields in the order they came.
     let rate = node.raw.get("rate").and_then(serde_json::Value::as_bool).unwrap_or(true);
     if rate {
         let r = make("videorate")?;
         r.set_property("skip-to-first", true);
         elements.push(r);
-    }
-    match node.text("deinterlace") {
-        Some("on") => elements.push(make("deinterlace")?),
-        Some("auto") => {
-            let d = make("deinterlace")?;
-            d.set_property_from_str("mode", "auto");
-            elements.push(d);
-        }
-        _ => {}
     }
     let fit = node.text("fit").unwrap_or("pad");
     if fit == "crop" {
@@ -46,7 +47,6 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
         crop.set_property("aspect-ratio", gst::Fraction::new(width as i32, height.max(1) as i32));
         elements.push(crop);
     }
-    let cuda = node.cuda();
     let scaler = make(if cuda { "cudaconvertscale" } else { "videoscale" })?;
     let scaler = if cuda { super::build::on_card(scaler, node) } else { scaler };
     if scaler.has_property("add-borders") {
@@ -98,6 +98,33 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let sink = appsink()?;
     elements.push(sink.clone().upcast());
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
+}
+
+/// Make an interlaced picture progressive: `on` every picture, `auto` only
+/// those the decoder marks as interlaced (it marks each one, so a film
+/// coded as frames inside an interlaced sequence is left alone), with
+/// YADIF, one picture out for each frame in.
+///
+/// On the GPU the picture goes down in I420, which YADIF has a fast path
+/// for (measured on 1080i, about half the time it takes on NV12), and the
+/// result goes back up for the scale. A converted SD channel costs about
+/// 0.5 ms of one core a frame, a 1080i one about 3 ms; the rest of the
+/// work, the conversion, the scale and the encode, stays on the card.
+fn deinterlace(node: &NodeSpec, always: bool) -> Result<Vec<gst::Element>, String> {
+    let d = make("deinterlace")?;
+    d.set_property_from_str("mode", if always { "interlaced" } else { "auto" });
+    d.set_property_from_str("method", "yadif");
+    d.set_property_from_str("fields", "top");
+    if !node.cuda() {
+        return Ok(vec![d]);
+    }
+    let convert = super::build::on_card(make("cudaconvert")?, node);
+    let down = super::build::on_card(make("cudadownload")?, node);
+    let up = super::build::on_card(make("cudaupload")?, node);
+    // The caps after the download say system memory: without them the
+    // download passes CUDA memory through, since `deinterlace` takes any
+    // memory in its caps, and then lets every picture by untouched.
+    Ok(vec![convert, caps("video/x-raw(memory:CUDAMemory),format=I420")?, down, caps("video/x-raw,format=I420")?, d, up, caps("video/x-raw(memory:CUDAMemory)")?])
 }
 
 /// Take an interlaced picture as the frame it is, both fields woven, which

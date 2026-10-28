@@ -31,8 +31,13 @@ pub(crate) fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
 }
 
 /// The caps an MPEG-2 keyframe gives its decoder: parsed, a picture a
-/// buffer, with the size and rate its sequence header states. `None` for
-/// any other picture, which keeps the caps the last keyframe gave.
+/// buffer, with the size, rate and pixel shape its sequence header states.
+/// `None` for any other picture, which keeps the caps the last keyframe gave.
+///
+/// The pixel shape matters: the decoder copies it onto the pictures it
+/// hands on, and the scaler fits by it. Left out, a 704x480 picture meant
+/// for 16:9 was taken as square and came out 1056x720 between bars, and
+/// when an advert's sequence changes it the caps change with it.
 pub(crate) fn mpeg2(tag: &MediaTag) -> Option<crate::direct::vitals::sound::Coded> {
     let (video, _, _) = crate::hub::mpeg2(tag)?;
     let s = crate::mp2v::sequence(tag.payload.get(crate::mp2v::PREFIX..)?)?;
@@ -43,6 +48,7 @@ pub(crate) fn mpeg2(tag: &MediaTag) -> Option<crate::direct::vitals::sound::Code
         .field("width", video.width as i32)
         .field("height", video.height as i32)
         .field("framerate", gst::Fraction::new(s.fps.0 as i32, s.fps.1 as i32))
+        .field("pixel-aspect-ratio", gst::Fraction::new(s.par.0 as i32, s.par.1 as i32))
         .build();
     Some(crate::direct::vitals::sound::Coded { caps, skip: crate::mp2v::PREFIX })
 }

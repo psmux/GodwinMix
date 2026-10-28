@@ -3,7 +3,7 @@
 //! keyframe interval in the encoder's units.
 
 use godwinmix_core::catalogue::apply::{cpu_count, Vars};
-use godwinmix_protocol::rendition::{Deinterlace, Fit, StreamInfo, VideoShape};
+use godwinmix_protocol::rendition::{Deinterlace, Fit, StreamInfo, VideoCodec, VideoShape};
 use godwinmix_render::container::video_slug;
 use godwinmix_render::NodeKind;
 use serde_json::{json, Value};
@@ -25,6 +25,11 @@ pub fn scale(kind: &NodeKind, input: &str, info: &StreamInfo) -> Value {
     let deinterlace = match deinterlace {
         Deinterlace::Off => "off",
         Deinterlace::On => "on",
+        // A progressive MPEG-2 sequence has no field pictures in it, so
+        // `auto` would only take a 720p picture off the GPU and back for
+        // nothing. H.264 does not tell the meter its scan, so it keeps
+        // `auto`, which passes a progressive picture through.
+        Deinterlace::Auto if progressive_mpeg2(info) => "off",
         Deinterlace::Auto => "auto",
     };
     let rate = info.video.is_none_or(|v| v.fps.as_f64() != fps.as_f64());
@@ -32,6 +37,10 @@ pub fn scale(kind: &NodeKind, input: &str, info: &StreamInfo) -> Value {
         "kind": "scale", "input": input, "width": width, "height": height, "fps": fps_pair(*fps),
         "fit": fit, "border": argb(pad_color.as_deref()), "deinterlace": deinterlace, "rate": rate,
     })
+}
+
+fn progressive_mpeg2(info: &StreamInfo) -> bool {
+    info.video.is_some_and(|v| v.codec == VideoCodec::Mpeg2) && !info.interlaced
 }
 
 /// `#rrggbb` as an opaque `0xffrrggbb`; black when it does not read.
