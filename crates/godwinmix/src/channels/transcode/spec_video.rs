@@ -3,7 +3,7 @@
 //! keyframe interval in the encoder's units.
 
 use godwinmix_core::catalogue::apply::{cpu_count, Vars};
-use godwinmix_protocol::rendition::{Deinterlace, Fit, StreamInfo, VideoCodec, VideoShape};
+use godwinmix_protocol::rendition::{Deinterlace, DeinterlaceMethod, Fit, StreamInfo, VideoCodec, VideoShape};
 use godwinmix_render::container::video_slug;
 use godwinmix_render::NodeKind;
 use serde_json::{json, Value};
@@ -13,10 +13,12 @@ use super::spec::{fps_pair, resolve};
 
 /// A scale node: size and rate, `fit` (`pad`, `crop`, `stretch`) with the
 /// bars' colour as `0xAARRGGBB` the way GStreamer's scalers take it,
-/// `deinterlace` (`off`, `on`, `auto`), and `rate` when the frame rate
-/// changes, so a scale to the source's own rate never drops or repeats one.
+/// `deinterlace` (`off`, `on`, `auto`) with its `method`, `aspect` when the
+/// source's shape is overridden (`16:9`, `4:3`), and `rate` when the frame
+/// rate changes, so a scale to the source's own rate never drops or
+/// repeats one.
 pub fn scale(kind: &NodeKind, input: &str, info: &StreamInfo) -> Value {
-    let NodeKind::Scale { width, height, fps, fit, pad_color, deinterlace, .. } = kind else { return Value::Null };
+    let NodeKind::Scale { width, height, fps, fit, pad_color, deinterlace, method, aspect, .. } = kind else { return Value::Null };
     let fit = match fit {
         Fit::Pad => "pad",
         Fit::Crop => "crop",
@@ -32,11 +34,20 @@ pub fn scale(kind: &NodeKind, input: &str, info: &StreamInfo) -> Value {
         Deinterlace::Auto if progressive_mpeg2(info) => "off",
         Deinterlace::Auto => "auto",
     };
+    let method = match method {
+        DeinterlaceMethod::Yadif => "yadif",
+        DeinterlaceMethod::Greedyh => "greedyh",
+        DeinterlaceMethod::Linear => "linear",
+    };
     let rate = info.video.is_none_or(|v| v.fps.as_f64() != fps.as_f64());
-    json!({
+    let mut node = json!({
         "kind": "scale", "input": input, "width": width, "height": height, "fps": fps_pair(*fps),
-        "fit": fit, "border": argb(pad_color.as_deref()), "deinterlace": deinterlace, "rate": rate,
-    })
+        "fit": fit, "border": argb(pad_color.as_deref()), "deinterlace": deinterlace, "method": method, "rate": rate,
+    });
+    if let Some((w, h)) = aspect.ratio() {
+        node["aspect"] = json!([w, h]);
+    }
+    node
 }
 
 fn progressive_mpeg2(info: &StreamInfo) -> bool {

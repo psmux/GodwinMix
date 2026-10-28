@@ -27,6 +27,7 @@ mod build_video;
 mod graph;
 pub(crate) mod input;
 mod meta;
+mod picture;
 mod router;
 mod session;
 mod sink;
@@ -37,6 +38,8 @@ mod tee;
 mod tests;
 #[cfg(test)]
 mod tests_fit;
+#[cfg(test)]
+mod tests_picture;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};

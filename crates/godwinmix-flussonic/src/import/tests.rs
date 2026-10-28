@@ -19,12 +19,13 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     assert_eq!((r["video"]["width"].as_u64(), r["video"]["height"].as_u64()), (Some(1280), Some(720)));
     assert_eq!(r["video"]["bitrate_kbps"], 1500);
     assert_eq!((r["video"]["fit"].as_str(), r["video"]["pad_color"].as_str()), (Some("pad"), Some("#000000")));
-    assert_eq!((r["video"]["keyframe_frames"].as_u64(), r["video"]["deinterlace"].as_str()), (Some(50), Some("off")));
+    // deinterlace=false is read as auto unless the station reads it as written.
+    assert_eq!((r["video"]["keyframe_frames"].as_u64(), r["video"]["deinterlace"].as_str()), (Some(50), Some("auto")));
     // Exactly the request the media side plans from; the planner takes NVENC first on its own.
     assert_eq!(
         *r,
         json!({"video": {"codec": "h264", "width": 1280, "height": 720, "bitrate_kbps": 1500, "keyframe_frames": 50,
-                         "fit": "pad", "pad_color": "#000000", "deinterlace": "off", "preset": "p1", "gpu": "auto"},
+                         "fit": "pad", "pad_color": "#000000", "deinterlace": "auto", "preset": "p1", "gpu": "auto"},
                "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}})
     );
     assert_eq!((r["audio"]["codec"].as_str(), r["audio"]["bitrate_kbps"].as_u64()), (Some("aac"), Some(128)));
@@ -36,7 +37,7 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     assert!(relay.copy && relay.outputs[0].get("rendition").is_none());
     assert_eq!(relay.outputs[0]["uri"], "hls://flussonic");
     // The DVR is not carried. Every field of the line is acted on, so the
-    // sample's 51 transcoders, black pads and no deinterlacing, say nothing.
+    // sample's 51 transcoders, black pads and deinterlace=false, say nothing.
     assert!(i.notes.iter().any(|(_, n)| n.what.starts_with("dvr archive")));
     assert_eq!(i.notes.len(), 1, "{:?}", i.notes);
 }
@@ -82,7 +83,7 @@ fn a_title_change_is_not_a_media_change() {
 }
 
 fn with(text: &str, deviceid: DeviceId) -> Import {
-    import_with(&Document::parse(text).unwrap().config, &Options { deviceid })
+    import_with(&Document::parse(text).unwrap().config, &Options { deviceid, ..Options::default() })
 }
 
 const TWO_CARDS: &str = "stream A {\n  input udp://239.0.0.1:5000;\n  transcoder deviceid=0 hw=nvenc vb=1500k size=1280x720 ab=128k;\n}\n\
@@ -108,4 +109,18 @@ fn deviceid_as_written_puts_each_channel_on_its_card() {
     assert_eq!(gpu("C"), json!(0));
     // deviceid is acted on, so it is in no note.
     assert!(!i.notes.iter().any(|(_, n)| n.what.contains("deviceid")), "{:?}", i.notes);
+}
+
+#[test]
+fn deinterlace_false_is_auto_unless_read_as_written() {
+    let text = "stream A {\n  input udp://239.0.0.1:1;\n  transcoder deinterlace=false vb=1500k size=1280x720 ab=128k;\n}\n\
+                stream B {\n  input udp://239.0.0.1:2;\n  transcoder deinterlace=true vb=1500k ab=128k;\n}\n\
+                stream C {\n  input udp://239.0.0.1:3;\n  transcoder vb=1500k ab=128k;\n}\n";
+    let read = |deinterlace| {
+        let i = import_with(&Document::parse(text).unwrap().config, &Options { deinterlace, ..Options::default() });
+        i.shows.iter().map(|s| s.outputs[0]["rendition"]["video"]["deinterlace"].as_str().unwrap_or_default().to_string()).collect::<Vec<_>>()
+    };
+    assert_eq!(read(Deinterlacing::Auto), ["auto", "on", "auto"]);
+    assert_eq!(read(Deinterlacing::File), ["off", "on", "off"]);
+    assert_eq!(Options::default().deinterlace, Deinterlacing::Auto);
 }

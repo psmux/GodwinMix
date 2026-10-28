@@ -3,7 +3,8 @@
 use std::collections::BTreeMap;
 
 use godwinmix_protocol::rendition::{
-    AudioShape, Container, Cost, Deinterlace, EncoderSlot, Fit, Fps, VideoShape,
+    AudioShape, Container, Cost, Deinterlace, DeinterlaceMethod, EncoderSlot, Fit, Fps,
+    SourceAspect, VideoShape,
 };
 use serde::Serialize;
 
@@ -51,6 +52,11 @@ pub enum NodeKind {
         pad_color: Option<String>,
         #[serde(default)]
         deinterlace: Deinterlace,
+        #[serde(default, skip_serializing_if = "is_default")]
+        method: DeinterlaceMethod,
+        /// The source's shape when the request overrides the stream's.
+        #[serde(default, skip_serializing_if = "is_default")]
+        aspect: SourceAspect,
     },
     /// One video encoder, shared by every output that wants this shape.
     Encode {
@@ -87,6 +93,10 @@ pub enum NodeKind {
 
 fn is_zero(n: &u8) -> bool {
     *n == 0
+}
+
+fn is_default<T: Default + PartialEq>(t: &T) -> bool {
+    *t == T::default()
 }
 
 /// Why the planner decided what it did, for the page to show as it is.

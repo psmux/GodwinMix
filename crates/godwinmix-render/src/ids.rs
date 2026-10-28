@@ -1,7 +1,7 @@
 //! Node ids. Each is built from what the node does, so the same work gets
 //! the same id in every plan and `diff` can match nodes across plans.
 
-use godwinmix_protocol::rendition::{AudioShape, Deinterlace, Fit, Fps, VideoShape};
+use godwinmix_protocol::rendition::{AudioShape, Deinterlace, DeinterlaceMethod, Fit, Fps, SourceAspect, VideoShape};
 
 use crate::container::{audio_slug, video_slug};
 use crate::graph::Track;
@@ -29,11 +29,15 @@ pub struct Look {
     /// `#rrggbb` for a pad that is not black.
     pub pad_color: Option<String>,
     pub deinterlace: Deinterlace,
+    pub method: DeinterlaceMethod,
+    pub aspect: SourceAspect,
 }
 
 /// `scale:cam:1280x720p30`, then `:crop`, `:stretch` or `:pad-ff0000` for a
-/// fit that is not black bars, and `:di` or `:da` for a deinterlace on or
-/// automatic, so a plain scale keeps the id it always had.
+/// fit that is not black bars, `:di` or `:da` for a deinterlace on or
+/// automatic, with `-greedyh` or `-linear` for a method that is not YADIF,
+/// and `:a16x9` or `:a4x3` for a shape that overrides the stream's, so a
+/// plain scale keeps the id it always had.
 pub fn scale_id(source: &str, s: &VideoShape, look: &Look) -> String {
     let mut id = format!("scale:{source}:{}x{}p{}", s.width, s.height, fps_id(s.fps));
     match (look.fit, look.pad_color.as_deref()) {
@@ -46,6 +50,16 @@ pub fn scale_id(source: &str, s: &VideoShape, look: &Look) -> String {
         Deinterlace::On => id.push_str(":di"),
         Deinterlace::Auto => id.push_str(":da"),
         Deinterlace::Off => {}
+    }
+    match (look.deinterlace, look.method) {
+        (Deinterlace::Off, _) | (_, DeinterlaceMethod::Yadif) => {}
+        (_, DeinterlaceMethod::Greedyh) => id.push_str("-greedyh"),
+        (_, DeinterlaceMethod::Linear) => id.push_str("-linear"),
+    }
+    match look.aspect {
+        SourceAspect::Wide => id.push_str(":a16x9"),
+        SourceAspect::Standard => id.push_str(":a4x3"),
+        SourceAspect::Auto => {}
     }
     id
 }

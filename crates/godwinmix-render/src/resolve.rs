@@ -9,7 +9,7 @@ use crate::container::{
     carries_video, container_slug, fps_text, video_codecs, video_name, video_slug,
 };
 use crate::error::PlanError;
-use crate::sizing::{default_kbps, size};
+use crate::sizing::{default_kbps, matched, size};
 
 /// Fraction either way a bitrate may differ and still be copied.
 pub const DEFAULT_TOLERANCE: f32 = 0.25;
@@ -100,6 +100,7 @@ pub fn resolve_video(
     let want = req.video.clone().unwrap_or_default();
     let (codec, explicit) = codec_for(req, info, available)?;
     let (width, height) = size(want.width, want.height, &src);
+    let (width, height, kbps) = matched(&want, width, height, src.height);
     let fps = want.fps.unwrap_or(src.fps);
     let keyframe_ms = want
         .keyframe_frames
@@ -118,7 +119,7 @@ pub fn resolve_video(
     let progressive = want.deinterlace == Some(Deinterlace::On) && info.interlaced;
     let why = match progressive {
         true => Some("the source is interlaced and this output wants it progressive".into()),
-        false => mismatch(req, info, &src, &target, want.bitrate_kbps, tolerance),
+        false => mismatch(req, info, &src, &target, kbps, tolerance),
     };
     let Some(why) = why else {
         return Ok(VideoDecision::Copy);
@@ -126,7 +127,7 @@ pub fn resolve_video(
     if !explicit && !available.contains(&target.codec) {
         target.codec = fallback(req, available);
     }
-    target.bitrate_kbps = want.bitrate_kbps.unwrap_or_else(|| default_kbps(&target));
+    target.bitrate_kbps = kbps.unwrap_or_else(|| default_kbps(&target));
     Ok(VideoDecision::Encode { target, why })
 }
 

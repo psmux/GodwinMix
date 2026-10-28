@@ -110,7 +110,7 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
         log: s.log.as_deref().map(|p| Mutex::new(Log::new(p))),
         token: Token::open(),
         changed: tokio::sync::Notify::new(),
-        import: godwinmix_flussonic::import::Options { deviceid: s.deviceid },
+        import: s.import(),
     });
     // The station's own methods read it for headend.status. Weak, since the
     // headend holds the station.

@@ -17,6 +17,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 
 use super::build::{appsink, caps, element, leaky_queue, make, set_all, tee, Built};
+use super::picture::{aspect, deinterlace, reshape};
 use super::spec::NodeSpec;
 
 pub fn scale(node: &NodeSpec) -> Result<Built, String> {
@@ -24,9 +25,10 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     let (width, height) = (node.number("width"), node.number("height"));
     let mut elements = vec![leaky_queue()?];
     let cuda = node.cuda();
-    match node.text("deinterlace") {
-        Some(mode @ ("on" | "auto")) => elements.extend(deinterlace(node, mode == "on")?),
-        _ => weave(&elements[0]),
+    let deinterlacing = matches!(node.text("deinterlace"), Some("on" | "auto"));
+    reshape(&elements[0], !deinterlacing, aspect(node));
+    if deinterlacing {
+        elements.extend(deinterlace(node, node.text("deinterlace") == Some("on"))?);
     }
     // Only a change of rate needs videorate: at the source's own rate it
     // could only drop or repeat a picture whose time wobbled. After the
@@ -98,55 +100,4 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let sink = appsink()?;
     elements.push(sink.clone().upcast());
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
-}
-
-/// Make an interlaced picture progressive: `on` every picture, `auto` only
-/// those the decoder marks as interlaced (it marks each one, so a film
-/// coded as frames inside an interlaced sequence is left alone), with
-/// YADIF, one picture out for each frame in.
-///
-/// On the GPU the picture goes down in I420, which YADIF has a fast path
-/// for (measured on 1080i, about half the time it takes on NV12), and the
-/// result goes back up for the scale. A converted SD channel costs about
-/// 0.5 ms of one core a frame, a 1080i one about 3 ms; the rest of the
-/// work, the conversion, the scale and the encode, stays on the card.
-fn deinterlace(node: &NodeSpec, always: bool) -> Result<Vec<gst::Element>, String> {
-    let d = make("deinterlace")?;
-    d.set_property_from_str("mode", if always { "interlaced" } else { "auto" });
-    d.set_property_from_str("method", "yadif");
-    d.set_property_from_str("fields", "top");
-    if !node.cuda() {
-        return Ok(vec![d]);
-    }
-    let convert = super::build::on_card(make("cudaconvert")?, node);
-    let down = super::build::on_card(make("cudadownload")?, node);
-    let up = super::build::on_card(make("cudaupload")?, node);
-    // The caps after the download say system memory: without them the
-    // download passes CUDA memory through, since `deinterlace` takes any
-    // memory in its caps, and then lets every picture by untouched.
-    Ok(vec![convert, caps("video/x-raw(memory:CUDAMemory),format=I420")?, down, caps("video/x-raw,format=I420")?, d, up, caps("video/x-raw(memory:CUDAMemory)")?])
-}
-
-/// Take an interlaced picture as the frame it is, both fields woven, which
-/// is what "no deinterlace" means: the caps going into the branch say
-/// progressive. `cudaconvertscale` takes nothing else, and a decoder marks
-/// a broadcast's pictures `mixed` whether or not a field ever differs.
-fn weave(head: &gst::Element) {
-    let Some(pad) = head.static_pad("sink") else { return };
-    pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, |_, info| {
-        let Some(gst::PadProbeData::Event(event)) = &info.data else { return gst::PadProbeReturn::Ok };
-        let gst::EventView::Caps(c) = event.view() else { return gst::PadProbeReturn::Ok };
-        let caps = c.caps();
-        let interlaced = caps.structure(0).and_then(|s| s.get::<&str>("interlace-mode").ok()).is_some_and(|m| m != "progressive");
-        if !interlaced {
-            return gst::PadProbeReturn::Ok;
-        }
-        let mut woven = caps.to_owned();
-        if let Some(s) = woven.make_mut().structure_mut(0) {
-            s.set("interlace-mode", "progressive");
-            s.remove_field("field-order");
-        }
-        info.data = Some(gst::PadProbeData::Event(gst::event::Caps::new(&woven)));
-        gst::PadProbeReturn::Ok
-    });
 }

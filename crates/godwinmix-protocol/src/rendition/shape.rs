@@ -70,6 +70,59 @@ pub enum Deinterlace {
     Auto,
 }
 
+/// How a deinterlace makes the lines of the field it does not have.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DeinterlaceMethod {
+    /// Looks at the fields before and after: no combing on movement and no
+    /// flicker on still detail. About 3 ms of one core a 1080i frame.
+    #[default]
+    Yadif,
+    /// Motion adaptive, a little cheaper than YADIF and a little softer.
+    Greedyh,
+    /// The missing lines from the lines either side: the cheapest, and the
+    /// softest, with some flicker on fine detail.
+    Linear,
+}
+
+/// The shape a source's picture is shown at.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub enum SourceAspect {
+    /// The shape the stream says.
+    #[default]
+    #[serde(rename = "auto")]
+    Auto,
+    /// Widescreen, whatever the stream says.
+    #[serde(rename = "16:9")]
+    Wide,
+    /// Standard, whatever the stream says.
+    #[serde(rename = "4:3")]
+    Standard,
+}
+
+impl SourceAspect {
+    /// The display aspect it forces, or None for the stream's own.
+    pub fn ratio(self) -> Option<(u32, u32)> {
+        match self {
+            SourceAspect::Auto => None,
+            SourceAspect::Wide => Some((16, 9)),
+            SourceAspect::Standard => Some((4, 3)),
+        }
+    }
+}
+
+/// A rendition that follows a larger source's size, up to a limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MatchSource {
+    /// The tallest picture made, such as 1080.
+    pub max_height: u32,
+    /// The bitrate at `max_height`. Left out, the rendition's own bitrate
+    /// grown by the picture's area, so 1500 kbit/s at 720p is 3375 at 1080p.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+}
+
 /// Where a rendition's picture is encoded, when it must be one or the other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]

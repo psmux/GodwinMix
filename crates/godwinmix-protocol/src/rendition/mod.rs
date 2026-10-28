@@ -73,9 +73,28 @@ pub struct VideoWant {
     /// The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pad_color: Option<String>,
+    /// The shape the source's picture is shown at, which `pad` and `crop`
+    /// fit by. Left out (`auto`), the shape the stream says: a 704x480
+    /// picture flagged 16:9 fills a 16:9 frame. `16:9` or `4:3` overrides
+    /// it for a broadcaster that flags its picture wrong.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aspect: Option<SourceAspect>,
     /// Off when left out: an interlaced picture is scaled as it comes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deinterlace: Option<Deinterlace>,
+    /// How a deinterlace makes the missing lines. `yadif` when left out.
+    /// It runs on the CPU whatever the method: GStreamer has no GPU
+    /// deinterlace, so on an NVIDIA card the picture goes down for it and
+    /// back up, and the scale and the encode stay on the card.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deinterlace_method: Option<DeinterlaceMethod>,
+    /// Convert a larger source at its own size: a source taller than
+    /// `height` comes out at its own height, up to `max_height`, with the
+    /// frame's shape kept, and a smaller one at `width` x `height`. So one
+    /// profile at 1280x720 with `max_height` 1080 makes 1080p of an HD
+    /// source and 720p of the rest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub match_source: Option<MatchSource>,
     /// The encoder's speed and quality preset in its own words (`p4` on
     /// NVENC, `veryfast` on x264). The catalogue's when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]

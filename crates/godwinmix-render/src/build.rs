@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use godwinmix_protocol::rendition::{AudioShape, Cost, Deinterlace, EncoderPick, EncoderSlot, VideoShape};
+use godwinmix_protocol::rendition::{AudioShape, Cost, Deinterlace, EncoderPick, EncoderSlot, SourceAspect, VideoShape};
 
 use crate::choose::{choose, hold, Used};
 use crate::container::video_slug;
@@ -166,9 +166,11 @@ impl<'m> Builder<'m> {
             fit: want.fit.unwrap_or_default(),
             pad_color: want.pad_color.clone().filter(|c| !is_black(c)),
             deinterlace: want.deinterlace.unwrap_or_default(),
+            method: want.deinterlace_method.unwrap_or_default(),
+            aspect: want.aspect.unwrap_or_default(),
         };
         let resized = (target.width, target.height, target.fps) != (src.width, src.height, src.fps);
-        if resized || look.deinterlace != Deinterlace::Off {
+        if resized || look.deinterlace != Deinterlace::Off || look.aspect != SourceAspect::Auto {
             let source = r.source.to_string();
             let (width, height, fps) = (target.width, target.height, target.fps);
             let id = scale_id(&source, target, &look);
@@ -183,6 +185,8 @@ impl<'m> Builder<'m> {
                         fit: look.fit,
                         pad_color: look.pad_color,
                         deinterlace: look.deinterlace,
+                        method: look.method,
+                        aspect: look.aspect,
                     },
                     model.scale_cost(src, target),
                 )

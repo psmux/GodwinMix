@@ -27,6 +27,14 @@ pub struct TranscodeProfile {
     pub video: Option<VideoWant>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<AudioWant>,
+    /// Further pictures of the same programme for the HLS output, each a
+    /// variant of its own in the master playlist beside `video`, so a
+    /// player on a weak connection can step down: 720p under a 1080p
+    /// `video`, say. Every one shares the sound. A field left out of one is
+    /// taken from `video`, so a rung can be just a size and a bitrate. The
+    /// channel's other outputs carry `video` alone. Needs `video`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ladder: Vec<VideoWant>,
 }
 
 impl TranscodeProfile {
@@ -80,7 +88,7 @@ fn h264(width: u32, height: u32, kbps: u32) -> VideoWant {
 }
 
 fn builtin(id: &str, name: &str, video: Option<VideoWant>, audio: Option<AudioWant>) -> TranscodeProfile {
-    TranscodeProfile { id: id.into(), name: name.into(), builtin: true, video, audio }
+    TranscodeProfile { id: id.into(), name: name.into(), builtin: true, video, audio, ladder: Vec::new() }
 }
 
 /// The id of the profile that passes the input through.
