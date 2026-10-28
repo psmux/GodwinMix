@@ -29,7 +29,10 @@ pub fn keep_on_gpu(nodes: &mut [Value], machine: &Machine) {
         .filter_map(|n| n["id"].as_str().map(str::to_string))
         .collect();
     for decode in decodes {
-        let scales: Vec<String> = ids(nodes, |n| n["kind"] == "scale" && n["input"] == decode.as_str());
+        // A scale may read the decode, or the one stage that deinterlaces it.
+        let first: Vec<String> = ids(nodes, |n| n["kind"] == "scale" && n["input"] == decode.as_str());
+        let mut scales = first.clone();
+        scales.extend(ids(nodes, |n| n["kind"] == "scale" && first.iter().any(|f| n["input"] == f.as_str())));
         let reads = |n: &Value| n["input"] == decode.as_str() || scales.iter().any(|s| n["input"] == s.as_str());
         let encodes: Vec<String> = ids(nodes, |n| n["kind"] == "encode" && reads(n));
         let on_gpu = |id: &String| nodes.iter().find(|n| n["id"] == id.as_str()).is_some_and(|n| match n["kind"].as_str() {

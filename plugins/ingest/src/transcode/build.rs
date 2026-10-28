@@ -3,6 +3,7 @@
 //! ```text
 //!   decode   appsrc ─ [parser] ─ decoder ─ [download | caps(CUDA memory)] ─ tee
 //!   scale    queue(leaky) ─ [deinterlace] ─ [videorate] ─ [crop] ─ videoscale | cudaconvertscale ─ caps ─ tee
+//!            queue(leaky) ─ deinterlace ─ tee   (`only_deinterlace`: one for every scale of a source)
 //!   encode   queue(leaky) ─ [videoconvert] ─ encoder ─ parser ─ caps ─ appsink
 //!   aconvert queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ tee
 //!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ encoder [─ parser] ─ caps ─ appsink

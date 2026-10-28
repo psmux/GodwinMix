@@ -64,6 +64,19 @@ pub fn scale_id(source: &str, s: &VideoShape, look: &Look) -> String {
     id
 }
 
+/// `deinterlace:cam:da`, with `-greedyh` or `-linear` for a method that is
+/// not YADIF: the one stage that deinterlaces a source's picture for every
+/// scale of it that asks the same way.
+pub fn deinterlace_id(source: &str, look: &Look) -> String {
+    let mode = if look.deinterlace == Deinterlace::On { "di" } else { "da" };
+    let method = match look.method {
+        DeinterlaceMethod::Yadif => "",
+        DeinterlaceMethod::Greedyh => "-greedyh",
+        DeinterlaceMethod::Linear => "-linear",
+    };
+    format!("deinterlace:{source}:{mode}{method}")
+}
+
 /// `encode:cam:h264:1280x720p30:2800k:g2000`: everything that makes two
 /// encodes different, so equal work has one id.
 ///

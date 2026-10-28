@@ -30,6 +30,13 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     if deinterlacing {
         elements.extend(deinterlace(node, node.text("deinterlace") == Some("on"))?);
     }
+    // The one stage that deinterlaces a source for every scale of it: the
+    // picture keeps its size, its pixel shape and its rate.
+    if node.raw.get("only_deinterlace").and_then(serde_json::Value::as_bool) == Some(true) {
+        let tee = tee()?;
+        elements.push(tee.clone());
+        return Ok(Built { head: Some(elements[0].clone()), elements, tee: Some(tee), appsrc: None, appsink: None });
+    }
     // Only a change of rate needs videorate: at the source's own rate it
     // could only drop or repeat a picture whose time wobbled. After the
     // deinterlace, which needs the fields in the order they came.

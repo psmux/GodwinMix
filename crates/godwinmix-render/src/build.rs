@@ -10,7 +10,7 @@ use crate::choose::{choose, hold, Used};
 use crate::container::video_slug;
 use crate::error::{NoEncoder, PlanError, Skip};
 use crate::graph::{Node, NodeKind, Track};
-use crate::ids::{encode_id, scale_id, track_slug, Look};
+use crate::ids::{deinterlace_id, encode_id, scale_id, track_slug, Look};
 use crate::model::{device_of, AudioWork, CostModel, CPU};
 use crate::nearest::nearest;
 use crate::plan::Resolved;
@@ -153,6 +153,21 @@ impl<'m> Builder<'m> {
         })
     }
 
+    /// The source's picture deinterlaced, once, at its own size, shape and
+    /// rate: every rendition of it that deinterlaces the same way reads this
+    /// one, so a ladder of two does the CPU's work once and not twice.
+    fn deinterlaced(&mut self, r: &Resolved, decoded: String, src: &VideoShape, look: &Look) -> String {
+        let source = r.source.to_string();
+        let id = deinterlace_id(&source, look);
+        let model = self.model;
+        let (deinterlace, method) = (look.deinterlace, look.method);
+        self.cpu(id, r.id(), vec![decoded], || {
+            let (width, height, fps) = (src.width, src.height, src.fps);
+            let kind = NodeKind::Scale { source, width, height, fps, fit: Default::default(), pad_color: None, deinterlace, method, aspect: SourceAspect::Auto, only_deinterlace: true };
+            (kind, model.scale_cost(src, src))
+        })
+    }
+
     /// Decode, scale when the size or rate differs, and encode, each shared.
     pub fn encoded(
         &mut self,
@@ -170,10 +185,15 @@ impl<'m> Builder<'m> {
             aspect: want.aspect.unwrap_or_default(),
         };
         let resized = (target.width, target.height, target.fps) != (src.width, src.height, src.fps);
-        let reshaped = look.deinterlace != Deinterlace::Off || look.aspect != SourceAspect::Auto;
-        if resized || reshaped {
+        if look.deinterlace != Deinterlace::Off {
+            upstream = self.deinterlaced(r, upstream, src, &look);
+        }
+        if resized || look.aspect != SourceAspect::Auto {
             let source = r.source.to_string();
             let (width, height, fps) = (target.width, target.height, target.fps);
+            // Named by the whole look, deinterlace included, though the
+            // deinterlace is upstream: it reads something else than a scale
+            // of the same size straight off the decode.
             let id = scale_id(&source, target, &look);
             let model = self.model;
             upstream = self.cpu(id, r.id(), vec![upstream], || {
@@ -185,9 +205,10 @@ impl<'m> Builder<'m> {
                         fps,
                         fit: look.fit,
                         pad_color: look.pad_color,
-                        deinterlace: look.deinterlace,
-                        method: look.method,
+                        deinterlace: Deinterlace::Off,
+                        method: Default::default(),
                         aspect: look.aspect,
+                        only_deinterlace: false,
                     },
                     model.scale_cost(src, target),
                 )

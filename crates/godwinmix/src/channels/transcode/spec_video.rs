@@ -18,7 +18,7 @@ use super::spec::{fps_pair, resolve};
 /// rate changes, so a scale to the source's own rate never drops or
 /// repeats one.
 pub fn scale(kind: &NodeKind, input: &str, info: &StreamInfo) -> Value {
-    let NodeKind::Scale { width, height, fps, fit, pad_color, deinterlace, method, aspect, .. } = kind else { return Value::Null };
+    let NodeKind::Scale { width, height, fps, fit, pad_color, deinterlace, method, aspect, only_deinterlace, .. } = kind else { return Value::Null };
     let fit = match fit {
         Fit::Pad => "pad",
         Fit::Crop => "crop",
@@ -45,6 +45,9 @@ pub fn scale(kind: &NodeKind, input: &str, info: &StreamInfo) -> Value {
     });
     if let Some((w, h)) = aspect.ratio() {
         node["aspect"] = json!([w, h]);
+    }
+    if *only_deinterlace {
+        node["only_deinterlace"] = json!(true);
     }
     node
 }

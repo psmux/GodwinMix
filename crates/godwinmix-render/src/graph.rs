@@ -57,6 +57,10 @@ pub enum NodeKind {
         /// The source's shape when the request overrides the stream's.
         #[serde(default, skip_serializing_if = "is_default")]
         aspect: SourceAspect,
+        /// A stage that only deinterlaces: the picture keeps its size, its
+        /// pixel shape and its rate, and the scales of it read this.
+        #[serde(default, skip_serializing_if = "is_default")]
+        only_deinterlace: bool,
     },
     /// One video encoder, shared by every output that wants this shape.
     Encode {
