@@ -79,6 +79,9 @@ pub struct Sequence {
     pub fps: (u32, u32),
     /// False for an interlaced stream, or for MPEG-1, which has no extension.
     pub progressive: bool,
+    /// The shape of one stored pixel, as GStreamer's `pixel-aspect-ratio`:
+    /// 40/33 for a 704x480 picture shown at 16:9, 1/1 for square pixels.
+    pub par: (u32, u32),
 }
 
 /// The sequence in front of a keyframe, or `None` on any other picture.
@@ -87,6 +90,7 @@ pub fn sequence(picture: &[u8]) -> Option<Sequence> {
     let h = picture.get(at..at + 4)?;
     let mut width = (u32::from(h[0]) << 4) | (u32::from(h[1]) >> 4);
     let mut height = ((u32::from(h[1]) & 0x0f) << 8) | u32::from(h[2]);
+    let aspect = h[3] >> 4;
     let (mut num, mut den) = match h[3] & 0x0f {
         1 => (24000, 1001),
         2 => (24, 1),
@@ -108,7 +112,33 @@ pub fn sequence(picture: &[u8]) -> Option<Sequence> {
         let (n, d) = (u32::from((e[5] >> 5) & 0x03) + 1, u32::from(e[5] & 0x1f) + 1);
         (num, den) = (num * n, den * d);
     }
-    Some(Sequence { width, height, fps: (num, den), progressive })
+    let par = pixel_aspect(aspect, width, height, ext.is_some());
+    Some(Sequence { width, height, fps: (num, den), progressive, par })
+}
+
+/// MPEG-2's `aspect_ratio_information` is the shape of the whole picture
+/// (2 for 4:3, 3 for 16:9, 4 for 2.21:1), so a pixel is that shape over
+/// the stored size: 16:9 on 704x480 is 40/33. The stored size is what the
+/// decoder hands on, so the display extension's size is not used, as
+/// FFmpeg does not use it. MPEG-1 has a table of pixel shapes instead,
+/// which no broadcast here sends, and is taken as square.
+fn pixel_aspect(code: u8, width: u32, height: u32, mpeg2: bool) -> (u32, u32) {
+    let dar = match code {
+        2 => (4, 3),
+        3 => (16, 9),
+        4 => (221, 100),
+        _ => return (1, 1),
+    };
+    if !mpeg2 || width == 0 || height == 0 {
+        return (1, 1);
+    }
+    let (n, d) = (dar.0 * height, dar.1 * width);
+    let g = gcd(n, d);
+    (n / g, d / g)
+}
+
+fn gcd(a: u32, b: u32) -> u32 {
+    if b == 0 { a.max(1) } else { gcd(b, a % b) }
 }
 
 #[cfg(test)]

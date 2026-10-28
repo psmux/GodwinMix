@@ -62,7 +62,7 @@ async fn run(st: &Arc<Station>, token: &Token, params: Value) -> Result<HeadendI
         .map_err(|e| RpcError::invalid_params(format!("headend.import could not read its params: {e}. Send {{\"text\": ...}} or {{\"path\": ...}}, and dry_run.")))?;
     let (from, text) = super::import_read::source(&req)?;
     let doc = super::import_read::parse(&from, &text)?;
-    let made = import::import_with(&doc.config, &options(st, req.deviceid));
+    let made = import::import_with(&doc.config, &options(st, &req));
     if made.shows.is_empty() {
         return Err(RpcError::invalid_params(format!("{from} has no stream with an input, so there is nothing to make. A stream is a 'stream NAME {{ input URL; }}' block.")));
     }
@@ -127,15 +127,21 @@ async fn keep(st: &Arc<Station>, from: &str, plans: &[ShowPlan], result: &mut Sh
     Ok(())
 }
 
-/// What the import's `deviceid` does: as the request says, else as the
-/// followed file is read, else spread.
-fn options(st: &Station, asked: Option<godwinmix_protocol::headend::DeviceIdMode>) -> import::Options {
-    use godwinmix_flussonic::import::DeviceId;
-    use godwinmix_protocol::headend::DeviceIdMode;
-    let deviceid = match asked {
+/// What the import's `deviceid` and `deinterlace=false` do: as the request
+/// says, else as the followed file is read, else spread and auto.
+fn options(st: &Station, req: &godwinmix_protocol::headend::HeadendImportRequest) -> import::Options {
+    use godwinmix_flussonic::import::{Deinterlacing, DeviceId};
+    use godwinmix_protocol::headend::{DeinterlaceMode, DeviceIdMode};
+    let file = st.headend.get().and_then(std::sync::Weak::upgrade).map(|h| h.import).unwrap_or_default();
+    let deviceid = match req.deviceid {
         Some(DeviceIdMode::File) => DeviceId::File,
         Some(DeviceIdMode::Spread) => DeviceId::Spread,
-        None => st.headend.get().and_then(std::sync::Weak::upgrade).map_or(DeviceId::Spread, |h| h.import.deviceid),
+        None => file.deviceid,
     };
-    import::Options { deviceid }
+    let deinterlace = match req.deinterlace {
+        Some(DeinterlaceMode::File) => Deinterlacing::File,
+        Some(DeinterlaceMode::Auto) => Deinterlacing::Auto,
+        None => file.deinterlace,
+    };
+    import::Options { deviceid, deinterlace }
 }

@@ -484,6 +484,7 @@ export interface ChannelBulkRequest {
   interface?: string | null;
   names: string[];
   profile?: string | null;
+  video_overrides?: VideoWant | null;
 }
 
 /** What an add, an update or a removal did. */
@@ -781,6 +782,12 @@ export interface Crop {
 
 /** Whether an interlaced picture is made progressive. */
 export type Deinterlace = "off" | "on" | "auto";
+
+/** How a deinterlace makes the lines of the field it does not have. */
+export type DeinterlaceMethod = "yadif" | "greedyh" | "linear";
+
+/** What an imported `transcoder deinterlace=false` does. */
+export type DeinterlaceMode = "auto" | "file";
 
 /**
  * One destination as a client sees it. The key never appears: `has_key`
@@ -1737,6 +1744,7 @@ export interface HeadendChannel {
   outputs?: ChannelOutput[];
   profile?: string;
   title?: string | null;
+  video_overrides?: VideoWant | null;
 }
 
 /** An encoder this machine has, for the profile editor's choice. */
@@ -1767,6 +1775,7 @@ export interface HeadendImportReport {
 
 /** `headend.import`. One of `text` and `path`. */
 export interface HeadendImportRequest {
+  deinterlace?: DeinterlaceMode | null;
   deviceid?: DeviceIdMode | null;
   dry_run?: boolean | null;
   path?: string | null;
@@ -2179,6 +2188,12 @@ export interface MachineStatus {
 /** `scene.history.mark`. */
 export interface MarkRequest {
   label?: string | null;
+}
+
+/** A rendition that follows a larger source's size, up to a limit. */
+export interface MatchSource {
+  bitrate_kbps?: number | null;
+  max_height: number;
 }
 
 /** One tag and how many files have it. */
@@ -3597,6 +3612,9 @@ export interface SnapshotRequest {
   width?: number | null;
 }
 
+/** The shape a source's picture is shown at. */
+export type SourceAspect = "auto" | "16:9" | "4:3";
+
 /**
  * What a source's audio controls read back as, which is what the audio
  * endpoint answers with.
@@ -3956,6 +3974,7 @@ export interface TranscodeProfile {
   audio?: AudioWant | null;
   builtin?: boolean;
   id?: string;
+  ladder?: VideoWant[];
   name?: string;
   video?: VideoWant | null;
 }
@@ -4068,11 +4087,13 @@ export interface VideoShape {
 
 /** The video an output wants. Every field left out is taken from the source. */
 export interface VideoWant {
+  aspect?: SourceAspect | null;
   bframes?: number | null;
   bitrate_kbps?: number | null;
   bitrate_tolerance?: number | null;
   codec?: VideoCodec | null;
   deinterlace?: Deinterlace | null;
+  deinterlace_method?: DeinterlaceMethod | null;
   encoder?: EncoderPick | null;
   fit?: Fit | null;
   fps?: Fps | null;
@@ -4080,6 +4101,7 @@ export interface VideoWant {
   height?: number | null;
   keyframe_frames?: number | null;
   keyframe_ms?: number | null;
+  match_source?: MatchSource | null;
   pad_color?: string | null;
   preset?: string | null;
   width?: number | null;

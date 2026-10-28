@@ -68,7 +68,7 @@ impl Direct {
         let shows: Vec<(Record, Vec<StoredDestination>)> = records
             .into_iter()
             .map(|r| {
-                let outs = if r.compositing { Vec::new() } else { outputs::stored(&r.id, &r.outputs) };
+                let outs = if r.compositing { Vec::new() } else { super::rungs::expand(outputs::stored(&r.id, &r.outputs)) };
                 (r, outs)
             })
             .collect();

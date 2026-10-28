@@ -8,6 +8,11 @@
 //! all work on the same CUDA memory, and a 1080i picture never crosses the
 //! bus. Each node so placed says `"memory": "cuda"`, and the listener builds
 //! it that way.
+//!
+//! A scale that deinterlaces stays on the GPU too. GStreamer has no CUDA
+//! deinterlace, so the listener takes the picture down for the CPU's and
+//! puts it back, but the scale, the pad and the encode still run on the
+//! card, which is far cheaper than doing them all on the CPU.
 
 use serde_json::{json, Value};
 
@@ -24,11 +29,14 @@ pub fn keep_on_gpu(nodes: &mut [Value], machine: &Machine) {
         .filter_map(|n| n["id"].as_str().map(str::to_string))
         .collect();
     for decode in decodes {
-        let scales: Vec<String> = ids(nodes, |n| n["kind"] == "scale" && n["input"] == decode.as_str());
+        // A scale may read the decode, or the one stage that deinterlaces it.
+        let first: Vec<String> = ids(nodes, |n| n["kind"] == "scale" && n["input"] == decode.as_str());
+        let mut scales = first.clone();
+        scales.extend(ids(nodes, |n| n["kind"] == "scale" && first.iter().any(|f| n["input"] == f.as_str())));
         let reads = |n: &Value| n["input"] == decode.as_str() || scales.iter().any(|s| n["input"] == s.as_str());
         let encodes: Vec<String> = ids(nodes, |n| n["kind"] == "encode" && reads(n));
         let on_gpu = |id: &String| nodes.iter().find(|n| n["id"] == id.as_str()).is_some_and(|n| match n["kind"].as_str() {
-            Some("scale") => n["deinterlace"] == "off" && n["fit"] != "crop",
+            Some("scale") => n["fit"] != "crop",
             Some("encode") => n["accel"] == "nvidia",
             _ => false,
         });

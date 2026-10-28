@@ -60,7 +60,15 @@ impl Stream {
             sounds.push(Variant { id, bandwidth: peak.unwrap_or(0).max(1), average: avg, info });
         }
         sounds.sort_by_key(|v| v.info.sound);
-        Some(Master { main: Some(main), sounds })
+        let mut rungs = Vec::new();
+        for t in self.ts_tracks().iter().filter(|t| t.sound.is_none() && t.id != ts::MAIN && !t.listing().0.is_empty()) {
+            let Some(picture) = self.track(&t.id) else { continue };
+            let mut v = Self::variant(&picture);
+            let (peak, avg) = t.measured_bps().unwrap_or((v.bandwidth, v.bandwidth));
+            (v.bandwidth, v.average) = (peak.max(v.bandwidth).max(1), Some(avg));
+            rungs.push(v);
+        }
+        Some(Master { main: Some(main), sounds, rungs })
     }
 
     /// One TS rendition's media playlist as data.

@@ -60,7 +60,7 @@ becomes:
 
 ```json
 {"video": {"codec": "h264", "bitrate_kbps": 1500, "width": 1280, "height": 720,
-           "fit": "pad", "pad_color": "#000000", "deinterlace": "off",
+           "fit": "pad", "pad_color": "#000000", "deinterlace": "auto",
            "keyframe_frames": 50, "preset": "p1", "gpu": "auto"},
  "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}}
 ```
@@ -82,14 +82,35 @@ answers what the file says, whichever way it is read, and `headend.export`
 writes `deviceid=N` for a channel set on a card and none for one on `auto`.
 See [Split channels across GPUs](../how-to/split-channels-across-gpus.md).
 
+`deinterlace=false`, which Flussonic writes unless told otherwise and which
+scaled both fields as one frame, combing on every movement, is read one of
+two ways:
+
+| `[headend] flussonic_deinterlace` | `deinterlace=false` and a line with none become | Use it when |
+|---|---|---|
+| `auto` (the default) | `"deinterlace": "auto"`: what the stream marks as interlaced is deinterlaced, a progressive picture passes untouched | almost always: it costs nothing on a progressive channel |
+| `file` | `"deinterlace": "off"`, as written | the old look is wanted, or the CPU has no room for it |
+
+`deinterlace=true` is `on` and `deinterlace=auto` is `auto` either way.
+`headend.import` takes the same choice as `deinterlace`, and the import
+dialog offers it. The method is YADIF; a channel's `video_overrides` or a
+profile on the headend screen sets another.
+
 A line with `hw=nvenc` and no `preset=` gets
-NVENC's `p1`, which leaves room for many channels on one card. Three things
+NVENC's `p1`, which leaves room for many channels on one card. Two things
 are done differently, and `--check` says so as `not carried`: a pad colour
-other than black (the bars are black), `deinterlace_rate=field` (pictures
-keep the source's frame rate), and `deinterlace` on or `auto`, which runs on
-the CPU between the GPU decode and the encode. `vb=copy`
-copies the video and `ab=copy` the sound. A second `vb=` (a ladder) is not
-carried: the HLS output of a show without compositing has one rendition.
+other than black (the bars are black), and `deinterlace_rate=field`
+(pictures keep the source's frame rate). `vb=copy` copies the video and
+`ab=copy` the sound.
+
+Several video tracks on one line are a ladder, each a variant of the
+channel's master playlist (`tracks-v1a1`, `tracks-v2a1`, ...), the first
+track first:
+
+`transcoder deviceid=0 gop=50 hw=nvenc deinterlace=false vb=4500k vcodec=h264 size=1920x1080:fit:#000000 vb=1500k size=1280x720:fit:#000000 ab=128k`
+
+What the line says for all of them (`gop`, `deinterlace`, `deviceid`) goes
+to every rung, and a push of the stream sends the first.
 
 ## From the page and the API: `headend.import` and `headend.status`
 

@@ -27,7 +27,8 @@ impl Cutters {
     /// The renditions for a picture and the sound tracks `sounds` (track,
     /// caps), on the pipeline whose zero is tag time `base`. `named` is
     /// what the input says of each track.
-    pub fn new(stream: &Arc<Stream>, video: &gst::Caps, sounds: &[(u8, gst::Caps)], base: u32, named: &[Sound]) -> Cutters {
+    /// A ladder's further rungs' TS, `rungs`, is kept beside it.
+    pub fn new(stream: &Arc<Stream>, video: &gst::Caps, sounds: &[(u8, gst::Caps)], base: u32, named: &[Sound], rungs: &[String]) -> Cutters {
         let main = stream.add_ts(ts::MAIN, None);
         let mut main_cut = TsCut::new(stream, main.clone(), base);
         // The headers came before the pipeline was built: hand them on now.
@@ -59,8 +60,21 @@ impl Cutters {
             info.lang = named.iter().find(|s| s.track == *track).map(|s| s.lang.clone()).unwrap_or_default();
             *t.sound_info.write() = info;
         }
+        ids.extend(rungs.iter().cloned());
         stream.keep_ts(&ids);
         Cutters { main: main_cut, alone }
+    }
+
+    /// A ladder's further rung `id`: its picture with the first sound, the
+    /// one rendition it has. The other sounds are the first rung's.
+    pub fn rung(stream: &Arc<Stream>, id: &str, video: &gst::Caps, sounds: &[(u8, gst::Caps)], base: u32) -> Cutters {
+        let mut cut = TsCut::following(stream, stream.add_ts(id, None), base, id);
+        let hevc = video.structure(0).is_some_and(|s| s.name() == "video/x-h265");
+        cut.extend(config(video, if hevc { UnitKind::HevcConfig } else { UnitKind::AvcConfig }));
+        if let Some((_, caps)) = sounds.iter().find(|(t, _)| *t == 0) {
+            cut.extend(config(caps, UnitKind::AacConfig));
+        }
+        Cutters { main: cut, alone: Vec::new() }
     }
 
     /// Hand one tag to the cutter it belongs to.

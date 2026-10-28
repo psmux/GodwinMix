@@ -44,6 +44,13 @@ async function customTests(test, eq, ok) {
     eq(Object.keys(r.video).sort(), ["bitrate_kbps", "codec", "fps", "height", "keyframe_ms", "width"]);
     eq(r.audio, { codec: "aac", bitrate_kbps: 160 });
   });
+  test("source shape and a deinterlace method go in only when they say something", () => {
+    const base = { codec: "h264", size: "1280x720", fps: 0, bitrate_kbps: 1500, keyframe_s: 2, sound: "aac-128" };
+    const r = custom.requestFrom({ ...base, aspect: "4:3", deinterlace: "auto", deinterlace_method: "linear" }, "x");
+    eq([r.video.aspect, r.video.deinterlace_method], ["4:3", "linear"]);
+    const off = custom.requestFrom({ ...base, aspect: "auto", deinterlace: "off", deinterlace_method: "linear" }, "x");
+    ok(!("aspect" in off.video) && !("deinterlace_method" in off.video), JSON.stringify(off.video));
+  });
   test("an imported want opens on what it asks for, and saves the same", () => {
     const v = custom.valuesFrom(IMPORTED);
     eq([v.fps, v.keyframe_frames, v.preset, v.tracks, v.sound], [0, 50, "p1", "all", "aac-128"]);
@@ -164,6 +171,7 @@ async function importTests(test, eq, ok) {
     eq(importParams("text", "stream A { input udp://239.10.0.1:1; }", "", true), { text: "stream A { input udp://239.10.0.1:1; }", dry_run: true });
     eq(importParams("path", "", " /etc/flussonic/flussonic.conf ", false), { path: "/etc/flussonic/flussonic.conf", dry_run: false });
     ok(importParams("path", "x", "", true).error);
+    eq(importParams("text", "x", "", true, undefined, "file"), { text: "x", dry_run: true, deinterlace: "file" });
   });
   const stub = wallStub({ n: 2 });
   const inner = stub.call;
@@ -177,18 +185,26 @@ async function importTests(test, eq, ok) {
   await importFlussonic(stub);
   const m = dialogs().at(-1);
   test("a station that follows a config says so before anything is imported", () => ok(/follows \/etc\/flussonic\/flussonic.conf/.test(m.textContent)));
+  test("the deinterlace choice is asked on one card too, auto first", () => {
+    const pick = m.querySelector('[aria-label="What deinterlace=false does"]');
+    ok(pick && !pick.closest(".field").hidden);
+    eq(pick.value, "auto");
+  });
   m.querySelector("textarea").value = "http 8090;\nstream CH117 { input udp://239.10.0.1:2001; }";
   button(m, "Read it").click();
   await until(() => m.querySelector(".he-imp-table"));
   test("Read it is a dry run, and the report comes first: streams, refusals, lines not carried", () => {
     eq(sent(stub, "headend.import")[0].params.dry_run, true);
+    eq(sent(stub, "headend.import")[0].params.deinterlace, "auto");
     eq(m.querySelectorAll(".he-imp-table tbody tr").length, 2);
     ok(m.querySelector(".he-imp-refused") && /already a show called RELAY1/.test(m.textContent));
     ok(/Lines not carried \(1\)/.test(m.querySelector(".he-imp-notes summary").textContent));
     eq(button(m, "Make 1 show") ? "yes" : "no", "yes");
   });
+  const pick = m.querySelector('[aria-label="What deinterlace=false does"]');
+  pick.value = "file";
   button(m, "Make 1 show").click();
   await until(() => sent(stub, "headend.import").length > 1);
-  test("Make sends the same config with dry_run false", () => eq(sent(stub, "headend.import")[1].params, { text: "http 8090;\nstream CH117 { input udp://239.10.0.1:2001; }", dry_run: false }));
+  test("Make sends the same config with dry_run false and the deinterlace chosen", () => eq(sent(stub, "headend.import")[1].params, { text: "http 8090;\nstream CH117 { input udp://239.10.0.1:2001; }", dry_run: false, deinterlace: "file" }));
   closeDialogs();
 }

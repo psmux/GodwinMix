@@ -3,38 +3,48 @@
 //!
 //! On the GPU (`"memory": "cuda"`) the scale is `cudaconvertscale`, which
 //! pads with bars itself (`add-borders`), and the encoder takes the CUDA
-//! picture with no conversion in front of it. A deinterlace or a crop has no
-//! CUDA element here, so the core plans those on the CPU.
+//! picture with no conversion in front of it. A crop has no CUDA element
+//! here, so the core plans it on the CPU. Nor has a deinterlace: GStreamer
+//! 1.26 has no CUDA one and its NVDEC decoders always weave, so the
+//! picture goes down for `deinterlace` and comes back up (see
+//! [`deinterlace`]), and everything else stays on the card.
+//!
+//! Both scalers fit by the picture's shape, not its stored size: each
+//! reads `pixel-aspect-ratio` off its input, so an anamorphic 16:9 SD
+//! picture fills a 16:9 frame and a 4:3 one is laid in with bars.
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
 use super::build::{appsink, caps, element, leaky_queue, make, set_all, tee, Built};
+use super::picture::{aspect, deinterlace, reshape};
 use super::spec::NodeSpec;
 
 pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     let (num, den) = node.fps().unwrap_or((30, 1));
     let (width, height) = (node.number("width"), node.number("height"));
     let mut elements = vec![leaky_queue()?];
-    if node.text("deinterlace").is_none_or(|d| d == "off") {
-        weave(&elements[0]);
+    let cuda = node.cuda();
+    let deinterlacing = matches!(node.text("deinterlace"), Some("on" | "auto"));
+    reshape(&elements[0], !deinterlacing, aspect(node));
+    if deinterlacing {
+        elements.extend(deinterlace(node, node.text("deinterlace") == Some("on"))?);
+    }
+    // The one stage that deinterlaces a source for every scale of it: the
+    // picture keeps its size, its pixel shape and its rate.
+    if node.raw.get("only_deinterlace").and_then(serde_json::Value::as_bool) == Some(true) {
+        let tee = tee()?;
+        elements.push(tee.clone());
+        return Ok(Built { head: Some(elements[0].clone()), elements, tee: Some(tee), appsrc: None, appsink: None });
     }
     // Only a change of rate needs videorate: at the source's own rate it
-    // could only drop or repeat a picture whose time wobbled.
+    // could only drop or repeat a picture whose time wobbled. After the
+    // deinterlace, which needs the fields in the order they came.
     let rate = node.raw.get("rate").and_then(serde_json::Value::as_bool).unwrap_or(true);
     if rate {
         let r = make("videorate")?;
         r.set_property("skip-to-first", true);
         elements.push(r);
-    }
-    match node.text("deinterlace") {
-        Some("on") => elements.push(make("deinterlace")?),
-        Some("auto") => {
-            let d = make("deinterlace")?;
-            d.set_property_from_str("mode", "auto");
-            elements.push(d);
-        }
-        _ => {}
     }
     let fit = node.text("fit").unwrap_or("pad");
     if fit == "crop" {
@@ -46,7 +56,6 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
         crop.set_property("aspect-ratio", gst::Fraction::new(width as i32, height.max(1) as i32));
         elements.push(crop);
     }
-    let cuda = node.cuda();
     let scaler = make(if cuda { "cudaconvertscale" } else { "videoscale" })?;
     let scaler = if cuda { super::build::on_card(scaler, node) } else { scaler };
     if scaler.has_property("add-borders") {
@@ -68,6 +77,11 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let enc = element(node, "element")?;
     set_all(&enc, node.raw.get("props"));
     let mut elements = vec![leaky_queue()?];
+    // A picture straight from its decoder (a scale to the source's own size
+    // that has nothing to do) may still say `mixed`, which NVENC refuses: a
+    // 1080i source encoded at 1080 never ran. Taken as woven frames, as a
+    // scale would.
+    reshape(&elements[0], true, None);
     if !node.cuda() {
         elements.push(make("videoconvert")?);
         // 4:2:0, which every player decodes: given the choice, x264 took
@@ -98,28 +112,4 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let sink = appsink()?;
     elements.push(sink.clone().upcast());
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
-}
-
-/// Take an interlaced picture as the frame it is, both fields woven, which
-/// is what "no deinterlace" means: the caps going into the branch say
-/// progressive. `cudaconvertscale` takes nothing else, and a decoder marks
-/// a broadcast's pictures `mixed` whether or not a field ever differs.
-fn weave(head: &gst::Element) {
-    let Some(pad) = head.static_pad("sink") else { return };
-    pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, |_, info| {
-        let Some(gst::PadProbeData::Event(event)) = &info.data else { return gst::PadProbeReturn::Ok };
-        let gst::EventView::Caps(c) = event.view() else { return gst::PadProbeReturn::Ok };
-        let caps = c.caps();
-        let interlaced = caps.structure(0).and_then(|s| s.get::<&str>("interlace-mode").ok()).is_some_and(|m| m != "progressive");
-        if !interlaced {
-            return gst::PadProbeReturn::Ok;
-        }
-        let mut woven = caps.to_owned();
-        if let Some(s) = woven.make_mut().structure_mut(0) {
-            s.set("interlace-mode", "progressive");
-            s.remove_field("field-order");
-        }
-        info.data = Some(gst::PadProbeData::Event(gst::event::Caps::new(&woven)));
-        gst::PadProbeReturn::Ok
-    });
 }

@@ -2025,6 +2025,17 @@
             "string",
             "null"
           ]
+        },
+        "video_overrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoWant"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Every one of them takes these picture settings over its profile's\n(see `HeadendChannel.video_overrides`), in place of any it had. `{}`\nclears them, so each takes its profile as it is."
         }
       },
       "required": [
@@ -3294,6 +3305,41 @@
         {
           "const": "auto",
           "description": "Only pictures the stream marks as interlaced.",
+          "type": "string"
+        }
+      ]
+    },
+    "DeinterlaceMethod": {
+      "description": "How a deinterlace makes the lines of the field it does not have.",
+      "oneOf": [
+        {
+          "const": "yadif",
+          "description": "Looks at the fields before and after: no combing on movement and no\nflicker on still detail.",
+          "type": "string"
+        },
+        {
+          "const": "greedyh",
+          "description": "Motion adaptive, a little cheaper than YADIF and a little softer.",
+          "type": "string"
+        },
+        {
+          "const": "linear",
+          "description": "The missing lines from the lines either side: the cheapest, and the\nsoftest, with some flicker on fine detail.",
+          "type": "string"
+        }
+      ]
+    },
+    "DeinterlaceMode": {
+      "description": "What an imported `transcoder deinterlace=false` does.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Deinterlace what the stream marks as interlaced: Flussonic's `false`\nscaled both fields as one picture, which combs on every movement. A\nprogressive source passes untouched. The recommended choice.",
+          "type": "string"
+        },
+        {
+          "const": "file",
+          "description": "`deinterlace=false` is off, as written.",
           "type": "string"
         }
       ]
@@ -7413,6 +7459,17 @@
             "string",
             "null"
           ]
+        },
+        "video_overrides": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoWant"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "This channel's own picture settings, over its profile's: each field\nset here replaces the profile's on every rendition, and the rest\ncome from the profile. For what one channel needs and its profile\nshould not say: `aspect` for a broadcaster that flags its picture\nwrong, `deinterlace`, `fit`. Left out: the profile as it is."
         }
       },
       "required": [
@@ -7528,6 +7585,17 @@
       "additionalProperties": false,
       "description": "`headend.import`. One of `text` and `path`.",
       "properties": {
+        "deinterlace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeinterlaceMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a `transcoder deinterlace=false`, or a line with no\n`deinterlace`, means. Left out: `[headend] flussonic_deinterlace`,\nwhich is `auto` unless set."
+        },
         "deviceid": {
           "anyOf": [
             {
@@ -9163,6 +9231,31 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "MatchSource": {
+      "additionalProperties": false,
+      "description": "A rendition that follows a larger source's size, up to a limit.",
+      "properties": {
+        "bitrate_kbps": {
+          "description": "The bitrate at `max_height`. Left out, the rendition's own bitrate\ngrown by the picture's area, so 1500 kbit/s at 720p is 3375 at 1080p.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_height": {
+          "description": "The tallest picture made, such as 1080.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_height"
+      ],
       "type": "object"
     },
     "MediaCount": {
@@ -14753,6 +14846,26 @@
       ],
       "type": "object"
     },
+    "SourceAspect": {
+      "description": "The shape a source's picture is shown at.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The shape the stream says.",
+          "type": "string"
+        },
+        {
+          "const": "16:9",
+          "description": "Widescreen, whatever the stream says.",
+          "type": "string"
+        },
+        {
+          "const": "4:3",
+          "description": "Standard, whatever the stream says.",
+          "type": "string"
+        }
+      ]
+    },
     "SourceAudioState": {
       "description": "What a source's audio controls read back as, which is what the audio\nendpoint answers with.\n\nWider than `SourceAudio` because the fader and the mute apply to every\nsource, while the page and media balance belongs only to a superimposed one.\nEvery number here is read off the elements after the request landed, so a\nrequest whose gain was clamped answers with the gain that took effect.",
       "properties": {
@@ -16145,6 +16258,13 @@
           "description": "A slug. The built in ones are listed by `headend.channel.list`.",
           "type": "string"
         },
+        "ladder": {
+          "description": "Further pictures of the same programme for the HLS output, each a\nvariant of its own in the master playlist beside `video`, so a\nplayer on a weak connection can step down: 720p under a 1080p\n`video`, say. Every one shares the sound. A field left out of one is\ntaken from `video`, so a rung can be just a size and a bitrate. The\nchannel's other outputs carry `video` alone. Needs `video`.",
+          "items": {
+            "$ref": "#/$defs/VideoWant"
+          },
+          "type": "array"
+        },
         "name": {
           "description": "What the screen calls it.",
           "type": "string"
@@ -16569,6 +16689,17 @@
     "VideoWant": {
       "description": "The video an output wants. Every field left out is taken from the source.",
       "properties": {
+        "aspect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceAspect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The shape the source's picture is shown at, which `pad` and `crop`\nfit by. Left out (`auto`), the shape the stream says: a 704x480\npicture flagged 16:9 fills a 16:9 frame. `16:9` or `4:3` overrides\nit for a broadcaster that flags its picture wrong."
+        },
         "bframes": {
           "description": "B frames between references. The catalogue's (none, for live) when\nleft out.",
           "format": "uint8",
@@ -16616,6 +16747,17 @@
             }
           ],
           "description": "Off when left out: an interlaced picture is scaled as it comes."
+        },
+        "deinterlace_method": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeinterlaceMethod"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How a deinterlace makes the missing lines. `yadif` when left out.\nIt runs on the CPU whatever the method: GStreamer has no GPU\ndeinterlace, so on an NVIDIA card the picture goes down for it and\nback up, and the scale and the encode stay on the card."
         },
         "encoder": {
           "anyOf": [
@@ -16685,6 +16827,17 @@
             "integer",
             "null"
           ]
+        },
+        "match_source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MatchSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Convert a larger source at its own size: a source taller than\n`height` comes out at its own height, up to `max_height`, with the\nframe's shape kept, and a smaller one at `width` x `height`. So one\nprofile at 1280x720 with `max_height` 1080 makes 1080p of an HD\nsource and 720p of the rest."
         },
         "pad_color": {
           "description": "The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.",

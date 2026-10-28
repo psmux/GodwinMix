@@ -62,7 +62,7 @@ async function ladderTests(test, eq, ok) {
     eq(boxes.map((b) => rungAdv(b).querySelector("summary").textContent), ["Advanced, 720p", "Advanced, 480p", "Advanced, 360p"]);
     ok(boxes.every((b) => !rungAdv(b).open));
     const labels = [...rungAdv(boxes[0]).querySelectorAll(".field .lbl")].map((l) => l.firstChild.textContent);
-    eq(labels, ["Another shape", "Bar colour", "Deinterlace", "Encoder preset", "B frames"]);
+    eq(labels, ["Another shape", "Bar colour", "Source shape", "Deinterlace", "Deinterlace method", "Encoder preset", "B frames"]);
   });
   const first = rungAdv(rungBoxes(m)[0]);
   first.open = true;

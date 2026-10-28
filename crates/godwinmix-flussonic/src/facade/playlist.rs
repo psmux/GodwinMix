@@ -22,15 +22,17 @@ pub fn default_select(t: &Tracks) -> Select {
     let has_video = t.tracks.iter().any(|x| x.kind == Kind::Video);
     let has_sound = t.tracks.iter().any(|x| x.kind == Kind::Audio);
     match (has_video, has_sound) {
-        (true, true) if t.muxed => Select { video: true, audio: Some(1) },
-        (true, _) => Select { video: true, audio: None },
-        (false, _) => Select { video: false, audio: Some(1) },
+        (true, true) if t.muxed => Select { video: Some(1), audio: Some(1) },
+        (true, _) => Select { video: Some(1), audio: None },
+        (false, _) => Select { video: None, audio: Some(1) },
     }
 }
 
-/// `index.m3u8`: every sound track an `EXT-X-MEDIA`, the first the default.
+/// `index.m3u8`: every sound track an `EXT-X-MEDIA`, the first the default,
+/// and one variant for each picture, a ladder's first first.
 pub fn master(t: &Tracks) -> String {
-    let video = t.tracks.iter().find(|x| x.kind == Kind::Video);
+    let pictures: Vec<&Track> = t.tracks.iter().filter(|x| x.kind == Kind::Video).collect();
+    let video = pictures.first().copied();
     let sounds: Vec<&Track> = t.tracks.iter().filter(|x| x.kind == Kind::Audio).collect();
     let main = default_select(t);
     let mut out = String::from("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-INDEPENDENT-SEGMENTS\n");
@@ -54,10 +56,20 @@ pub fn master(t: &Tracks) -> String {
             out.push('\n');
         }
     }
-    let first_sound = sounds.first();
+    if pictures.is_empty() {
+        variant(&mut out, None, sounds.first().copied(), grouped, main);
+    }
+    for v in &pictures {
+        variant(&mut out, Some(v), sounds.first().copied(), grouped, Select { video: Some(v.number), ..main });
+    }
+    out
+}
+
+/// One `EXT-X-STREAM-INF`: a picture with the first sound, or the sound alone.
+fn variant(out: &mut String, video: Option<&Track>, first_sound: Option<&Track>, grouped: bool, sel: Select) {
     let bandwidth = video.map(|v| v.bandwidth).unwrap_or(0) + first_sound.map(|s| s.bandwidth).unwrap_or(0);
     let _ = write!(out, "#EXT-X-STREAM-INF:BANDWIDTH={}", bandwidth.max(1));
-    let codecs: Vec<&str> = [video, first_sound.copied()].into_iter().flatten().map(|x| x.codecs.as_str()).filter(|c| !c.is_empty()).collect();
+    let codecs: Vec<&str> = [video, first_sound].into_iter().flatten().map(|x| x.codecs.as_str()).filter(|c| !c.is_empty()).collect();
     if !codecs.is_empty() {
         let _ = write!(out, ",CODECS=\"{}\"", codecs.join(","));
     }
@@ -70,8 +82,7 @@ pub fn master(t: &Tracks) -> String {
     if grouped {
         out.push_str(",AUDIO=\"audio\"");
     }
-    let _ = writeln!(out, "\ntracks-{}/mono.m3u8", select_text(main));
-    out
+    let _ = writeln!(out, "\ntracks-{}/mono.m3u8", select_text(sel));
 }
 
 /// A media playlist. `prefix` is put before every URI: empty for a

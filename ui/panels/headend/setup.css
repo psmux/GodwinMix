@@ -103,3 +103,11 @@
   .hs-acts { justify-content: flex-start; flex-wrap: wrap; }
   .hs-bulk select { max-width: 100%; }
 }
+
+/* The HLS ladder's rungs, the picture overrides and their bulk part. */
+.hs-ladder, .hs-overrides { display: grid; gap: 6px; }
+.hs-rungs { display: grid; gap: 6px; }
+.hs-rung { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 8px; align-items: end; }
+.hs-bulk > .hs-bulkpic { flex-basis: 100%; }
+.hs-bulkpic[open] > .hs-row { margin-top: 6px; }
+@media (max-width: 600px) { .hs-rung { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }

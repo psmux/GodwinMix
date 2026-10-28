@@ -45,6 +45,24 @@ pub struct HeadendImportRequest {
     /// flussonic_deviceid`, which is `spread` unless set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deviceid: Option<DeviceIdMode>,
+    /// What a `transcoder deinterlace=false`, or a line with no
+    /// `deinterlace`, means. Left out: `[headend] flussonic_deinterlace`,
+    /// which is `auto` unless set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deinterlace: Option<DeinterlaceMode>,
+}
+
+/// What an imported `transcoder deinterlace=false` does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DeinterlaceMode {
+    /// Deinterlace what the stream marks as interlaced: Flussonic's `false`
+    /// scaled both fields as one picture, which combs on every movement. A
+    /// progressive source passes untouched. The recommended choice.
+    #[default]
+    Auto,
+    /// `deinterlace=false` is off, as written.
+    File,
 }
 
 /// What an imported `transcoder deviceid=N` does.

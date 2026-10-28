@@ -34,16 +34,40 @@ fn empty_audio(a: &AudioWant) -> bool {
     a == &AudioWant::default()
 }
 
-/// A profile as an output's rendition, or None for a pass through.
-pub fn rendition(p: &TranscodeProfile) -> Option<Value> {
+/// A profile as an output's rendition, with a channel's `overrides` over
+/// its picture, or None for a pass through. A profile with a ladder is
+/// `{"ladder": [...]}`, its `video` the first rung and each further one
+/// that rung over `video` (less `match_source`, which is the top's alone),
+/// every one with the same sound; else `{video, audio}`.
+pub fn rendition(p: &TranscodeProfile, overrides: Option<&VideoWant>) -> Option<Value> {
+    let top = p.video.as_ref().map(|v| overrides.map_or_else(|| v.clone(), |o| o.over(v)));
+    let single = one(top.as_ref(), p.audio.as_ref())?;
+    let Some(top) = top.filter(|_| !p.ladder.is_empty()) else { return Some(single) };
+    let mut rungs = vec![single];
+    for rung in &p.ladder {
+        let under = VideoWant { match_source: None, ..top.clone() };
+        let v = overrides.map_or_else(|| rung.over(&under), |o| o.over(&rung.over(&under)));
+        rungs.extend(one(Some(&v), p.audio.as_ref()));
+    }
+    Some(json!({"ladder": rungs}))
+}
+
+/// One rendition, `{video, audio}`, or None when it asks for nothing.
+fn one(video: Option<&VideoWant>, audio: Option<&AudioWant>) -> Option<Value> {
     let mut r = Map::new();
-    if let Some(v) = p.video.as_ref().filter(|v| !empty_video(v)) {
+    if let Some(v) = video.filter(|v| !empty_video(v)) {
         r.insert("video".into(), serde_json::to_value(v).ok()?);
     }
-    if let Some(a) = p.audio.as_ref().filter(|a| !empty_audio(a)) {
+    if let Some(a) = audio.filter(|a| !empty_audio(a)) {
         r.insert("audio".into(), serde_json::to_value(a).ok()?);
     }
     (!r.is_empty()).then_some(Value::Object(r))
+}
+
+/// The one rendition an output that sends a single stream carries: a
+/// ladder's first rung.
+pub fn top(r: &Value) -> Value {
+    r.get("ladder").and_then(|l| l.get(0)).cloned().unwrap_or_else(|| r.clone())
 }
 
 /// The input as a direct show takes it: the card goes into `params`.
@@ -75,8 +99,15 @@ fn hls_params(h: &ChannelHls) -> Value {
 }
 
 /// A rendition with the channel's GPU in it: the card it names, else the
-/// profile's own, else `auto`. A pass through of the picture has none.
+/// profile's own, else `auto`, on every rung of a ladder, which runs on one
+/// card. A pass through of the picture has none.
 fn on_gpu(mut r: Value, gpu: Option<u32>) -> Value {
+    if let Some(rungs) = r.get_mut("ladder").and_then(Value::as_array_mut) {
+        for rung in rungs.iter_mut() {
+            *rung = on_gpu(rung.take(), gpu);
+        }
+        return r;
+    }
     if let Some(v) = r.get_mut("video").and_then(Value::as_object_mut) {
         match gpu {
             Some(n) => {
@@ -92,7 +123,7 @@ fn on_gpu(mut r: Value, gpu: Option<u32>) -> Value {
 
 /// The plan the keeper runs for `c`.
 pub fn plan(c: &HeadendChannel, profiles: &[TranscodeProfile]) -> Result<ShowPlan, String> {
-    let r = rendition(profile_of(c, profiles)?).map(|r| on_gpu(r, c.gpu));
+    let r = rendition(profile_of(c, profiles)?, c.video_overrides.as_ref()).map(|r| on_gpu(r, c.gpu));
     let mut hls = json!({"id": HLS_OUTPUT, "uri": format!("hls://{HLS_OUTPUT}"), "params": hls_params(&c.hls)});
     if let Some(r) = &r {
         hls["rendition"] = r.clone();
@@ -102,7 +133,7 @@ pub fn plan(c: &HeadendChannel, profiles: &[TranscodeProfile]) -> Result<ShowPla
         let id = if o.id.is_empty() { format!("push-{}", i + 1) } else { o.id.clone() };
         let mut out = json!({"id": id, "uri": o.uri.trim()});
         if let Some(r) = r.as_ref().filter(|_| !o.copy) {
-            out["rendition"] = r.clone();
+            out["rendition"] = top(r);
         }
         outputs.push(out);
     }

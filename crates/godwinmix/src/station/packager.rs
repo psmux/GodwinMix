@@ -31,6 +31,7 @@ mod feed;
 mod flv;
 mod output;
 mod outputs;
+mod rung;
 mod run;
 mod serve;
 mod session;

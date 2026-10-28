@@ -85,6 +85,15 @@ pub struct Settings {
     pub marketplaces_only: Vec<String>,
     /// `[headend] flussonic_deviceid`: `spread` (the default) or `file`.
     pub deviceid: godwinmix_flussonic::import::DeviceId,
+    /// `[headend] flussonic_deinterlace`: `auto` (the default) or `file`.
+    pub deinterlace: godwinmix_flussonic::import::Deinterlacing,
+}
+
+impl Settings {
+    /// How the followed file, and an import that says nothing, are read.
+    pub fn import(&self) -> godwinmix_flussonic::import::Options {
+        godwinmix_flussonic::import::Options { deviceid: self.deviceid, deinterlace: self.deinterlace }
+    }
 }
 
 fn table_path(cfg: &Config, key: &str) -> Option<PathBuf> {
@@ -103,6 +112,7 @@ pub fn settings(args: &Args, cfg: Option<&Config>) -> Result<Settings> {
         allow_unsigned: cfg.is_none_or(|c| c.plugins.allow_unsigned),
         marketplaces_only: cfg.map(|c| c.marketplaces_only()).unwrap_or_default(),
         deviceid: apply::deviceid(cfg)?,
+        deinterlace: apply::deinterlace(cfg)?,
     })
 }
 
@@ -112,7 +122,7 @@ pub fn check(s: &Settings) -> Result<String> {
     let file = s.file.as_ref().context("--check reads a Flussonic config: give --flussonic FILE")?;
     let text = std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let doc = godwinmix_flussonic::Document::parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", file.display()))?;
-    let import = godwinmix_flussonic::import::import_with(&doc.config, &godwinmix_flussonic::import::Options { deviceid: s.deviceid });
+    let import = godwinmix_flussonic::import::import_with(&doc.config, &s.import());
     let copies = import.shows.iter().filter(|p| p.copy).count();
     let mut out = format!(
         "{}: {} streams, {} converted and {} copied, {} off\n",

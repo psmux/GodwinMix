@@ -44,13 +44,41 @@ A stream that asks for something done differently gets a line of its own:
 
 ```text
 line 40, stream CH455, not carried: pad colour #102030: the bars are drawn black
-line 40, stream CH455, not carried: deinterlace=auto: the deinterlacing runs on the CPU, between the GPU decode and the encode
 ```
 
 `ignored` is a directive or option GodwinMix has no use for. `not carried`
 says what GodwinMix does instead: a pad colour other than black, one picture
-per field, deinterlacing (which runs on the CPU), a DVR. Every other option
-of a `transcoder` line is acted on.
+per field, a DVR. Every other option of a `transcoder` line is acted on.
+
+Two things are read differently from Flussonic on purpose, both settings in
+`[headend]`: `deinterlace=false` is read as `auto`, so an interlaced picture
+is no longer scaled as one combed frame (`flussonic_deinterlace = "file"`
+keeps it off), and `deviceid=0` is read as the card with the least work
+(`flussonic_deviceid = "file"` keeps it). An anamorphic SD picture, 704x480
+flagged 16:9, fills a 1280x720 frame by its shape, and a 4:3 one is laid in
+960 wide; a broadcaster that flags its picture wrong is set right with the
+channel's `video_overrides.aspect` on the headend screen.
+
+### HD channels at 1080p, and a 720p variant for weak connections
+
+Give a 1080i stream a 1080 line, and it is deinterlaced to 1080p at its own
+frame rate:
+
+```text
+transcoder deviceid=0 gop=50 hw=nvenc deinterlace=false vb=4500k vcodec=h264 size=1920x1080:fit:#000000 ab=128k;
+```
+
+Add a second `vb` and `size` and the channel's master playlist has both, so
+a player on a weak connection steps down to 720p:
+
+```text
+transcoder deviceid=0 gop=50 hw=nvenc deinterlace=false vb=4500k vcodec=h264 size=1920x1080:fit:#000000 vb=1500k size=1280x720:fit:#000000 ab=128k;
+```
+
+The source is decoded and deinterlaced once for both; the second costs a
+GPU scale and one more NVENC session. On the headend screen the same is
+the built in profile `h264-hd-1080p-720p-ladder`, which also makes 720p
+alone of a source that is not HD, so one profile serves every channel.
 
 ### From the page, or an agent
 
@@ -184,5 +212,3 @@ every line it did not change, so Flussonic reads them too.
 ## What is not there yet
 
 * No DVR: GodwinMix keeps the live window only.
-* One rendition per stream: a `transcoder` line with a second `vb=` (a
-  ladder) makes the first.

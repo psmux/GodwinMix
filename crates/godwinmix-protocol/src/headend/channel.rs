@@ -135,6 +135,13 @@ pub struct HeadendChannel {
     /// line is imported as one of these.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom: Option<TranscodeProfile>,
+    /// This channel's own picture settings, over its profile's: each field
+    /// set here replaces the profile's on every rendition, and the rest
+    /// come from the profile. For what one channel needs and its profile
+    /// should not say: `aspect` for a broadcaster that flags its picture
+    /// wrong, `deinterlace`, `fit`. Left out: the profile as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_overrides: Option<crate::rendition::VideoWant>,
     #[serde(default)]
     pub hls: ChannelHls,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -256,6 +263,11 @@ pub struct ChannelBulkRequest {
     pub custom: Option<TranscodeProfile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// Every one of them takes these picture settings over its profile's
+    /// (see `HeadendChannel.video_overrides`), in place of any it had. `{}`
+    /// clears them, so each takes its profile as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_overrides: Option<crate::rendition::VideoWant>,
     /// Join every multicast input on this card. Empty: the default route's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<String>,

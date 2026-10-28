@@ -63,6 +63,24 @@ pub struct Want {
     /// names none, and then whatever the relay gives is packaged unnamed.
     #[serde(default)]
     pub sounds: Vec<Sound>,
+    /// A ladder's further pictures, each a variant of the master beside
+    /// `source`'s, which carries the sound for all of them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rungs: Vec<Rung>,
+}
+
+/// The track a ladder's further rung `name` is served as: `main-720p`,
+/// beside the first rung's `main`.
+pub fn rung_track(name: &str) -> String {
+    format!("main-{name}")
+}
+
+/// One further picture of a ladder: the variant's track id (`main-720p`)
+/// and the rendition it reads off the relay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rung {
+    pub id: String,
+    pub source: Source,
 }
 
 impl Want {

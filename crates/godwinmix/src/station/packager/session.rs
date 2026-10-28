@@ -38,7 +38,7 @@ pub struct Session {
     base: u32,
 }
 
-fn appsrc(caps: &gst::Caps) -> AppSrc {
+pub(super) fn appsrc(caps: &gst::Caps) -> AppSrc {
     let src = AppSrc::builder().caps(caps).format(gst::Format::Time).is_live(true).block(false).max_bytes(8 * 1024 * 1024).build();
     // Full means the oldest frames go, never that the pusher waits.
     src.set_property_from_str("leaky-type", "downstream");
@@ -51,7 +51,8 @@ impl Session {
     /// named and tagged from `named`. With no sound the output is the
     /// picture alone. MPEG-TS renditions are cut beside it when the output
     /// asks for them.
-    pub fn start(stream: &Arc<Stream>, video: &gst::Caps, sounds: &[(u8, gst::Caps)], base: u32, named: &[Sound]) -> Result<Session, String> {
+    /// A ladder's further rungs are `rungs`, their TS kept beside `main`'s.
+    pub fn start(stream: &Arc<Stream>, video: &gst::Caps, sounds: &[(u8, gst::Caps)], base: u32, named: &[Sound], rungs: &[String]) -> Result<Session, String> {
         // The connection before this one is gone with its pipeline, so the
         // timestamps start again: every track marks the break alike.
         stream.restart();
@@ -86,7 +87,7 @@ impl Session {
         for t in stream.tracks().iter().filter(|t| t.kind == TrackKind::Audio && !audio.iter().any(|(n, _)| tracks::rung(*n) == t.id)) {
             stream.remove_track(&t.id);
         }
-        let ts = stream.params.segments.ts().then(|| Cutters::new(stream, video, sounds, base, named));
+        let ts = stream.params.segments.ts().then(|| Cutters::new(stream, video, sounds, base, named, rungs));
         if let Err(e) = pipeline.set_state(gst::State::Playing) {
             let _ = pipeline.set_state(gst::State::Null);
             return Err(format!("the HLS packager would not start ({e})"));
@@ -104,7 +105,7 @@ impl Session {
         if let Some(ts) = self.ts.as_mut() {
             ts.push(tag, read);
         }
-        let Read::Frame { skip, cts, key } = *read else { return 0 };
+        let Read::Frame { skip, .. } = *read else { return 0 };
         let src = match tag.kind {
             Kind::Video => &self.video,
             Kind::Audio => match self.audio.iter().find(|(t, _)| *t == tag.track) {
@@ -113,20 +114,7 @@ impl Session {
             },
             Kind::Script => return 0,
         };
-        // A frame from before the first keyframe is from before zero.
-        let dts = i64::from(tag.ms) - i64::from(self.base);
-        if tag.body.len() <= skip || dts < 0 {
-            return 0;
-        }
-        // The relay's own bytes, not a copy: the TS cutter holds the same.
-        let mut buffer = gst::Buffer::from_slice(tag.body.slice(skip..));
-        if let Some(b) = buffer.get_mut() {
-            b.set_dts(gst::ClockTime::from_mseconds(dts as u64));
-            b.set_pts(gst::ClockTime::from_mseconds((dts + i64::from(cts)).max(0) as u64));
-            if tag.kind == Kind::Video && !key {
-                b.set_flags(gst::BufferFlags::DELTA_UNIT);
-            }
-        }
+        let Some(buffer) = buffer(tag, read, self.base) else { return 0 };
         // Flushing or full: the frame is lost and the stream goes on.
         let _ = src.push_buffer(buffer);
         tag.body.len() - skip
@@ -141,6 +129,26 @@ impl Session {
             _ => None,
         }
     }
+}
+
+/// One frame as a buffer on the pipeline whose zero is relay time `base`.
+/// None for anything that is no frame, and for a frame from before zero.
+pub(super) fn buffer(tag: &Tag, read: &Read, base: u32) -> Option<gst::Buffer> {
+    let Read::Frame { skip, cts, key } = *read else { return None };
+    let dts = i64::from(tag.ms) - i64::from(base);
+    if tag.body.len() <= skip || dts < 0 {
+        return None;
+    }
+    // The relay's own bytes, not a copy: the TS cutter holds the same.
+    let mut buffer = gst::Buffer::from_slice(tag.body.slice(skip..));
+    if let Some(b) = buffer.get_mut() {
+        b.set_dts(gst::ClockTime::from_mseconds(dts as u64));
+        b.set_pts(gst::ClockTime::from_mseconds((dts + i64::from(cts)).max(0) as u64));
+        if tag.kind == Kind::Video && !key {
+            b.set_flags(gst::BufferFlags::DELTA_UNIT);
+        }
+    }
+    Some(buffer)
 }
 
 impl Drop for Session {

@@ -8,12 +8,17 @@
 //! software pins it with `[hardware]`. `deviceid=N` is `video.gpu`: the card
 //! the decode, the scale and the encode run on, either N as written
 //! ([`DeviceId::File`]) or `auto`, spread by load ([`DeviceId::Spread`]).
-//! What GodwinMix does differently is a note: a pad colour other than
-//! black, one picture per field, and deinterlacing, which runs on the CPU.
+//! `deinterlace=false`, Flussonic's default, is `auto` unless the station
+//! reads it as written ([`Deinterlacing`]). Several video tracks on one
+//! line (`vb=4500k size=1920x1080 vb=1500k size=1280x720`) are a ladder,
+//! each a variant of the HLS output's master. What GodwinMix does
+//! differently is a note: a pad colour other than black, and one picture
+//! per field.
 
-use super::codecs::{audio_codec, fps_of, video_codec};
-use super::{DeviceId, Note, Options};
-use crate::model::{Bitrate, Deinterlace, DeinterlaceRate, Hw, SizeMode, Transcoder};
+use super::codecs::audio_codec;
+use super::picture::picture;
+use super::{Deinterlacing, DeviceId, Note, Options};
+use crate::model::{Bitrate, Deinterlace, DeinterlaceRate, Hw, Transcoder};
 use serde_json::{json, Map, Value};
 
 /// The NVENC preset for a transcoder line that names none. The catalogue's
@@ -23,88 +28,45 @@ use serde_json::{json, Map, Value};
 /// is passed through as written.
 pub const NVENC_PRESET: &str = "p1";
 
-fn kbps(b: Bitrate) -> Option<u64> {
+pub(super) fn kbps(b: Bitrate) -> Option<u64> {
     match b {
         Bitrate::Copy => None,
         Bitrate::Bps(bps) => Some(bps.div_ceil(1000)),
     }
 }
 
-fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>, opts: &Options) -> Option<Value> {
-    let track = t.video.first()?;
-    if t.video.len() > 1 {
-        notes.push(Note::not_carried(line, format!("{} video tracks (a ladder): an HLS output of a direct show carries one, the first", t.video.len())));
-    }
-    let kbps = kbps(track.bitrate)?;
-    let mut v = Map::new();
-    match video_codec(&track.codec) {
-        Some(c) => { v.insert("codec".into(), json!(c)); },
-        None => notes.push(Note::not_carried(line, format!("vcodec={}: the source's codec family is kept", track.codec))),
-    }
-    v.insert("bitrate_kbps".into(), json!(kbps));
-    if let Some(size) = track.size {
-        if size.width > 0 {
-            v.insert("width".into(), json!(size.width));
-        }
-        if size.height > 0 {
-            v.insert("height".into(), json!(size.height));
-        }
-        let fit = match size.mode {
-            SizeMode::Fit => "pad",
-            SizeMode::Crop => "crop",
-            SizeMode::Scale => "stretch",
-        };
-        v.insert("fit".into(), json!(fit));
-        if let Some(rgb) = size.pad.filter(|_| size.mode == SizeMode::Fit) {
-            v.insert("pad_color".into(), json!(format!("#{rgb:06x}")));
-            if rgb != 0 {
-                notes.push(Note::not_carried(line, format!("pad colour #{rgb:06x}: the bars are drawn black")));
-            }
-        }
-    }
-    if let Some(fps) = track.fps {
-        v.insert("fps".into(), fps_of(fps));
-    }
-    let deinterlace = match t.deinterlace {
-        Deinterlace::Off => "off",
-        Deinterlace::On => "on",
-        Deinterlace::Auto => "auto",
+/// The line's pictures, first first: each video track one, every one with
+/// what the line says for all of them (deinterlace, gop, the card). More
+/// than one is a ladder, each a variant of the HLS output's master.
+fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>, opts: &Options) -> Vec<Value> {
+    let mut all = Map::new();
+    let deinterlace = match (t.deinterlace, opts.deinterlace) {
+        (Deinterlace::Off, Deinterlacing::File) => "off",
+        (Deinterlace::Off | Deinterlace::Auto, _) => "auto",
+        (Deinterlace::On, _) => "on",
     };
-    v.insert("deinterlace".into(), json!(deinterlace));
-    if t.deinterlace != Deinterlace::Off {
-        notes.push(Note::not_carried(line, format!("deinterlace={deinterlace}: the deinterlacing runs on the CPU, between the GPU decode and the encode")));
-    }
-    if t.deinterlace_rate == DeinterlaceRate::Field && t.deinterlace != Deinterlace::Off {
+    all.insert("deinterlace".into(), json!(deinterlace));
+    if t.deinterlace_rate == DeinterlaceRate::Field && deinterlace != "off" {
         notes.push(Note::not_carried(line, "deinterlace_rate=field (one picture per field): pictures are kept at the source's frame rate".into()));
     }
     if let Some(gop) = t.gop {
-        v.insert("keyframe_frames".into(), json!(gop));
-    }
-    match (&track.preset, t.hw) {
-        (Some(p), _) => {
-            v.insert("preset".into(), json!(p));
-        }
-        (None, Hw::Nvenc) => {
-            v.insert("preset".into(), json!(NVENC_PRESET));
-        }
-        (None, _) => {}
-    }
-    if let Some(b) = track.bframes {
-        v.insert("bframes".into(), json!(b));
+        all.insert("keyframe_frames".into(), json!(gop));
     }
     match opts.deviceid {
-        DeviceId::Spread => v.insert("gpu".into(), json!("auto")),
-        DeviceId::File => v.insert("gpu".into(), json!(t.device_id)),
+        DeviceId::Spread => all.insert("gpu".into(), json!("auto")),
+        DeviceId::File => all.insert("gpu".into(), json!(t.device_id)),
     };
-    if matches!(t.hw, Hw::Qsv | Hw::Other) {
+    if matches!(t.hw, Hw::Qsv | Hw::Other) && t.video.iter().any(|v| kbps(v.bitrate).is_some()) {
         notes.push(Note::not_carried(line, "hw other than nvenc or cpu: the planner picks the encoder".into()));
     }
-    for (what, set) in [("vprofile", track.profile.is_some()), ("level", track.level.is_some())] {
-        if set {
-            notes.push(Note::not_carried(line, format!("transcoder option {what}: the encoder's own is used")));
-        }
+    let mut out = Vec::new();
+    for track in &t.video {
+        let Some(own) = picture(track, t, line, notes) else { continue };
+        let mut v = out.first().and_then(Value::as_object).cloned().unwrap_or_else(|| all.clone());
+        v.extend(own);
+        out.push(Value::Object(v));
     }
-    Some(Value::Object(v))
+    out
 }
 
 fn audio(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
@@ -136,16 +98,22 @@ pub fn rendition(t: &Transcoder, line: usize, notes: &mut Vec<Note>, opts: &Opti
     for opt in &t.unused {
         notes.push(Note::ignored(line, format!("transcoder option {opt}")));
     }
-    let (v, a) = (video(t, line, notes, opts), audio(t, line, notes));
-    if v.is_none() && a.is_none() {
+    let (pictures, a) = (video(t, line, notes, opts), audio(t, line, notes));
+    if pictures.is_empty() && a.is_none() {
         return None;
     }
-    let mut r = Map::new();
-    if let Some(v) = v {
-        r.insert("video".into(), v);
+    let one = |v: Option<&Value>| {
+        let mut r = Map::new();
+        if let Some(v) = v {
+            r.insert("video".into(), v.clone());
+        }
+        if let Some(a) = &a {
+            r.insert("audio".into(), a.clone());
+        }
+        Value::Object(r)
+    };
+    if pictures.len() > 1 {
+        return Some(json!({"ladder": pictures.iter().map(|v| one(Some(v))).collect::<Vec<_>>()}));
     }
-    if let Some(a) = a {
-        r.insert("audio".into(), a);
-    }
-    Some(Value::Object(r))
+    Some(one(pictures.first()))
 }

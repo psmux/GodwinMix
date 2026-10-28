@@ -44,7 +44,7 @@ fn the_master_carries_the_first_sound_in_main_and_points_at_the_others() {
         bandwidth: 1_700_000,
         average: Some(1_600_000),
     };
-    let m = Master { main: Some(main), sounds: vec![sound("audio", 0, "eng"), sound("audio1", 1, "spa"), sound("audio2", 2, "fre")] };
+    let m = Master { main: Some(main), sounds: vec![sound("audio", 0, "eng"), sound("audio1", 1, "spa"), sound("audio2", 2, "fre")], rungs: Vec::new() };
     let text = m.render(|id| match id {
         None => "main/ts.m3u8".into(),
         Some(id) => format!("{id}/ts.m3u8"),
@@ -53,4 +53,20 @@ fn the_master_carries_the_first_sound_in_main_and_points_at_the_others() {
     assert!(text.contains("LANGUAGE=\"es\",CHANNELS=\"2\",URI=\"audio1/ts.m3u8\""), "{text}");
     assert!(text.contains("BANDWIDTH=1830000,AVERAGE-BANDWIDTH=1728000,CODECS=\"avc1.64001f,mp4a.40.2\",RESOLUTION=1280x720"), "{text}");
     assert!(text.ends_with("AUDIO=\"aud\"\nmain/ts.m3u8\n"), "{text}");
+}
+
+#[test]
+fn a_ladder_s_further_pictures_follow_main_with_the_same_sounds() {
+    let picture = |id: &str, height: u32, bandwidth: u64| Variant {
+        id: id.into(),
+        info: TrackInfo { codecs: "avc1.4d401f".into(), width: height * 16 / 9, height, fps: Some((30000, 1001)), ..TrackInfo::default() },
+        bandwidth,
+        average: None,
+    };
+    let sound = Variant { id: "audio".into(), info: TrackInfo { codecs: "mp4a.40.2".into(), channels: 2, ..TrackInfo::default() }, bandwidth: 130_000, average: None };
+    let m = Master { main: Some(picture("main", 1080, 4_600_000)), sounds: vec![sound], rungs: vec![picture("main-720p", 720, 1_600_000)] };
+    let text = m.render(|id| format!("{}/ts.m3u8", id.unwrap_or("main")));
+    assert_eq!(text.matches("#EXT-X-STREAM-INF").count(), 2, "{text}");
+    assert!(text.contains("RESOLUTION=1920x1080,FRAME-RATE=29.970,AUDIO=\"aud\"\nmain/ts.m3u8\n"), "{text}");
+    assert!(text.ends_with("RESOLUTION=1280x720,FRAME-RATE=29.970,AUDIO=\"aud\"\nmain-720p/ts.m3u8\n"), "{text}");
 }

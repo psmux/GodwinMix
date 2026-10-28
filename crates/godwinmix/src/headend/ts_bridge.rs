@@ -8,6 +8,7 @@
 //! | Selection | TS rendition |
 //! |---|---|
 //! | `tracks-v1a1`, and `tracks-v1` | `main`: the picture with the first sound muxed in |
+//! | `tracks-v<n>a1`, n from 2 | a ladder's further picture, `main-720p`, the same way |
 //! | `tracks-a<n>`, n from 2 | `audio<n-1>`: that sound alone |
 //! | `tracks-a1` | none: the first sound rides in `main` |
 
@@ -31,9 +32,10 @@ fn missing(r: TsRefusal) -> Missing {
     }
 }
 
-fn track(v: &Variant, kind: Kind) -> Track {
+/// One track of the master; a picture is numbered `picture` from 1.
+fn track(v: &Variant, kind: Kind, picture: u8) -> Track {
     let i = &v.info;
-    let number = if kind == Kind::Video { 1 } else { i.sound + 1 };
+    let number = if kind == Kind::Video { picture } else { i.sound + 1 };
     let name = (!i.name.is_empty()).then(|| i.name.clone()).or_else(|| Some(godwinmix_core::hls::lang::name(&i.lang, i.sound)));
     Track {
         kind,
@@ -49,11 +51,13 @@ fn track(v: &Variant, kind: Kind) -> Track {
     }
 }
 
-/// The TS rendition a selection is.
-fn rendition(sel: Select) -> Result<String, Missing> {
+/// The TS rendition a selection is, `rungs` being a ladder's further
+/// pictures in the master's order.
+fn rendition(sel: Select, rungs: &[String]) -> Result<String, Missing> {
     match (sel.video, sel.audio) {
-        (true, None | Some(1)) => Ok(ts::MAIN.to_string()),
-        (false, Some(n)) if n > 1 => Ok(ts::sound_id(n - 1)),
+        (Some(1), None | Some(1)) => Ok(ts::MAIN.to_string()),
+        (Some(n), None | Some(1)) => usize::from(n).checked_sub(2).and_then(|i| rungs.get(i)).cloned().ok_or_else(|| Missing::Gone(format!("this output has no picture {n}"))),
+        (None, Some(n)) if n > 1 => Ok(ts::sound_id(n - 1)),
         _ => Err(Missing::Unsupported("in MPEG-TS the first sound rides with the picture: ask for tracks-v1a1".into())),
     }
 }
@@ -61,6 +65,16 @@ fn rendition(sel: Select) -> Result<String, Missing> {
 impl Ts {
     pub fn new(st: Arc<Station>) -> Ts {
         Ts { cmaf: Cmaf::new(st.clone()), st }
+    }
+
+    /// The TS rendition of `sel`: a picture past the first is a ladder's,
+    /// named by the master.
+    async fn rendition_of(&self, at: &At, sel: Select) -> Result<String, Missing> {
+        if sel.video.is_some_and(|v| v > 1) {
+            let m = self.st.direct.hls.ts_master(&self.st, &at.show, &at.output).await.map_err(missing)?;
+            return rendition(sel, &m.rungs.iter().map(|r| r.id.clone()).collect::<Vec<_>>());
+        }
+        rendition(sel, &[])
     }
 
     /// Whether the output makes TS. An output the station does not know
@@ -80,8 +94,9 @@ impl Segments for Ts {
                 Ok(m) => m,
                 Err(_) => return self.cmaf.tracks(at).await,
             };
-            let mut tracks: Vec<Track> = m.main.iter().map(|v| track(v, Kind::Video)).collect();
-            tracks.extend(m.sounds.iter().map(|v| track(v, Kind::Audio)));
+            let mut tracks: Vec<Track> = m.main.iter().map(|v| track(v, Kind::Video, 1)).collect();
+            tracks.extend(m.rungs.iter().zip(2u8..).map(|(v, n)| track(v, Kind::Video, n)));
+            tracks.extend(m.sounds.iter().map(|v| track(v, Kind::Audio, 0)));
             Ok(Tracks { tracks, muxed: true })
         })
     }
@@ -91,7 +106,7 @@ impl Segments for Ts {
             return self.cmaf.window(at, sel);
         }
         Box::pin(async move {
-            let Ok(r) = rendition(sel) else { return self.cmaf.window(at, sel).await };
+            let Ok(r) = self.rendition_of(at, sel).await else { return self.cmaf.window(at, sel).await };
             let media = match self.st.direct.hls.ts_media(&self.st, &at.show, &at.output, &r).await {
                 Ok(m) if !m.segments.is_empty() => m,
                 _ => return self.cmaf.window(at, sel).await,
@@ -116,7 +131,7 @@ impl Segments for Ts {
             return self.cmaf.segment(at, sel, start_s);
         }
         Box::pin(async move {
-            let Ok(r) = rendition(sel) else { return self.cmaf.segment(at, sel, start_s).await };
+            let Ok(r) = self.rendition_of(at, sel).await else { return self.cmaf.segment(at, sel, start_s).await };
             match self.st.direct.hls.ts_segment(&self.st, &at.show, &at.output, &r, TsAt::Second(start_s)).await {
                 Ok(bytes) => Ok(bytes.to_vec()),
                 Err(e) => self.cmaf.segment(at, sel, start_s).await.map_err(|_| missing(e)),
@@ -136,9 +151,12 @@ mod tests {
 
     #[test]
     fn a_flussonic_selection_is_a_ts_rendition() {
-        assert_eq!(rendition(Select { video: true, audio: Some(1) }).unwrap(), "main");
-        assert_eq!(rendition(Select { video: true, audio: None }).unwrap(), "main");
-        assert_eq!(rendition(Select { video: false, audio: Some(3) }).unwrap(), "audio2");
-        assert!(matches!(rendition(Select { video: false, audio: Some(1) }), Err(Missing::Unsupported(_))));
+        let rungs = ["main-720p".to_string()];
+        assert_eq!(rendition(Select { video: Some(1), audio: Some(1) }, &rungs).unwrap(), "main");
+        assert_eq!(rendition(Select { video: Some(1), audio: None }, &rungs).unwrap(), "main");
+        assert_eq!(rendition(Select { video: Some(2), audio: Some(1) }, &rungs).unwrap(), "main-720p");
+        assert!(matches!(rendition(Select { video: Some(3), audio: Some(1) }, &rungs), Err(Missing::Gone(_))));
+        assert_eq!(rendition(Select { video: None, audio: Some(3) }, &rungs).unwrap(), "audio2");
+        assert!(matches!(rendition(Select { video: None, audio: Some(1) }, &rungs), Err(Missing::Unsupported(_))));
     }
 }

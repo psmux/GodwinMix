@@ -4,6 +4,7 @@
 use godwinmix_flussonic::import::HLS_OUTPUT;
 use godwinmix_protocol::headend::profile::{COPY, CUSTOM};
 use godwinmix_protocol::headend::{ChannelInput, HeadendChannel, TranscodeProfile};
+use godwinmix_protocol::rendition::VideoWant;
 use std::collections::BTreeSet;
 
 /// A public name: the path segment of `/<name>/index.m3u8`.
@@ -39,6 +40,9 @@ pub fn channel(c: &HeadendChannel, profiles: &[TranscodeProfile]) -> Result<(), 
     if c.profile == CUSTOM {
         profile_body(c.custom.as_ref().expect("profile_of checked it"))?;
     }
+    if let Some(v) = &c.video_overrides {
+        video(v).map_err(|e| format!("video_overrides: {e}"))?;
+    }
     if !matches!(c.hls.segments.as_str(), "both" | "ts" | "cmaf") {
         return Err(format!("HLS segments '{}' is not one of both, ts or cmaf.", c.hls.segments));
     }
@@ -61,17 +65,43 @@ pub fn channel(c: &HeadendChannel, profiles: &[TranscodeProfile]) -> Result<(), 
     Ok(())
 }
 
+/// A picture's settings: a profile's, a rung's, a channel's overrides.
+pub fn video(v: &VideoWant) -> Result<(), String> {
+    if v.bitrate_kbps.is_some_and(|b| !(100..=100_000).contains(&b)) {
+        return Err("a picture bitrate is 100 to 100000 kbit/s.".into());
+    }
+    if v.width.is_some_and(|w| w % 2 == 1 || w > 7680) || v.height.is_some_and(|h| h % 2 == 1 || h > 4320) {
+        return Err("a size is even on both sides, up to 7680x4320.".into());
+    }
+    if v.keyframe_frames == Some(0) || v.keyframe_ms == Some(0) {
+        return Err("a keyframe interval of 0 is never; leave it out for the encoder's own.".into());
+    }
+    if let Some(m) = v.match_source {
+        if m.max_height % 2 == 1 || !(144..=4320).contains(&m.max_height) {
+            return Err(format!("match_source max_height {} is not an even height from 144 to 4320, such as 1080.", m.max_height));
+        }
+        if v.height.is_some_and(|h| m.max_height <= h) {
+            return Err(format!("match_source max_height {} is no taller than the picture's own height, so it would never apply. Make it taller, such as 1080 over 720, or leave it out.", m.max_height));
+        }
+        if m.bitrate_kbps.is_some_and(|b| !(100..=100_000).contains(&b)) {
+            return Err("a match_source bitrate is 100 to 100000 kbit/s.".into());
+        }
+    }
+    Ok(())
+}
+
 /// A profile's settings, whoever names it.
 fn profile_body(p: &TranscodeProfile) -> Result<(), String> {
     if let Some(v) = &p.video {
-        if v.bitrate_kbps.is_some_and(|b| !(100..=100_000).contains(&b)) {
-            return Err("a picture bitrate is 100 to 100000 kbit/s.".into());
-        }
-        if v.width.is_some_and(|w| w % 2 == 1 || w > 7680) || v.height.is_some_and(|h| h % 2 == 1 || h > 4320) {
-            return Err("a size is even on both sides, up to 7680x4320.".into());
-        }
-        if v.keyframe_frames == Some(0) || v.keyframe_ms == Some(0) {
-            return Err("a keyframe interval of 0 is never; leave it out for the encoder's own.".into());
+        video(v)?;
+    }
+    if !p.ladder.is_empty() && p.video.is_none() {
+        return Err("a ladder hangs under the profile's own picture: give video (its top rendition) as well, or leave the ladder out.".into());
+    }
+    for (i, rung) in p.ladder.iter().enumerate() {
+        video(rung).map_err(|e| format!("ladder rendition {}: {e}", i + 1))?;
+        if rung.match_source.is_some() {
+            return Err(format!("ladder rendition {} has match_source, which only the profile's own picture takes. Leave it out of the rung.", i + 1));
         }
     }
     if let Some(a) = &p.audio {

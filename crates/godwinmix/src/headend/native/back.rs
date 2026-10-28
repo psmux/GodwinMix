@@ -8,9 +8,18 @@ use godwinmix_protocol::headend::{ChannelBackup, ChannelHls, ChannelInput, Chann
 use serde_json::Value;
 
 /// The GPU a rendition names, and the rendition without it, which is the
-/// profile it was made from.
+/// profile it was made from. A ladder's rungs all name the first's.
 fn off_gpu(r: &Value) -> (Option<u32>, Value) {
     let mut r = r.clone();
+    if let Some(rungs) = r.get_mut("ladder").and_then(Value::as_array_mut) {
+        let mut gpu = None;
+        for rung in rungs.iter_mut() {
+            let (g, bare) = off_gpu(rung);
+            gpu = gpu.or(g);
+            *rung = bare;
+        }
+        return (gpu, r);
+    }
     let gpu = r.get_mut("video").and_then(Value::as_object_mut).and_then(|v| v.remove("gpu"));
     (gpu.and_then(|g| g.as_u64()).and_then(|g| u32::try_from(g).ok()), r)
 }
@@ -44,8 +53,10 @@ fn hls_of(v: &Value) -> ChannelHls {
 /// one of them, `custom` otherwise.
 fn conversion_of(r: Option<&Value>, profiles: &[TranscodeProfile]) -> (String, Option<TranscodeProfile>) {
     let Some(r) = r else { return (COPY.into(), None) };
-    let custom = TranscodeProfile { video: serde_json::from_value(r["video"].clone()).ok(), audio: serde_json::from_value(r["audio"].clone()).ok(), ..TranscodeProfile::default() };
-    match profiles.iter().find(|p| rendition(p).as_ref() == Some(r)) {
+    let first = super::compile::top(r);
+    let ladder = r["ladder"].as_array().into_iter().flatten().skip(1).filter_map(|rung| serde_json::from_value(rung["video"].clone()).ok()).collect();
+    let custom = TranscodeProfile { video: serde_json::from_value(first["video"].clone()).ok(), audio: serde_json::from_value(first["audio"].clone()).ok(), ladder, ..TranscodeProfile::default() };
+    match profiles.iter().find(|p| rendition(p, None).as_ref() == Some(r)) {
         Some(p) => (p.id.clone(), None),
         None => (CUSTOM.into(), Some(custom)),
     }
@@ -76,6 +87,7 @@ pub fn channel_of(p: &ShowPlan, profiles: &[TranscodeProfile], origin: &str) -> 
         input: input_of(&p.input),
         profile,
         custom,
+        video_overrides: None,
         hls: hls_of(&hls["params"]),
         outputs,
         gpu,

@@ -120,7 +120,8 @@ async fn a_channel_set_up_here_and_one_imported_are_the_same_show() {
         eprintln!("CH201 was refused for room on this machine, so the two shows were not compared: {made}");
         return;
     }
-    let custom = json!({"video": {"codec": "h264", "width": 1280, "height": 720, "fit": "pad", "pad_color": "#000000", "bitrate_kbps": 1500, "keyframe_frames": 50, "deinterlace": "off", "preset": "p1"},
+    // A line with no deinterlace is read as auto, as deinterlace=false is.
+    let custom = json!({"video": {"codec": "h264", "width": 1280, "height": 720, "fit": "pad", "pad_color": "#000000", "bitrate_kbps": 1500, "keyframe_frames": 50, "deinterlace": "auto", "preset": "p1"},
                         "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}});
     let by_hand = json!({"name": "CH202", "input": {"uri": "udp://@239.0.0.9:2001", "program": 7, "interface": "eth1"}, "profile": "custom", "custom": custom});
     ok(&call(&mut ws, 2, "headend.channel.add", json!({"channels": [by_hand]})).await);

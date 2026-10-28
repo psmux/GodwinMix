@@ -21,6 +21,7 @@ mod hls_channel;
 mod hls_channel_restart;
 mod hls_direct;
 mod hls_late_picture;
+mod hls_picture;
 mod hls_relay_taken;
 mod hls_ts_late_sound;
 mod hls_ts_open;

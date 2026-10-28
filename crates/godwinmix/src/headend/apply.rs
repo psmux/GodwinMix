@@ -31,3 +31,14 @@ pub fn deviceid(cfg: Option<&godwinmix_core::config::Config>) -> anyhow::Result<
         Some(other) => anyhow::bail!("[headend] flussonic_deviceid = \"{other}\" is not a choice. Write \"spread\" (every channel on the GPU with the least work) or \"file\" (deviceid as written)."),
     }
 }
+
+/// `[headend] flussonic_deinterlace`: what a `transcoder deinterlace=false`
+/// does, which is also what a line with no `deinterlace` says.
+pub fn deinterlace(cfg: Option<&godwinmix_core::config::Config>) -> anyhow::Result<godwinmix_flussonic::import::Deinterlacing> {
+    use godwinmix_flussonic::import::Deinterlacing;
+    match cfg.and_then(|c| c.extra.get("headend")?.get("flussonic_deinterlace")?.as_str().map(str::to_string)).as_deref() {
+        None | Some("auto") => Ok(Deinterlacing::Auto),
+        Some("file") => Ok(Deinterlacing::File),
+        Some(other) => anyhow::bail!("[headend] flussonic_deinterlace = \"{other}\" is not a choice. Write \"auto\" (deinterlace what the stream marks as interlaced, the default) or \"file\" (deinterlace=false is off, as written)."),
+    }
+}

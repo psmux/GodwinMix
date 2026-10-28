@@ -82,3 +82,22 @@ fn a_fit_other_than_black_bars_is_other_work_with_an_id_of_its_own() {
     let di = plan(&sources(&[("main", broadcast())]), &on("main", vec![on_di]), &gpu()).unwrap();
     assert!(di.node("scale:main:1280x720p30000/1001:di").is_some());
 }
+
+#[test]
+fn renditions_that_deinterlace_alike_share_one_deinterlace_of_the_source() {
+    let auto = |id: &str, width: u32, height: u32| {
+        let mut r = channel(None, None);
+        r.id = id.into();
+        let v = r.video.as_mut().unwrap();
+        (v.width, v.height, v.deinterlace) = (Some(width), Some(height), Some(Deinterlace::Auto));
+        r
+    };
+    let p = plan(&sources(&[("main", broadcast())]), &on("main", vec![auto("top", 1920, 1080), auto("rung", 1280, 720)]), &gpu()).unwrap();
+    let stage = p.node("deinterlace:main:da").expect("one deinterlace stage");
+    assert_eq!(stage.inputs, ["decode:main:video"]);
+    // The 1080 rendition is the source's own size: it reads the stage as it
+    // is. The 720 one scales the stage's picture.
+    assert_eq!(p.node("scale:main:1280x720p30000/1001:da").unwrap().inputs, ["deinterlace:main:da"]);
+    assert!(p.node("scale:main:1920x1080p30000/1001:da").is_none());
+    assert_eq!(p.nodes.iter().filter(|n| n.id.starts_with("deinterlace:")).count(), 1);
+}

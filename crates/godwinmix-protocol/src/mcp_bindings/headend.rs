@@ -39,7 +39,8 @@ pub const BINDINGS: &[Binding] = &[
             compositing, kept by the station and editable afterwards, with its input, one HLS output (TS and CMAF, open access) and the \
             transcoder line as its rendition. Send text (the config) or path (a file on the \
             station's machine). dry_run true (the default) answers streams, notes (lines not \
-            carried) and shows.refused and makes nothing; then send dry_run false.",
+            carried) and shows.refused and makes nothing; then send dry_run false. deinterlace: \
+            auto (default, deinterlace=false is read as auto) or file (as written).",
     },
     Binding {
         method: "headend.status",
@@ -62,9 +63,10 @@ pub const BINDINGS: &[Binding] = &[
         tool: "add_headend_channels",
         tier: Search,
         description: "Add channels, each {name, title?, enabled?, input: {uri, program?, interface?, \
-            params?, backup?}, profile (copy, aac-sound, h264-480p-800, h264-720p-1500, h264-1080p-4000, a saved id from \
-            headend_channels, or custom with custom: {video, audio}), \
-            hls?, outputs?: [{uri, copy?}]}. name is the public path /<name>/index.m3u8. dry_run \
+            params?, backup?}, profile (copy, aac-sound, h264-480p-800, h264-720p-1500, h264-1080p-4000, \
+            h264-hd-1080p-else-720p, h264-hd-1080p-720p-ladder, a saved id from headend_channels, or custom with \
+            custom: {video, audio, ladder?}), video_overrides? (this channel's own aspect 16:9 or 4:3, deinterlace, \
+            fit over its profile's), hls?, outputs?: [{uri, copy?}]}. name is the public path /<name>/index.m3u8. dry_run \
             true checks and prices them and makes nothing. Answers done and refused with why.",
     },
     Binding {
@@ -89,7 +91,7 @@ pub const BINDINGS: &[Binding] = &[
         tool: "bulk_edit_headend_channels",
         tier: Search,
         description: "One change to many headend channels: names, and profile (or custom), \
-            enabled, or interface.",
+            enabled, interface, gpu, or video_overrides (aspect, deinterlace, deinterlace_method, fit; {} clears).",
     },
     Binding {
         method: "headend.channel.remove",
@@ -109,10 +111,12 @@ pub const BINDINGS: &[Binding] = &[
         method: "headend.profile.save",
         tool: "save_transcode_profile",
         tier: Search,
-        description: "Save a transcode profile {id, name, video, audio}: video and audio are a \
-            rendition's wants (codec, width, height, fit, bitrate_kbps, keyframe_frames, \
-            deinterlace, encoder gpu or cpu; audio codec, bitrate_kbps, tracks). Every channel \
-            that takes it follows.",
+        description: "Save a transcode profile {id, name, video, audio, ladder?}: video and audio are a \
+            rendition's wants (codec, width, height, fps, fit pad crop or stretch, aspect auto 16:9 or 4:3, \
+            bitrate_kbps, keyframe_frames, deinterlace off on or auto, deinterlace_method yadif greedyh or linear, \
+            match_source {max_height, bitrate_kbps} for HD sources at their own size, preset, encoder gpu or cpu; \
+            audio codec, bitrate_kbps, tracks). ladder: further pictures, each an HLS variant, such as \
+            [{width: 1280, height: 720, bitrate_kbps: 1500}]. Every channel that takes it follows.",
     },
     Binding {
         method: "headend.profile.remove",
