@@ -1,6 +1,6 @@
-// Two parts of the channel editor: an input, as a transport and the
-// fields that transport asks for (the main input and the backup share
-// it), and the list of outputs beside the HLS one.
+// Parts of the channel editor: an input, as a transport and the fields
+// that transport asks for (the main input and the backup share it), the
+// list of outputs beside the HLS one, and the GPU a conversion runs on.
 
 import { el } from "../../shell/dom.js";
 import { ASKS, TRANSPORTS, inputFields, inputFrom, inputUri } from "./setup.js";
@@ -76,4 +76,18 @@ export function outputsBox(outputs) {
     add,
     read: () => [...rows.children].map((r) => r.read()).filter((o) => o.uri && !/^[a-z]+:\/\/$/i.test(o.uri)),
   };
+}
+
+/**
+ * Which NVIDIA card the conversion runs on: Auto, the card with the least
+ * work when it starts, or one card. Offered on a machine with more than
+ * one card, or when the channel already names one.
+ */
+export function gpuPicker(gpus, current) {
+  const rows = [["", "Auto, the card with the least work (recommended)"], ...gpus.map((g) => [String(g), `GPU ${g}`])];
+  if (current != null && !gpus.includes(current)) rows.push([String(current), `GPU ${current} (not on this machine, placed as Auto)`]);
+  const select = choice(rows, current == null ? "" : String(current), "GPU");
+  const node = field("GPU", select, "Auto keeps the channel on its card while it runs. Spread across GPUs on the channel list evens the cards out again.");
+  node.hidden = gpus.length < 2 && current == null;
+  return { select, node };
 }

@@ -1,9 +1,9 @@
 // A stand in for a headend station's own setup, on top of the wall's stub:
-// headend.channel.list, add (with its dry run), update, bulk, remove and
-// follow, headend.profile.save and remove (refused with data.channels when
-// a channel takes the profile), headend.scan after a short listen, and
-// headend.export. Each channel added runs as a direct show in show.list.
-// Shapes are crates/godwinmix-protocol/src/headend.
+// headend.channel.list, add (with its dry run), update, bulk (picture
+// overrides too), remove and follow, headend.profile.save and remove
+// (refused with data.channels when a channel takes the profile),
+// headend.scan after a short listen, and headend.export. Each channel
+// added runs as a direct show in show.list. Shapes are crates/godwinmix-protocol/src/headend.
 
 import { wallStub } from "./wall-stub.js";
 import { RpcError } from "../client/errors.js";
@@ -11,12 +11,16 @@ import { RpcError } from "../client/errors.js";
 const SOUND = { codec: "aac", bitrate_kbps: 128, tracks: "all" };
 const h264 = (width, height, kbps) => ({ codec: "h264", width, height, fit: "pad", bitrate_kbps: kbps, keyframe_ms: 2000, deinterlace: "auto" });
 
+const HD = { ...h264(1280, 720, 1500), match_source: { max_height: 1080, bitrate_kbps: 4500 } };
+
 export const BUILTINS = [
   { id: "copy", name: "Pass through", builtin: true },
   { id: "aac-sound", name: "Picture as it comes, sound to AAC", builtin: true, audio: SOUND },
   { id: "h264-480p-800", name: "480p H.264, 800 kbit/s", builtin: true, video: h264(854, 480, 800), audio: SOUND },
   { id: "h264-720p-1500", name: "720p H.264, 1.5 Mbit/s", builtin: true, video: h264(1280, 720, 1500), audio: SOUND },
   { id: "h264-1080p-4000", name: "1080p H.264, 4 Mbit/s", builtin: true, video: h264(1920, 1080, 4000), audio: SOUND },
+  { id: "h264-hd-1080p-else-720p", name: "1080p H.264 of HD sources, else 720p", builtin: true, video: HD, audio: SOUND },
+  { id: "h264-hd-1080p-720p-ladder", name: "1080p and 720p of HD sources, else 720p", builtin: true, video: HD, audio: SOUND, ladder: [{ width: 1280, height: 720, bitrate_kbps: 1500 }] },
 ];
 
 const HLS = { segments: "both", access: "open", segment_ms: 3400 };
@@ -126,6 +130,10 @@ function methods(stub) {
       if (p.profile) e.channel.profile = p.profile;
       if (p.custom) e.channel.custom = p.custom;
       if (p.enabled !== undefined) e.channel.enabled = p.enabled;
+      if (p.video_overrides) {
+        if (Object.keys(p.video_overrides).length) e.channel.video_overrides = p.video_overrides;
+        else delete e.channel.video_overrides;
+      }
       if (p.interface !== undefined) e.channel.input.interface = p.interface || undefined;
       if (p.gpu !== undefined) {
         if (p.gpu === "auto") delete e.channel.gpu;

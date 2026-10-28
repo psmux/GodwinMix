@@ -1,6 +1,6 @@
 // One custom rung's Advanced group in HLS for viewers: how a picture of
-// another shape is fitted, the bar colour, deinterlacing, the encoder's
-// preset and B frames. The same fields as the Custom form's Advanced group
+// another shape is fitted, the bar colour, the source's shape,
+// deinterlacing and its method, the encoder's preset and B frames. The same fields as the Custom form's Advanced group
 // (custom-advanced.js), less the ones a ladder decides for every rung: the
 // keyframes follow the segment length, and the sound is one track that every
 // rung shares, set once for the ladder.
@@ -8,7 +8,7 @@
 import { advancedFrom, advancedInto, advancedProps, advancedRules } from "./custom-advanced.js";
 
 /** The fields a rung may set on its own. */
-export const RUNG_FIELDS = ["fit", "pad_color", "deinterlace", "preset", "bframes"];
+export const RUNG_FIELDS = ["fit", "pad_color", "aspect", "deinterlace", "deinterlace_method", "preset", "bframes"];
 
 /** The rung's Advanced schema, grouped and closed as everywhere else. */
 export function rungSchema() {
@@ -36,7 +36,7 @@ export function intoRung(r, values) {
 /** True when the rung asks for anything its Advanced group sets. */
 export function rungUsesAdvanced(r) {
   const v = (r && r.video) || {};
-  return (v.fit && v.fit !== "pad") || (v.deinterlace && v.deinterlace !== "off") || !!v.preset || v.bframes !== undefined || !!v.pad_color;
+  return (v.fit && v.fit !== "pad") || (v.deinterlace && v.deinterlace !== "off") || (v.aspect && v.aspect !== "auto") || !!v.preset || v.bframes !== undefined || !!v.pad_color;
 }
 
 /**
