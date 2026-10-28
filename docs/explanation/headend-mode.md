@@ -1,6 +1,6 @@
 # Headend mode
 
-Status: shipped in 0.3.17. Setting a headend up on the station itself, with no Flussonic file, is unreleased.
+Status: shipped in 0.3.17. Setting a headend up on the station itself, with no Flussonic file, and splitting the channels across GPUs shipped in 0.3.18.
 
 ## Why
 

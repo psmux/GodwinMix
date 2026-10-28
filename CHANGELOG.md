@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.18 (2026-10-28)
 
 A headend is set up in GodwinMix itself. The headend screen used to offer one way in, importing a Flussonic config; it now has three, and the import is one of them.
 
