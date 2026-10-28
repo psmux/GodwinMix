@@ -144,6 +144,11 @@ impl Graph {
         }
     }
 
+    #[cfg(test)]
+    pub fn pipeline(&self) -> &gst::Pipeline {
+        &self.pipeline
+    }
+
     /// Errors the pipeline raised since the last look, by the node whose
     /// element raised them.
     pub fn errors(&mut self) -> Vec<(String, String)> {

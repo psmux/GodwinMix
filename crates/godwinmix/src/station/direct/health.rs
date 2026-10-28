@@ -1,14 +1,20 @@
 //! A show's health: the host's alarms, and what only the station knows
-//! (an output the governor would not admit, a show process that failed),
+//! (an output the governor would not admit, one that keeps trying to
+//! connect with the input live, a show process that failed),
 //! as one state. Announced as `event/show.health` when the state or the
 //! set of alarm kinds moves, and never for a number.
 
 use super::Direct;
 use crate::station::state::Station;
-use godwinmix_protocol::destination::DestinationState;
+use godwinmix_protocol::destination::{DestinationLive, DestinationState};
 use godwinmix_protocol::shows::{Alarm, AlarmKind, Health, ShowState};
 use godwinmix_protocol::types::Event;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::warn;
+
+/// How long an output may connect or reconnect, with the input live,
+/// before the show is in alarm for it.
+const STUCK_MS: u64 = 60_000;
 
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
@@ -77,10 +83,10 @@ impl Direct {
             if let (_, Some(no)) = self.transcode.view(id, &o.id) {
                 add(AlarmKind::GovernorRefused, format!("{}: {}", o.id, no.message));
             }
-            let hls = self.hls.view(id, &o.id).map(|(live, _)| live.state);
-            let unreadable = super::outputs::unreadable(id, &o.id).map(|l| l.state);
-            if unreadable.or(hls).unwrap_or_else(|| seen.output(&o.id, true).state) == DestinationState::Failed {
-                add(AlarmKind::OutputFailed, format!("{} failed", o.id));
+            let hls = self.hls.view(id, &o.id).map(|(live, _)| live);
+            let live = super::outputs::unreadable(id, &o.id).or(hls).unwrap_or_else(|| seen.output(&o.id, true));
+            if let Some(why) = not_sending(&o.id, &live, seen.input_live()) {
+                add(AlarmKind::OutputFailed, why);
             }
         }
         Health::from_alarms(alarms)
@@ -97,6 +103,12 @@ impl Direct {
             let s = seen.entry(id.to_string()).or_default();
             let moved = s.announced.as_ref().is_none_or(|was| was.changed_from(&now));
             if moved {
+                // An output that fails says so in the log once, with why:
+                // one stuck trying wrote nothing after its first warning.
+                let before = |a: &Alarm| s.announced.as_ref().is_some_and(|h| h.alarms.iter().any(|b| b.kind == a.kind));
+                for a in now.alarms.iter().filter(|a| a.kind == AlarmKind::OutputFailed && !before(a)) {
+                    warn!(show = id, "{}", a.detail);
+                }
                 s.announced = Some(now.clone());
             }
             moved
@@ -104,6 +116,21 @@ impl Direct {
         if moved {
             st.events.emit(Event::ShowHealth { id: id.to_string(), health: now });
         }
+    }
+}
+
+/// Why an output sends nothing, when it is an alarm: it failed, or it has
+/// tried to connect for `STUCK_MS` with the input live. Trying again and
+/// again is sending nothing too: an HLS output that never once read a
+/// frame off its rendition said `ok` for as long as it tried.
+fn not_sending(id: &str, live: &DestinationLive, input_live: bool) -> Option<String> {
+    match live.state {
+        DestinationState::Failed => Some(format!("{id} failed")),
+        DestinationState::Connecting | DestinationState::Reconnecting if input_live && live.since_ms >= STUCK_MS => {
+            let why = live.error.as_deref().unwrap_or("it has not connected");
+            Some(format!("{id} has sent nothing for {} s: {why}", live.since_ms / 1000))
+        }
+        _ => None,
     }
 }
 
@@ -132,6 +159,18 @@ fn process_health(state: Option<ShowState>, lost_ms: Option<u64>) -> Option<Heal
 mod tests {
     use super::*;
     use godwinmix_protocol::shows::HealthState;
+
+    #[test]
+    fn an_output_trying_to_connect_for_a_minute_with_the_input_live_is_an_alarm() {
+        let trying = |state, secs: u64| DestinationLive { state, since_ms: secs * 1000, error: Some("nothing came from the relay for 30 s".into()), ..Default::default() };
+        assert_eq!(not_sending("hls", &trying(DestinationState::Reconnecting, 30), true), None, "not yet");
+        let stuck = not_sending("hls", &trying(DestinationState::Reconnecting, 61), true).expect("a minute of trying is an alarm");
+        assert_eq!(stuck, "hls has sent nothing for 61 s: nothing came from the relay for 30 s");
+        assert!(not_sending("hls", &trying(DestinationState::Connecting, 90), true).is_some());
+        assert_eq!(not_sending("hls", &trying(DestinationState::Reconnecting, 90), false), None, "the input is down, and says so itself");
+        assert_eq!(not_sending("hls", &trying(DestinationState::Live, 90), true), None);
+        assert_eq!(not_sending("hls", &trying(DestinationState::Failed, 0), false).as_deref(), Some("hls failed"));
+    }
 
     #[test]
     fn a_show_process_that_failed_or_went_reads_as_a_stall_and_one_starting_reads_as_off() {

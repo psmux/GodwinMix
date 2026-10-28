@@ -9,6 +9,7 @@
 use super::seen::Seen;
 use crate::station::state::Station;
 use godwinmix_core::plugin::supervisor::Supervisor;
+use godwinmix_protocol::destination::DestinationState;
 use serde_json::Value;
 use std::sync::{Arc, Weak};
 use tracing::{debug, warn};
@@ -114,7 +115,7 @@ fn host_health(st: &Arc<Station>, v: &Value) {
 fn stats(st: &Arc<Station>, v: &Value) {
     let Some(rows) = v["shows"].as_array() else { return };
     let ids = st.registry.lock().ids();
-    let mut filled = Vec::new();
+    let (mut filled, mut trying) = (Vec::new(), Vec::new());
     let mut seen = st.direct.seen.lock();
     for row in rows {
         let Some(id) = row["id"].as_str().filter(|id| ids.iter().any(|k| k == id)) else { continue };
@@ -123,9 +124,17 @@ fn stats(st: &Arc<Station>, v: &Value) {
         if s.settle_fps() {
             filled.push(id.to_string());
         }
+        // An output still trying to connect turns into an alarm with time
+        // alone, and nothing else would say so.
+        if s.outputs.values().any(|(l, _)| matches!(l.state, DestinationState::Connecting | DestinationState::Reconnecting)) {
+            trying.push(id.to_string());
+        }
     }
     drop(seen);
     if filled.iter().any(|id| replans(st, id)) {
         st.direct.hand_over();
+    }
+    for id in trying {
+        st.direct.announce_health(st, &id);
     }
 }

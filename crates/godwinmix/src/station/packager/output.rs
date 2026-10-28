@@ -5,7 +5,7 @@
 //! ```text
 //!   waiting ──relay and stream known──► connecting ──first segment──► live
 //!                                           ▲                          │
-//!                                           └──── lost, after 1 s ◄────┘
+//!                                           └─ lost, after 1 to 16 s ◄─┘
 //!   a sound codec MP4 does not carry ──► failed, looked at again every 5 s
 //! ```
 //!
@@ -33,6 +33,10 @@ use std::time::Duration;
 /// dropped and dialled again forever a stream whose keyframes were two
 /// seconds apart.
 const READ: Duration = Duration::from_secs(5);
+/// The wait after a connection is lost, doubled each time one is lost
+/// without going live, up to `LONGEST_RETRY`, and back to this once one did.
+const FIRST_RETRY: Duration = Duration::from_secs(1);
+const LONGEST_RETRY: Duration = Duration::from_secs(16);
 
 pub struct Packager {
     pub stream: Arc<Stream>,
@@ -78,7 +82,7 @@ impl Drop for Packager {
 }
 
 fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, named: &[Sound], sound: &dyn Fn(bool, &str) -> String) {
-    let mut ever = false;
+    let (mut ever, mut retry) = (false, FIRST_RETRY);
     while !stop.load(Ordering::Relaxed) {
         if board.state() != S::Failed {
             board.set(if ever { S::Reconnecting } else { S::Connecting }, board.read().error);
@@ -97,8 +101,13 @@ fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, nam
             End::Stopped => return,
             End::Again => continue,
             End::Lost(why) => {
+                if board.state() == S::Live {
+                    retry = FIRST_RETRY;
+                }
                 board.set(S::Reconnecting, Some(why));
-                Duration::from_secs(1)
+                let wait = retry;
+                retry = (retry * 2).min(LONGEST_RETRY);
+                wait
             }
             End::Refused(why) => {
                 board.set(S::Failed, Some(why));

@@ -119,6 +119,12 @@ impl Transcoders {
         }
     }
 
+    /// The running pipeline of one stream, for a test to reach into.
+    #[cfg(test)]
+    pub fn pipeline(&self, app: &str, stream: &str) -> Option<gstreamer::Pipeline> {
+        self.lock().get(&(app.to_string(), stream.to_string()))?.pipeline()
+    }
+
     /// Why a converting destination has nothing to send, when a node it
     /// reads would not run.
     pub fn error(&self, w: &Wanted) -> Option<String> {

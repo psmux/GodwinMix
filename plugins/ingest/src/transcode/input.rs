@@ -12,8 +12,9 @@
 //! less the session's first), and nothing is parsed beyond that.
 //!
 //! A decoder that has just started waits for a keyframe, and the handle is
-//! taken out of the lock before a push, which may wait for the decoder:
-//! nothing that changes the graph ever waits behind it.
+//! taken out of the lock before a push: nothing that changes the graph ever
+//! waits behind it. A push never waits either; a decoder that has fallen
+//! behind loses whole GOPs here instead.
 
 use std::sync::{Mutex, MutexGuard};
 
@@ -101,6 +102,17 @@ impl Input {
             let starts = tag.kind == TagKind::Audio || tag.keyframe;
             let known = f.header.is_some() || framed.is_some() || (mpeg2 && f.framed.is_some());
             if f.src.is_none() || !known || (f.need_key && !starts) {
+                return;
+            }
+            // A decoder whose stream stopped (a node after it failed, and
+            // the failure came back up) takes nothing more, and its appsrc
+            // fills. A push into a full one waited for good, on the thread
+            // that would have built the node again: an NVENC encoder that
+            // failed twice at a headend's start left its channel with no
+            // picture until the show was stopped. So a full one is skipped,
+            // and the feed starts again at the next keyframe it has room for.
+            if f.src.as_ref().is_some_and(|s| s.current_level_bytes() >= s.max_bytes()) {
+                f.need_key = true;
                 return;
             }
             f.need_key = false;

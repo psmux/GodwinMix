@@ -113,16 +113,26 @@ impl Packagers {
         (book.gen, book.cards.values().map(|c| c.want.clone()).collect())
     }
 
-    pub(super) fn reported(&self, reports: Vec<Report>) {
+    /// Take what the packager says, and answer the shows whose health may
+    /// have moved with it: an output whose state moved, or one still trying
+    /// to connect, which turns into an alarm with time alone.
+    pub(super) fn reported(&self, reports: Vec<Report>) -> Vec<String> {
         let mut book = self.book.lock();
         let Book { cards, reports: kept, .. } = &mut *book;
         let fresh: BTreeMap<_, _> = reports.into_iter().map(|r| ((r.show.clone(), r.output.clone()), r)).filter(|(k, _)| cards.contains_key(k)).collect();
+        let mut judge = Vec::new();
         // What the packager says of each output reaches the station's log:
         // its own process writes nothing about an output's state.
         for (key, r) in &fresh {
-            crate::station::direct::seen::log_output(&key.0, &key.1, kept.get(key).map(|k| &k.live), &r.live);
+            let was = kept.get(key).map(|k| &k.live);
+            crate::station::direct::seen::log_output(&key.0, &key.1, was, &r.live);
+            let trying = matches!(r.live.state, DestinationState::Connecting | DestinationState::Reconnecting);
+            if (trying || was.is_none_or(|w| w.state != r.live.state)) && !judge.contains(&key.0) {
+                judge.push(key.0.clone());
+            }
         }
         *kept = fresh;
+        judge
     }
 
     /// The packager is gone: say so on every output, with what happens next.

@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
@@ -65,7 +66,15 @@ pub(super) struct Inner {
     pub(super) script: Option<MediaTag>,
     /// Each node's description, for the metadata of a pair it feeds.
     pub(super) nodes: HashMap<String, Value>,
+    /// When a pair could not be opened because its name was still held, by
+    /// the last session of this stream taking its pipeline down. It is
+    /// tried again on a tag a second later. Skipped for good, it left its
+    /// readers waiting for a name nobody published.
+    refused_at: Option<Instant>,
 }
+
+/// How long a pair whose name was held waits before it is tried again.
+const OPEN_AGAIN: Duration = Duration::from_secs(1);
 
 /// Whether every AAC encoder a pair's sound comes from has given its header.
 /// A pair starts on a keyframe only once they have: started on NVENC's
@@ -131,6 +140,7 @@ impl Router {
     pub fn stop(&self) {
         let mut inner = self.lock();
         inner.live = false;
+        inner.refused_at = None;
         inner.open.clear();
         inner.headers.clear();
         inner.script = None;
@@ -139,7 +149,16 @@ impl Router {
     fn open_missing(&self, inner: &mut Inner) {
         let missing: Vec<Output> = inner.wanted.iter().filter(|w| !inner.open.iter().any(|o| &o.output == *w)).cloned().collect();
         for output in missing {
-            let Ok(publication) = self.hub.publish_via(&self.app, &output.key, "transcode", None, "transcode") else { continue };
+            let publication = match self.hub.publish_via(&self.app, &output.key, "transcode", None, "transcode") {
+                Ok(p) => p,
+                Err(why) => {
+                    if inner.refused_at.is_none() {
+                        eprintln!("transcode: {why}; trying again");
+                    }
+                    inner.refused_at = Some(Instant::now());
+                    continue;
+                }
+            };
             let script = metadata(inner, &output, self.base.load(Ordering::Relaxed));
             publication.push(script);
             for producer in [&output.video, &output.audio].into_iter().flatten().chain(&output.tracks) {
@@ -169,6 +188,10 @@ impl Router {
 impl Route for Router {
     fn tag(&self, node: &str, tag: MediaTag) {
         let mut inner = self.lock();
+        if inner.live && inner.refused_at.is_some_and(|t| t.elapsed() >= OPEN_AGAIN) {
+            inner.refused_at = None;
+            self.open_missing(&mut inner);
+        }
         if tag.sequence_header {
             inner.headers.insert(node.to_string(), tag.clone());
         }
