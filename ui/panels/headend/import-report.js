@@ -4,11 +4,17 @@
 // not carried. Plain nodes from the answer; nothing here calls the station.
 
 import { el } from "../../shell/dom.js";
-import { describe } from "../renditions/model.js";
+import { describe, rate } from "../renditions/model.js";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-/** "H.264 1280×720 · 1.5 Mb/s · keyframe every 50 frames · pad #000000 · AAC 128 kb/s, every track". */
+/** One ladder rung, "720p 1.5 Mb/s". */
+const rungWords = (x) => [x.height ? `${x.height}p` : "", x.bitrate_kbps ? rate(x.bitrate_kbps) : "", x.fps ? describe({ video: x }).fps : "", x.preset ? `preset ${x.preset}` : ""].filter(Boolean).join(" ") || "as the main picture";
+
+/**
+ * "H.264 · 1280×720 · 1.5 Mb/s · keyframe every 50 frames · pad #000000 ·
+ * AAC 128 kb/s, every track", with a profile's ladder after the picture.
+ */
 export function renditionWords(r) {
   if (!r) return "Copy, as it comes";
   if (r.preset) return r.preset;
@@ -18,8 +24,12 @@ export function renditionWords(r) {
   const bits = [v.codec ? v.codec.toUpperCase().replace("H264", "H.264") : "", d.size, d.fps, v.bitrate_kbps ? d.bitrate : ""];
   if (v.keyframe_frames) bits.push(`keyframe every ${v.keyframe_frames} frames`);
   if (v.fit) bits.push(v.fit === "pad" ? `pad ${v.pad_color || "#000000"}` : v.fit);
-  if (v.deinterlace && v.deinterlace !== "off") bits.push(`deinterlace ${v.deinterlace}`);
+  if (v.aspect && v.aspect !== "auto") bits.push(`shown as ${v.aspect}`);
+  if (v.deinterlace && v.deinterlace !== "off") bits.push(`deinterlace ${v.deinterlace}${v.deinterlace_method && v.deinterlace_method !== "yadif" ? ` with ${v.deinterlace_method}` : ""}`);
+  const m = v.match_source;
+  if (m && m.max_height) bits.push(`larger sources at their own size up to ${m.max_height}p${m.bitrate_kbps ? ` at ${rate(m.bitrate_kbps)}` : ""}`);
   if (v.preset) bits.push(`preset ${v.preset}`);
+  if ((r.ladder || []).length) bits.push(`also ${r.ladder.map(rungWords).join(", ")} for HLS`);
   const sound = a.codec ? `${a.codec.toUpperCase()}${a.bitrate_kbps ? ` ${a.bitrate_kbps} kb/s` : ""}${a.tracks === "all" ? ", every track" : ""}` : r.no_audio ? "no sound" : "";
   return [...bits, sound].filter(Boolean).join(" · ") || "Re-encoded";
 }

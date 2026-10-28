@@ -1,7 +1,8 @@
 // Every channel the station knows, in a table: its name, input, profile
 // (and its GPU, on a machine with several), state and where it came from,
 // with a tick box each for the changes made to many at once (a profile, on
-// or off, the network card, the GPU or a spread across them, removal), and
+// or off, the network card, the GPU or a spread across them, picture
+// overrides set or cleared, removal), and
 // Edit and Duplicate on each row. Opened from the band of
 // the headend view; reads headend.channel.list each time it changes.
 
@@ -10,7 +11,9 @@ import { modal } from "../../shell/modal.js";
 import { toast } from "../../shell/toast.js";
 import { sheet } from "./sheet.js";
 import { inputWords, originOf, profileOf, readSetup } from "./setup.js";
-import { choice, said, text, whyBox } from "./form.js";
+import { said, text, whyBox } from "./form.js";
+import { bulkOverrides } from "./overrides.js";
+import { overrideWords } from "./picture.js";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -51,6 +54,7 @@ export async function channelList(client, opts = {}) {
     el("button.btn", { type: "button", "data-bulk": "spread", text: "Spread across GPUs", title: "Placed by load from now on, and the cards evened out now. A channel that moves restarts its encode." }),
     card, el("button.btn", { type: "button", "data-bulk": "card", text: "Move to GPU" }),
   ]);
+  const pic = bulkOverrides();
   const why = whyBox();
   const removeB = el("button.btn.he-danger", { type: "button", "data-bulk": "remove" });
   const bulk = el("div.hs-bulk", { hidden: true }, [
@@ -61,6 +65,7 @@ export async function channelList(client, opts = {}) {
     el("span.hs-row", {}, [nic, el("button.btn", { type: "button", "data-bulk": "nic", text: "Move to network card" })]),
     gpuRow,
     removeB,
+    pic.node,
   ]);
   const top = el("div.hs-row.hs-listtop", {}, [
     find,
@@ -101,7 +106,7 @@ export async function channelList(client, opts = {}) {
         el("td", {}, [box]),
         el("td", { "data-label": "Channel" }, [el("strong", { text: c.name }), c.title ? el("div.he-sub", { text: c.title }) : null]),
         el("td.hs-wrap", { "data-label": "Input", text: inputWords(c.input) }),
-        el("td", { "data-label": "Profile" }, [profileOf(setup, c).name || c.profile, gpuWords(setup, e) ? el("div.he-sub", { text: gpuWords(setup, e) }) : null]),
+        el("td", { "data-label": "Profile" }, [profileOf(setup, c).name || c.profile, ...[overrideWords(c.video_overrides) && `Own picture: ${overrideWords(c.video_overrides)}`, gpuWords(setup, e)].filter(Boolean).map((t) => el("div.he-sub", { text: t }))]),
         el("td", { "data-label": "State" }, [el(`span.hs-state.st-${sk}`, { text: sw })]),
         el("td", { "data-label": "From", title: o.full }, [el(`span.hs-from.from-${o.key}`, { text: o.word })]),
         el("td.hs-acts", {}, [
@@ -169,6 +174,10 @@ export async function channelList(client, opts = {}) {
     if (what === "on" || what === "off") return run("headend.channel.bulk", { names, enabled: what === "on" }, (n) => `${plural(n, "channel is", "channels are")} ${what === "on" ? "on" : "off"}.`);
     if (what === "spread") return run("headend.channel.bulk", { names, gpu: "auto" }, (n) => `${plural(n, "channel is", "channels are")} placed by load and spread across the GPUs.`);
     if (what === "card") return run("headend.channel.bulk", { names, gpu: Number(card.value) }, (n) => `${plural(n, "channel runs", "channels run")} on GPU ${card.value} now.`);
+    if (what === "pic" || what === "unpic") {
+      const own = what === "pic" ? pic.read() : {};
+      return run("headend.channel.bulk", { names, video_overrides: own }, (n) => Object.keys(own).length ? `${plural(n, "channel takes", "channels take")} ${overrideWords(own)} over its profile now.` : `${plural(n, "channel takes", "channels take")} its profile as it is now.`);
+    }
     if (what === "nic") return run("headend.channel.bulk", { names, interface: nic.value.trim() }, (n) => `${plural(n, "channel joins", "channels join")} on ${nic.value.trim() || "the default route's card"}.`);
     if (what === "remove") {
       if (armed < Date.now()) {

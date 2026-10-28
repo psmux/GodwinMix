@@ -11,6 +11,7 @@ import { sheet } from "./sheet.js";
 import { profileWords, readSetup, slug } from "./setup.js";
 import { choice, field, said, text, whyBox } from "./form.js";
 import { STARTER, customForm } from "./conv.js";
+import { ladderProblem } from "./picture.js";
 
 export async function manageProfiles(client, opts = {}) {
   sheet("headend");
@@ -75,6 +76,7 @@ export async function manageProfiles(client, opts = {}) {
       const want = { id: id.value.trim(), name: name.value.trim() || id.value.trim(), ...form.read() };
       if (!/^[A-Za-z0-9._-]{1,64}$/.test(want.id)) return err.say("Give the profile an id of letters, digits, - _ and . only.");
       if (isNew && taken.has(want.id)) return err.say(`There is already a profile ${want.id}. Pick another id.`);
+      if (ladderProblem(want.video, want.ladder || [])) return err.say(ladderProblem(want.video, want.ladder || []));
       save.disabled = true;
       try {
         const got = await client.call("headend.profile.save", { profile: want });
