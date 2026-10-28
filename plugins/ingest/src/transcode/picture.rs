@@ -32,7 +32,20 @@ pub(super) fn deinterlace(node: &NodeSpec, always: bool) -> Result<Vec<gst::Elem
     // The caps after the download say system memory: without them the
     // download passes CUDA memory through, since `deinterlace` takes any
     // memory in its caps, and then lets every picture by untouched.
-    Ok(vec![convert, caps("video/x-raw(memory:CUDAMemory),format=I420")?, down, caps("video/x-raw,format=I420")?, d, up, caps("video/x-raw(memory:CUDAMemory)")?])
+    // Back in NV12 on the card: an encoder may read this stage as it is
+    // (a 1080i source made at 1080), and NVENC takes no I420.
+    let back = super::build::on_card(make("cudaconvert")?, node);
+    Ok(vec![
+        convert,
+        caps("video/x-raw(memory:CUDAMemory),format=I420")?,
+        down,
+        caps("video/x-raw,format=I420")?,
+        d,
+        up,
+        caps("video/x-raw(memory:CUDAMemory)")?,
+        back,
+        caps("video/x-raw(memory:CUDAMemory),format=NV12")?,
+    ])
 }
 
 /// The display shape a node forces on its source, `[16, 9]` or `[4, 3]`.
