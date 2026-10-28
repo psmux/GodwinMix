@@ -11,6 +11,7 @@ use godwinmix_core::catalogue::select::Registry;
 use godwinmix_core::catalogue::Catalogue;
 use godwinmix_protocol::rendition::{AudioCodec, EncoderSlot, VideoCodec};
 
+use super::cards::{device_name, Cards, NVIDIA};
 use super::source::{audio_codec, video_codec};
 
 /// The catalogue entries this machine has, best first within each list.
@@ -23,6 +24,8 @@ pub struct Machine {
     /// `cudaconvertscale` is here, so pictures an NVIDIA decoder made can be
     /// scaled and padded where they are, in the GPU's memory.
     pub cuda_scale: bool,
+    /// The NVIDIA cards, and each one's decoders and encoders (`cards.rs`).
+    pub cards: Cards,
 }
 
 fn present(needs: Vec<String>, reg: &dyn Registry) -> bool {
@@ -52,18 +55,34 @@ impl Machine {
             v.sort_by_key(|e| std::cmp::Reverse(e.rank));
             v
         };
+        let (encoders, decoders) = (video(Role::Encode), video(Role::Decode));
+        let nvidia = |v: &[VideoEntry], role: Role| -> Vec<String> { v.iter().filter(|e| e.accel == NVIDIA).filter_map(|e| e.element(role).map(str::to_string)).collect() };
+        let cards = Cards::probe([nvidia(&encoders, Role::Encode), nvidia(&decoders, Role::Decode)].concat(), reg);
         Machine {
-            encoders: video(Role::Encode),
-            decoders: video(Role::Decode),
+            encoders,
+            decoders,
             audio_encoders: audio(Role::Encode),
             audio_decoders: audio(Role::Decode),
             cuda_scale: reg.has("cudaconvertscale"),
+            cards,
         }
     }
 
     /// Every video encoder as the planner names it, best first.
     pub fn slots(&self) -> Vec<EncoderSlot> {
-        self.encoders.iter().map(slot).collect()
+        self.slots_on(None)
+    }
+
+    /// The same with the NVIDIA ones counted against card `gpu`, as
+    /// `nvidia:1` for the second: what a channel put on that card plans with.
+    pub fn slots_on(&self, gpu: Option<u32>) -> Vec<EncoderSlot> {
+        let mut slots: Vec<EncoderSlot> = self.encoders.iter().map(slot).collect();
+        if let Some(g) = gpu {
+            for s in slots.iter_mut().filter(|s| s.device.as_deref() == Some(NVIDIA)) {
+                s.device = Some(device_name(g));
+            }
+        }
+        slots
     }
 
     pub fn encoder(&self, id: &str) -> Option<&VideoEntry> {

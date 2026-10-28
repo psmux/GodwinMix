@@ -29,6 +29,13 @@ pub struct Profile {
     encs: Vec<Enc>,
 }
 
+/// A device's family: `nvidia` for `nvidia:1`, the name itself otherwise.
+/// The planner counts a second NVIDIA card as `nvidia:1`, and the first as
+/// `nvidia`, which is what calibrations have always called it.
+pub fn family(device: &str) -> &str {
+    device.split_once(':').map_or(device, |(f, _)| f)
+}
+
 impl Profile {
     pub fn from_calibration(cal: Calibration) -> Profile {
         let margin = if cal.software_margin > 0.0 { cal.software_margin } else { 1.0 };
@@ -110,11 +117,10 @@ impl Profile {
     /// How many sessions `device` opens at once, when it refused during
     /// calibration. None means no limit was found.
     pub fn session_limit(&self, device: &str) -> Option<u32> {
-        self.encs
-            .iter()
-            .filter(|e| e.cal.slot.device.as_deref() == Some(device))
-            .filter_map(|e| e.cal.sessions.and_then(|s| s.limit()))
-            .min()
+        let of = |d: &str| self.encs.iter().filter(|e| e.cal.slot.device.as_deref() == Some(d)).filter_map(|e| e.cal.sessions.and_then(|s| s.limit())).min();
+        // A second card of a family is calibrated as the first: the driver,
+        // and so the session limit, is the same for both.
+        of(device).or_else(|| (family(device) != device).then(|| of(family(device))).flatten())
     }
 
     /// Every hardware device calibration saw.

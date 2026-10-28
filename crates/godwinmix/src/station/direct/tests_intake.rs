@@ -111,3 +111,34 @@ fn an_alarm_keeps_the_time_it_began_on_every_read_until_it_clears() {
     take_event(&st, "direct.health", &cc(3_000));
     assert_eq!(at(&st.direct.health_of(&st, "feed")), Some(3_000), "a new alarm after it cleared has its own start");
 }
+
+/// A headend remakes a channel by removing its show and adding it again
+/// under the same id. The host may never see the show go: its row comes
+/// back the same, its input runs on and says nothing new. What it said must
+/// come back with the show, or the channel waits for ever for an input that
+/// is live; a show made again on another input starts from nothing.
+#[test]
+fn a_show_made_again_on_the_same_input_gets_back_what_its_input_said() {
+    let (st, _heard) = station("remade");
+    let live = json!({"show": "feed", "state": "live", "since_ms": 1, "relay": "127.0.0.1:1", "stream": "~feed/main",
+                      "video": {"codec": "mpeg2", "width": 1920, "height": 1080, "fps": 29.97, "kbps": 6000}});
+    take_event(&st, "direct.input", &live);
+    let record = st.registry.lock().get("feed").cloned().unwrap();
+    let said = |st: &Station| st.direct.seen.lock().get("feed").is_some_and(|s| s.input.is_some());
+
+    st.registry.lock().records.retain(|r| r.id != "feed");
+    st.direct.forget("feed", record.input.as_ref());
+    let _ = st.direct.table(&st);
+    assert!(!said(&st), "gone, nothing is said of it");
+    st.registry.lock().records.push(record.clone());
+    let _ = st.direct.table(&st);
+    assert!(said(&st), "made again on the same input before the host said anything new");
+
+    st.registry.lock().records.retain(|r| r.id != "feed");
+    st.direct.forget("feed", record.input.as_ref());
+    let mut other = record.clone();
+    other.input.as_mut().unwrap().uri = "udp://@239.1.1.2:5000".into();
+    st.registry.lock().records.push(other);
+    let _ = st.direct.table(&st);
+    assert!(!said(&st), "another input says its own once it is live");
+}

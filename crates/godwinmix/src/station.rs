@@ -26,6 +26,7 @@ mod channel_feed;
 pub mod direct;
 pub mod child;
 mod files;
+pub mod gpus;
 mod host;
 pub(crate) mod ingest;
 pub mod packager;

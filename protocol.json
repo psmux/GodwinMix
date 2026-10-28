@@ -1995,6 +1995,17 @@
             "null"
           ]
         },
+        "gpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GpuPick"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Put every one of them on this GPU, or `\"auto\"` to spread them over\nevery card by load. `auto` places them again at once, which restarts\nthe ones that move."
+        },
         "interface": {
           "description": "Join every multicast input on this card. Empty: the default route's.",
           "type": [
@@ -2073,6 +2084,15 @@
           "description": "Set for a stream of the Flussonic config this station follows: the\nfile. An edit here takes the channel out of the file's hands (see\n`headend.channel.update`).",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "on_gpu": {
+          "description": "The GPU its conversion runs on now, once planned on one.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
             "null"
           ]
         },
@@ -3636,6 +3656,21 @@
         "installed"
       ],
       "type": "object"
+    },
+    "DeviceIdMode": {
+      "description": "What an imported `transcoder deviceid=N` does.",
+      "oneOf": [
+        {
+          "const": "spread",
+          "description": "Every imported channel is placed on the GPU with the least work, as\n`gpu: \"auto\"`. Flussonic writes `deviceid=0` on every stream unless\ntold otherwise, so on a machine with two cards this is what splits\nthe channels between them. The recommended choice.",
+          "type": "string"
+        },
+        {
+          "const": "file",
+          "description": "`deviceid=N` puts the channel on GPU N, as written.",
+          "type": "string"
+        }
+      ]
     },
     "DeviceToken": {
       "description": "One device token, without its secret.",
@@ -6912,6 +6947,13 @@
     "GpuDevice": {
       "description": "One GPU: what it is, its newest reading and the ones before it.",
       "properties": {
+        "channels": {
+          "description": "The shows and channels whose conversion runs on this card, by id.\nFilled by a station; empty from a core on its own.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "driver": {
           "type": [
             "string",
@@ -6944,6 +6986,107 @@
         "name",
         "now"
       ],
+      "type": "object"
+    },
+    "GpuMove": {
+      "description": "One show or channel `gpu.rebalance` placed.",
+      "properties": {
+        "from": {
+          "description": "The card it was on, if it was on one.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "to"
+      ],
+      "type": "object"
+    },
+    "GpuPick": {
+      "anyOf": [
+        {
+          "description": "A CUDA device index, as `gpu.status` numbers the cards.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "$ref": "#/$defs/GpuWord",
+          "description": "`\"auto\"`."
+        }
+      ],
+      "description": "Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA\ndevice index (0 is the first card), or `\"auto\"`, the card with the least\nwork when the channel starts. All three steps stay on that one card, so\na picture never crosses from one card's memory to another's."
+    },
+    "GpuRebalance": {
+      "description": "`gpu.rebalance`'s answer.",
+      "properties": {
+        "dry_run": {
+          "type": "boolean"
+        },
+        "gpus": {
+          "description": "The cards placed on, by CUDA device index.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "kept": {
+          "description": "How many were placed and stay where they are.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "moved": {
+          "description": "Each one whose card changes, or would. A move restarts its encode,\nso its HLS output starts a new segment.",
+          "items": {
+            "$ref": "#/$defs/GpuMove"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "moved",
+        "kept",
+        "dry_run",
+        "gpus"
+      ],
+      "type": "object"
+    },
+    "GpuRebalanceRequest": {
+      "additionalProperties": false,
+      "description": "`gpu.rebalance`.",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "description": "True: answer where each would go, and move nothing.",
+          "type": "boolean"
+        },
+        "only": {
+          "description": "Only these shows or channels, by id. Left out: every one placed by\n`auto`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "GpuSample": {
@@ -7125,6 +7268,13 @@
       },
       "type": "object"
     },
+    "GpuWord": {
+      "description": "The one word [`GpuPick`] takes.",
+      "enum": [
+        "auto"
+      ],
+      "type": "string"
+    },
     "GraphicListing": {
       "description": "`scene.graphic.list`.",
       "properties": {
@@ -7214,6 +7364,15 @@
           "default": true,
           "description": "False: kept, and its show stopped.",
           "type": "boolean"
+        },
+        "gpu": {
+          "description": "The NVIDIA GPU its conversion runs on, a CUDA device index (0 is the\nfirst card). Left out: placed on the card with the least work when\nit starts, and kept there while it runs. A Flussonic `deviceid` is\nread into it when the import takes the file's numbers as written.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "hls": {
           "$ref": "#/$defs/ChannelHls",
@@ -7369,6 +7528,17 @@
       "additionalProperties": false,
       "description": "`headend.import`. One of `text` and `path`.",
       "properties": {
+        "deviceid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeviceIdMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What a `transcoder deviceid=N` means. Left out: `[headend]\nflussonic_deviceid`, which is `spread` unless set."
+        },
         "dry_run": {
           "description": "Left out: true. Read the config, price its shows and make nothing.\nFalse makes them.",
           "type": [
@@ -7416,6 +7586,15 @@
             "string",
             "null"
           ]
+        },
+        "gpus": {
+          "description": "The NVIDIA GPUs a channel may be put on, by CUDA device index. Empty\non a machine with none.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
         },
         "profiles": {
           "description": "The built in profiles, then the ones saved here.",
@@ -16470,6 +16649,17 @@
             }
           ]
         },
+        "gpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GpuPick"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Which NVIDIA GPU the decode, the scale and the encode run on. Left\nout, the station's `[hardware] gpus` decides: the first card, or\nspread over every card as `auto` is. A channel placed by `auto` stays\non its card while it runs; `gpu.rebalance` places it again. A card\nthis machine does not have is taken as `auto`."
+        },
         "height": {
           "format": "uint32",
           "minimum": 0,
@@ -20001,6 +20191,32 @@
     },
     {
       "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "rebalance_gpus"
+      },
+      "mutating": true,
+      "name": "gpu.rebalance",
+      "params": {
+        "$ref": "#/$defs/GpuRebalanceRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/gpu/rebalance"
+      },
+      "result": {
+        "$ref": "#/$defs/GpuRebalance"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it."
+    },
+    {
+      "destructive": false,
       "idempotent": true,
       "mcp": {
         "destructiveHint": false,
@@ -20023,7 +20239,7 @@
       },
       "scope": "read",
       "since": "1",
-      "summary": "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."
+      "summary": "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."
     },
     {
       "destructive": false,

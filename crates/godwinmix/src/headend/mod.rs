@@ -83,6 +83,8 @@ pub struct Settings {
     /// ingest plugin.
     pub allow_unsigned: bool,
     pub marketplaces_only: Vec<String>,
+    /// `[headend] flussonic_deviceid`: `spread` (the default) or `file`.
+    pub deviceid: godwinmix_flussonic::import::DeviceId,
 }
 
 fn table_path(cfg: &Config, key: &str) -> Option<PathBuf> {
@@ -100,15 +102,17 @@ pub fn settings(args: &Args, cfg: Option<&Config>) -> Result<Settings> {
         log: args.flussonic_log.clone().or_else(|| from_table("flussonic_log")),
         allow_unsigned: cfg.is_none_or(|c| c.plugins.allow_unsigned),
         marketplaces_only: cfg.map(|c| c.marketplaces_only()).unwrap_or_default(),
+        deviceid: apply::deviceid(cfg)?,
     })
 }
+
 
 /// `--check`: the import's plan and notes, as text.
 pub fn check(s: &Settings) -> Result<String> {
     let file = s.file.as_ref().context("--check reads a Flussonic config: give --flussonic FILE")?;
     let text = std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
     let doc = godwinmix_flussonic::Document::parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", file.display()))?;
-    let import = godwinmix_flussonic::import::import(&doc.config);
+    let import = godwinmix_flussonic::import::import_with(&doc.config, &godwinmix_flussonic::import::Options { deviceid: s.deviceid });
     let copies = import.shows.iter().filter(|p| p.copy).count();
     let mut out = format!(
         "{}: {} streams, {} converted and {} copied, {} off\n",

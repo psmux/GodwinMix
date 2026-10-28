@@ -547,6 +547,8 @@ class ChannelBulkRequest(TypedDict, total=False):
     custom: Union[TranscodeProfile, None]
     # With `profile` `custom`: the conversion every one of them takes.
     enabled: Optional[bool]
+    gpu: Union[GpuPick, None]
+    # Put every one of them on this GPU, or `"auto"` to spread them over every card by load. `auto` places them again at once, which restarts the ones that move.
     interface: Optional[str]
     # Join every multicast input on this card. Empty: the default route's.
     names: List[str]
@@ -572,6 +574,8 @@ class ChannelEntry(TypedDict, total=False):
     # Set for a channel that came from the followed file and was edited here: the file it no longer follows. `headend.channel.follow` hands it back.
     follows: Optional[str]
     # Set for a stream of the Flussonic config this station follows: the file. An edit here takes the channel out of the file's hands (see `headend.channel.update`).
+    on_gpu: Optional[int]
+    # The GPU its conversion runs on now, once planned on one.
     show: Optional[str]
     # The show it runs as, once made.
 
@@ -1894,6 +1898,8 @@ class GovernorStatus(TypedDict, total=False):
 class GpuDevice(TypedDict, total=False):
     """One GPU: what it is, its newest reading and the ones before it."""
 
+    channels: List[str]
+    # The shows and channels whose conversion runs on this card, by id. Filled by a station; empty from a core on its own.
     driver: Optional[str]
     history: List[GpuSample]
     # One a second, oldest first, the last two minutes at most.
@@ -1901,6 +1907,31 @@ class GpuDevice(TypedDict, total=False):
     name: str
     # `NVIDIA GeForce RTX 3060`.
     now: GpuSample
+
+GpuMove = TypedDict("GpuMove", {
+    "from": "Optional[int]",
+    "id": "str",
+    "to": "int",
+}, total=False)
+
+class GpuRebalance(TypedDict, total=False):
+    """`gpu.rebalance`'s answer."""
+
+    dry_run: bool
+    gpus: List[int]
+    # The cards placed on, by CUDA device index.
+    kept: int
+    # How many were placed and stay where they are.
+    moved: List[GpuMove]
+    # Each one whose card changes, or would. A move restarts its encode, so its HLS output starts a new segment.
+
+class GpuRebalanceRequest(TypedDict, total=False):
+    """`gpu.rebalance`."""
+
+    dry_run: bool
+    # True: answer where each would go, and move nothing.
+    only: Optional[List[str]]
+    # Only these shows or channels, by id. Left out: every one placed by `auto`.
 
 class GpuSample(TypedDict, total=False):
     """One reading of one GPU. A number the driver would not give is left out."""
@@ -1976,6 +2007,8 @@ class HeadendChannel(TypedDict, total=False):
     # The conversion, when `profile` is `custom`. A Flussonic `transcoder` line is imported as one of these.
     enabled: bool
     # False: kept, and its show stopped.
+    gpu: Optional[int]
+    # The NVIDIA GPU its conversion runs on, a CUDA device index (0 is the first card). Left out: placed on the card with the least work when it starts, and kept there while it runs. A Flussonic `deviceid` is read into it when the import takes the file's numbers as written.
     hls: ChannelHls
     input: ChannelInput
     name: str
@@ -2024,6 +2057,8 @@ class HeadendImportReport(TypedDict, total=False):
 class HeadendImportRequest(TypedDict, total=False):
     """`headend.import`. One of `text` and `path`."""
 
+    deviceid: Union[DeviceIdMode, None]
+    # What a `transcoder deviceid=N` means. Left out: `[headend] flussonic_deviceid`, which is `spread` unless set.
     dry_run: Optional[bool]
     # Left out: true. Read the config, price its shows and make nothing. False makes them.
     path: Optional[str]
@@ -2040,6 +2075,8 @@ class HeadendSetup(TypedDict, total=False):
     # The video encoders the planner may pick, GPU ones first.
     following: Optional[str]
     # The Flussonic config this station follows, when it follows one.
+    gpus: List[int]
+    # The NVIDIA GPUs a channel may be put on, by CUDA device index. Empty on a machine with none.
     profiles: List[TranscodeProfile]
     # The built in profiles, then the ones saved here.
 
@@ -4553,6 +4590,8 @@ class VideoWant(TypedDict, total=False):
     fit: Union[Fit, None]
     # How a picture of another shape goes into the size asked for. Pad when left out, in black, which is what scaling has always done.
     fps: Union[Fps, None]
+    gpu: Union[GpuPick, None]
+    # Which NVIDIA GPU the decode, the scale and the encode run on. Left out, the station's `[hardware] gpus` decides: the first card, or spread over every card as `auto` is. A channel placed by `auto` stays on its card while it runs; `gpu.rebalance` places it again. A card this machine does not have is taken as `auto`.
     height: Optional[int]
     keyframe_frames: Optional[int]
     # Keyframe interval in frames of the source's own rate, as Flussonic's `gop` is written. Taken over `keyframe_ms` when both are set.
@@ -4717,6 +4756,51 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+# What an alarm is about.
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
+
+# The nine alignment keywords, used to place content inside its frame.
+Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
+
+AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
+
+# OBS's blend enum, so an import carries across unchanged.
+Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
+
+# How the bytes leave. Decides which codecs are allowed: FLV carries H.264 (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 'dash', 'rtp', 'webrtc']
+
+ConversionPhase = Literal['running', 'done', 'failed']
+
+# Copied as it arrives, or converted.
+DestinationMode = Literal['copy', 'transcode']
+
+# Which of the three a channel has.
+FeedKind = Literal['programme', 'encoder', 'pull']
+
+# The one word [`GpuPick`] takes.
+GpuWord = Literal['auto']
+
+ItemEdge = Literal['left', 'right', 'top', 'bottom']
+
+ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe', 'hold']
+
+# A mouse button.
+PageButton = Literal['left', 'middle', 'right']
+
+ResponseFormat = Literal['concise', 'detailed']
+
+# What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
+Scope = Literal['plugin', 'read', 'operate', 'admin']
+
+# For the user, in their home folder, or for one project folder.
+SetupScope = Literal['user', 'project']
+
+TaskState = Literal['running', 'completed', 'failed', 'cancelled']
+
+# Which sound tracks a rendition converts.
+Tracks = Literal['first', 'all']
+
 # What a write does to a file.
 Action = Literal['create', 'merge', 'update', 'unchanged']
 
@@ -4729,19 +4813,11 @@ AgentExt = Union[bool, Dict[str, Any]]
 # The agent tools this mixer knows how to set up.
 AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
-# What an alarm is about.
-AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
-
-# The nine alignment keywords, used to place content inside its frame.
-Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
-
 # When a change to a key takes effect.
 Applies = Literal['live', 'next_source', 'restart']
 
 # Whether the item's source is heard. A source is audible when any live item of it says so, which is OBS's behaviour and changes no pad topology.
 Audio = Literal['follow', 'always', 'never']
-
-AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
 
 # Where a source with a backup stands.
 BackupPhase = Literal['ready', 'lost', 'on_backup', 'returning', 'main_back']
@@ -4749,37 +4825,26 @@ BackupPhase = Literal['ready', 'lost', 'on_backup', 'returning', 'main_back']
 # Where a binding writes. One of three shapes.
 BindingTarget = Dict[str, Any]
 
-# OBS's blend enum, so an import carries across unchanged.
-Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
-
 # How media crosses between a node and the core.
 BridgeTransport = Literal['rtp', 'srt', 'whip']
 
 # A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart because it has a port of its own.
 ChannelProtocol = Literal['rtmp', 'srt', 'whip']
 
-# How the bytes leave. Decides which codecs are allowed: FLV carries H.264 (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
-Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 'dash', 'rtp', 'webrtc']
-
-ConversionPhase = Literal['running', 'done', 'failed']
-
 # Whether an interlaced picture is made progressive.
 Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
 
-# Copied as it arrives, or converted.
-DestinationMode = Literal['copy', 'transcode']
-
 # Where a destination has got to.
 DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
+
+# What an imported `transcoder deviceid=N` does.
+DeviceIdMode = Literal['spread', 'file']
 
 # Where a rendition's picture is encoded, when it must be one or the other.
 EncoderPick = Literal['gpu', 'cpu']
 
 # How the body is read. `auto` decides from the content type and the first byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
 FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Literal['text'], Literal['sse']]
-
-# Which of the three a channel has.
-FeedKind = Literal['programme', 'encoder', 'pull']
 
 # The three ways a channel is fed, as `channel.add` and `channel.set` take them: `{"kind": "programme"}`, `{"kind": "encoder"}` or `{"kind": "pull", "url": "rtmp://..."}`.
 FeedRequest = Dict[str, Any]
@@ -4811,15 +4876,14 @@ FxKind = Literal['stinger', 'overlay', 'matte', 'shader']
 # What an item is, which decides how it is drawn and how it is added.
 GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 'text', 'set', 'transition', 'effect']
 
+# Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA device index (0 is the first card), or `"auto"`, the card with the least work when the channel starts. All three steps stay on that one card, so a picture never crosses from one card's memory to another's.
+GpuPick = Union[int, GpuWord]
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
-
-ItemEdge = Literal['left', 'right', 'top', 'bottom']
-
-ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe', 'hold']
 
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
@@ -4843,9 +4907,6 @@ OutputState = Union[Literal['connecting', 'live', 'reconnecting', 'failed'], Lit
 # Where `source.page.navigate` goes.
 PageAction = Union[Literal['back', 'forward', 'reload'], Literal['go']]
 
-# A mouse button.
-PageButton = Literal['left', 'middle', 'right']
-
 # One thing the operator did to the page.
 PageEvent = Dict[str, Any]
 
@@ -4861,19 +4922,11 @@ ProgrammeExt = Union[bool, Dict[str, Any]]
 # What an output asks for: a whole request, or a preset by id. A request's `id` is replaced by the output's own id (a ladder's rungs get `<output>-<rung>`), so a client may send any slug there.
 RenditionChoice = Union[PresetRef, LadderRef, RenditionRequest]
 
-ResponseFormat = Literal['concise', 'detailed']
-
 # How a core that exits gets started again.
 RestartHow = Literal['supervised', 'none']
 
 # How the programme goes back to a source that came back.
 ReturnMode = Literal['auto', 'manual']
-
-# What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
-Scope = Literal['plugin', 'read', 'operate', 'admin']
-
-# For the user, in their home folder, or for one project folder.
-SetupScope = Literal['user', 'project']
 
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
@@ -4894,8 +4947,6 @@ ShowWork = Literal['mix', 'transcode', 'copy']
 
 SourceState = Literal['connecting', 'live', 'stalled', 'failed']
 
-TaskState = Literal['running', 'completed', 'failed', 'cancelled']
-
 # `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
 TelemetryExt = Union[bool, Dict[str, Any]]
 
@@ -4904,9 +4955,6 @@ TemplateFormat = Literal['svg', 'html']
 
 # Where a template comes from.
 TemplateOrigin = Literal['pack', 'library']
-
-# Which sound tracks a rendition converts.
-Tracks = Literal['first', 'all']
 
 # A name, or an object.
 Transition = Union[str, TransitionRequest]
@@ -4986,7 +5034,8 @@ METHODS = (
     {"name": "gallery.show", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/show"), "summary": 'Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.'},
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
-    {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
+    {"name": "gpu.rebalance", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gpu/rebalance"), "summary": 'Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.'},
+    {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
     {"name": "headend.channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/add"), "summary": "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."},
     {"name": "headend.channel.bulk", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/bulk"), "summary": 'The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.'},
     {"name": "headend.channel.follow", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/follow"), "summary": 'Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.'},
@@ -6312,12 +6361,26 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         return await self._call("governor.status", params)
 
+    async def gpu_rebalance(
+        self,
+        *,
+        dry_run: Optional[bool] = None,
+        only: Optional[List[str]] = None,
+    ) -> GpuRebalance:
+        """Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it."""
+        params: Dict[str, Any] = {}
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if only is not None:
+            params["only"] = only
+        return await self._call("gpu.rebalance", params)
+
     async def gpu_status(
         self,
         *,
         since_ms: Optional[int] = None,
     ) -> GpuStatus:
-        """Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."""
+        """Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."""
         params: Dict[str, Any] = {}
         if since_ms is not None:
             params["since_ms"] = since_ms
@@ -6342,6 +6405,7 @@ class GeneratedMethods:
         *,
         custom: Optional[Union[TranscodeProfile, None]] = None,
         enabled: Optional[bool] = None,
+        gpu: Optional[Union[GpuPick, None]] = None,
         interface: Optional[str] = None,
         profile: Optional[str] = None,
     ) -> ChannelChange:
@@ -6352,6 +6416,8 @@ class GeneratedMethods:
             params["custom"] = custom
         if enabled is not None:
             params["enabled"] = enabled
+        if gpu is not None:
+            params["gpu"] = gpu
         if interface is not None:
             params["interface"] = interface
         if profile is not None:
@@ -6404,12 +6470,15 @@ class GeneratedMethods:
     async def headend_import(
         self,
         *,
+        deviceid: Optional[Union[DeviceIdMode, None]] = None,
         dry_run: Optional[bool] = None,
         path: Optional[str] = None,
         text: Optional[str] = None,
     ) -> HeadendImportReport:
         """Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."""
         params: Dict[str, Any] = {}
+        if deviceid is not None:
+            params["deviceid"] = deviceid
         if dry_run is not None:
             params["dry_run"] = dry_run
         if path is not None:

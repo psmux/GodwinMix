@@ -139,6 +139,12 @@ pub struct HeadendChannel {
     pub hls: ChannelHls,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<ChannelOutput>,
+    /// The NVIDIA GPU its conversion runs on, a CUDA device index (0 is the
+    /// first card). Left out: placed on the card with the least work when
+    /// it starts, and kept there while it runs. A Flussonic `deviceid` is
+    /// read into it when the import takes the file's numbers as written.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<u32>,
     /// Where it came from: `added here`, `import of <source>`, or
     /// `<file>, edited here`. Set by the station; ignored when sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -169,6 +175,9 @@ pub struct ChannelEntry {
     /// it back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detached_from: Option<String>,
+    /// The GPU its conversion runs on now, once planned on one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_gpu: Option<u32>,
 }
 
 /// An encoder this machine has, for the profile editor's choice.
@@ -191,6 +200,10 @@ pub struct HeadendSetup {
     pub profiles: Vec<TranscodeProfile>,
     /// The video encoders the planner may pick, GPU ones first.
     pub encoders: Vec<HeadendEncoder>,
+    /// The NVIDIA GPUs a channel may be put on, by CUDA device index. Empty
+    /// on a machine with none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpus: Vec<u32>,
     /// The Flussonic config this station follows, when it follows one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub following: Option<String>,
@@ -246,6 +259,11 @@ pub struct ChannelBulkRequest {
     /// Join every multicast input on this card. Empty: the default route's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interface: Option<String>,
+    /// Put every one of them on this GPU, or `"auto"` to spread them over
+    /// every card by load. `auto` places them again at once, which restarts
+    /// the ones that move.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<crate::rendition::GpuPick>,
 }
 
 /// `headend.channel.remove` and `headend.channel.follow`.

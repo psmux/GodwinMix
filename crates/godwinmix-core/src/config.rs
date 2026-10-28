@@ -680,6 +680,21 @@ pub struct HardwareConfig {
     /// record for this platform; pin one to run the soak that earns it.
     #[serde(default)]
     pub graphics: Accel,
+    /// Which NVIDIA GPU a channel's conversion runs on when its rendition
+    /// names none. `first` keeps every one on the first card; `spread`
+    /// places each on the card with the least work when it starts, as a
+    /// rendition's `gpu = "auto"` does.
+    #[serde(default)]
+    pub gpus: GpuSpread,
+}
+
+/// `[hardware] gpus`.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum GpuSpread {
+    #[default]
+    First,
+    Spread,
 }
 
 /// Which RTMP client implementation to pull a source with.

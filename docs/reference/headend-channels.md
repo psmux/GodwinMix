@@ -60,6 +60,7 @@ tried again every 30 seconds.
 | `hls.window` | seconds of segments in the playlist; the packager's when left out |
 | `outputs[].uri` | `udp://`, `srt://` or `rtmp://` |
 | `outputs[].copy` | true sends the input as it comes, whatever the profile |
+| `gpu` | the NVIDIA card its conversion runs on, a CUDA device index; left out, the card with the least work when it starts (`video.gpu = "auto"`), where it stays while it runs. `headend.channel.list` answers `gpus`, the cards there are, and each entry's `on_gpu`, the card it is on now |
 | `origin` | set by the station: `added here`, `import of <source>`, or `<file>, edited here` |
 
 ## Profiles
@@ -98,7 +99,7 @@ marks as interlaced (`auto`) and puts a keyframe every 2000 ms.
 | `headend.channel.list` | read | nothing | `{channels: [{channel, show, follows, detached_from}], profiles, encoders: [{id, codec, on}], following}` |
 | `headend.channel.add` | admin | `{channels, dry_run}` | `{done, refused: [{index, name, why}], dry_run}` |
 | `headend.channel.update` | admin | `{name, channel}` | `{done, refused, restarted}` |
-| `headend.channel.bulk` | admin | `{names, profile?, custom?, enabled?, interface?}` | `{done, refused, restarted}` |
+| `headend.channel.bulk` | admin | `{names, profile?, custom?, enabled?, interface?, gpu?}` | `{done, refused, restarted}`. `gpu` is a card for every one, or `"auto"`, which places them by load and evens the cards out at once (`gpu.rebalance` for those channels) |
 | `headend.channel.remove` | admin, destructive | `{names}` | `{done, refused}` |
 | `headend.channel.follow` | admin | `{names}` | `{done, refused}` |
 | `headend.profile.save` | admin | `{profile}` | `{id, channels}`: the channels that take it |

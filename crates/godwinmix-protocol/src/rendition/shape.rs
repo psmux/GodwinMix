@@ -80,6 +80,38 @@ pub enum EncoderPick {
     Cpu,
 }
 
+/// Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA
+/// device index (0 is the first card), or `"auto"`, the card with the least
+/// work when the channel starts. All three steps stay on that one card, so
+/// a picture never crosses from one card's memory to another's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum GpuPick {
+    /// A CUDA device index, as `gpu.status` numbers the cards.
+    Index(u32),
+    /// `"auto"`.
+    Word(GpuWord),
+}
+
+/// The one word [`GpuPick`] takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum GpuWord {
+    Auto,
+}
+
+impl GpuPick {
+    pub const AUTO: GpuPick = GpuPick::Word(GpuWord::Auto);
+
+    /// The card asked for, or None for `auto`.
+    pub fn index(self) -> Option<u32> {
+        match self {
+            GpuPick::Index(i) => Some(i),
+            GpuPick::Word(_) => None,
+        }
+    }
+}
+
 /// Which sound tracks a rendition converts.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]

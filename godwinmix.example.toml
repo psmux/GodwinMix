@@ -276,6 +276,12 @@ encode = "auto"
 # add and remove are exactly the ones a mixer exercises. Pin one to run the
 # soak that earns it a promotion.
 graphics = "auto"
+# On a machine with several NVIDIA cards, which one a channel's conversion
+# runs on when its rendition names none: `first` keeps every one on card 0,
+# `spread` puts each on the card with the least work when it starts. A
+# headend's imported channels are spread either way unless [headend]
+# flussonic_deviceid = "file". See docs/how-to/split-channels-across-gpus.md.
+# gpus = "first"
 
 # --- codecs ----------------------------------------------------------------
 # Which codec the programme is encoded in, which element does it, and what that

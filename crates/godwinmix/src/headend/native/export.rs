@@ -94,7 +94,10 @@ fn stream(c: &HeadendChannel, profiles: &[TranscodeProfile], notes: &mut Vec<Str
         let _ = writeln!(s, "  input {};", input(&b.as_input()));
     }
     if let Some(line) = compile::profile_of(c, profiles).ok().and_then(|p| transcoder(p, notes, &c.name)) {
-        let _ = writeln!(s, "  transcoder {line};");
+        // The card it is set on, as Flussonic numbers them. A channel placed
+        // by load says none, which an import that spreads reads back as auto.
+        let device = c.gpu.map(|g| format!("deviceid={g} ")).unwrap_or_default();
+        let _ = writeln!(s, "  transcoder {device}{line};");
     }
     let _ = writeln!(s, "  segment_duration {};", f64::from(c.hls.segment_ms) / 1000.0);
     for o in &c.outputs {

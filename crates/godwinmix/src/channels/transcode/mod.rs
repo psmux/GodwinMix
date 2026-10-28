@@ -23,11 +23,14 @@
 
 mod admit;
 mod answers;
+mod cards;
 mod governor;
 mod gpu;
+mod gpus;
 mod machine;
 mod model;
 mod outcome;
+mod place;
 mod plan;
 mod price;
 mod refuse;
@@ -43,6 +46,8 @@ mod watch;
 mod tests;
 #[cfg(test)]
 mod tests_headend;
+#[cfg(test)]
+mod tests_gpus;
 
 use std::sync::OnceLock;
 
@@ -86,11 +91,13 @@ pub struct Transcode {
     governor: governor::Seam,
     machine: OnceLock<Machine>,
     state: Mutex<State>,
+    /// `[hardware] gpus = "spread"`.
+    spread: std::sync::atomic::AtomicBool,
 }
 
 impl Transcode {
     pub fn new(data_dir: Option<std::path::PathBuf>) -> Transcode {
-        Transcode { governor: governor::Seam::new(data_dir), machine: OnceLock::new(), state: Mutex::default() }
+        Transcode { governor: governor::Seam::new(data_dir), machine: OnceLock::new(), state: Mutex::default(), spread: Default::default() }
     }
 
     /// For tests: a machine and a governor stated rather than found.

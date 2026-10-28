@@ -24,7 +24,7 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     assert_eq!(
         *r,
         json!({"video": {"codec": "h264", "width": 1280, "height": 720, "bitrate_kbps": 1500, "keyframe_frames": 50,
-                         "fit": "pad", "pad_color": "#000000", "deinterlace": "off", "preset": "p1"},
+                         "fit": "pad", "pad_color": "#000000", "deinterlace": "off", "preset": "p1", "gpu": "auto"},
                "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}})
     );
     assert_eq!((r["audio"]["codec"].as_str(), r["audio"]["bitrate_kbps"].as_u64()), (Some("aac"), Some(128)));
@@ -79,4 +79,33 @@ fn a_title_change_is_not_a_media_change() {
     let b = &of("stream A {\n  title New;\n  input rtmp://h/a;\n}\n").shows[0];
     let c = &of("stream A {\n  input rtmp://h/b;\n}\n").shows[0];
     assert!(a.same_media(b) && !a.same_media(c));
+}
+
+fn with(text: &str, deviceid: DeviceId) -> Import {
+    import_with(&Document::parse(text).unwrap().config, &Options { deviceid })
+}
+
+const TWO_CARDS: &str = "stream A {\n  input udp://239.0.0.1:5000;\n  transcoder deviceid=0 hw=nvenc vb=1500k size=1280x720 ab=128k;\n}\n\
+stream B {\n  input udp://239.0.0.2:5000;\n  transcoder deviceid=1 hw=nvenc vb=1500k size=1280x720 ab=128k;\n}\n\
+stream C {\n  input udp://239.0.0.3:5000;\n  transcoder hw=nvenc vb=1500k ab=128k;\n}\n";
+
+#[test]
+fn deviceid_spreads_by_default_so_a_file_of_deviceid_0_is_split_over_the_cards() {
+    let i = of(TWO_CARDS);
+    for s in &i.shows {
+        assert_eq!(s.outputs[0]["rendition"]["video"]["gpu"], "auto", "{}", s.name);
+    }
+    assert_eq!(with(TWO_CARDS, DeviceId::Spread).shows, i.shows);
+}
+
+#[test]
+fn deviceid_as_written_puts_each_channel_on_its_card() {
+    let i = with(TWO_CARDS, DeviceId::File);
+    let gpu = |n: &str| i.shows.iter().find(|s| s.name == n).unwrap().outputs[0]["rendition"]["video"]["gpu"].clone();
+    assert_eq!(gpu("A"), json!(0));
+    assert_eq!(gpu("B"), json!(1));
+    // No deviceid is Flussonic's own default, the first card.
+    assert_eq!(gpu("C"), json!(0));
+    // deviceid is acted on, so it is in no note.
+    assert!(!i.notes.iter().any(|(_, n)| n.what.contains("deviceid")), "{:?}", i.notes);
 }

@@ -98,6 +98,10 @@ def render(model):
 
 
 
+def _is_words(schema):
+    return isinstance(schema, dict) and ("enum" in schema or "const" in schema) and "anyOf" not in schema and "oneOf" not in schema
+
+
 def _is_object(schema):
     kinds = schema.get("type")
     is_object = kinds == "object" or (isinstance(kinds, list) and "object" in kinds)
@@ -105,12 +109,14 @@ def _is_object(schema):
 
 
 def _types(model):
-    # Classes first, aliases last. Annotations inside a class body are lazy
-    # (`from __future__ import annotations`), but an alias such as
-    # `Transition = Union[str, TransitionRequest]` is evaluated when the
-    # module loads, so every class it might name has to exist by then.
+    # Classes first, then the aliases of plain words, then the rest.
+    # Annotations inside a class body are lazy (`from __future__ import
+    # annotations`), but an alias such as `Transition = Union[str,
+    # TransitionRequest]` is evaluated when the module loads, so every class
+    # and every word list it might name (`GpuPick = Union[int, GpuWord]`) has
+    # to exist by then.
     out = []
-    ordered = sorted(model.types.items(), key=lambda kv: 0 if _is_object(kv[1]) else 1)
+    ordered = sorted(model.types.items(), key=lambda kv: 0 if _is_object(kv[1]) else 1 if _is_words(kv[1]) else 2)
     for name, schema in ordered:
         kinds = schema.get("type")
         is_object = kinds == "object" or (isinstance(kinds, list) and "object" in kinds)

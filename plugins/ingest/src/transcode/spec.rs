@@ -49,6 +49,12 @@ impl NodeSpec {
     pub fn cuda(&self) -> bool {
         self.text("memory") == Some("cuda")
     }
+
+    /// The NVIDIA card the node runs on, when the plan names one: set on a
+    /// machine with several, and only then.
+    pub fn gpu(&self) -> Option<u32> {
+        self.raw.get("gpu").and_then(Value::as_u64).and_then(|g| u32::try_from(g).ok())
+    }
 }
 
 /// What to build for one live stream.

@@ -25,6 +25,7 @@ fn channel(name: &str) -> HeadendChannel {
         custom: None,
         hls: ChannelHls::default(),
         outputs: Vec::new(),
+        gpu: None,
         origin: None,
     }
 }
@@ -134,6 +135,40 @@ fn the_export_reads_back_as_the_same_plans() {
     let media = |p: &godwinmix_flussonic::import::ShowPlan| (p.input.clone(), p.outputs[0]["rendition"].clone(), p.disabled, p.title.clone());
     assert_eq!(media(&back[0]), media(&plan(&a, &profiles).unwrap()), "{}", out.text);
     assert_eq!(media(&back[1]), media(&plan(&b, &profiles).unwrap()), "{}", out.text);
+}
+
+/// A channel's GPU goes into its rendition, comes back as the channel's,
+/// and is `deviceid` in the export, which reads back as the same card.
+#[test]
+fn a_channel_s_gpu_is_its_rendition_s_and_its_deviceid_in_the_export() {
+    use godwinmix_flussonic::import::{import_with, DeviceId, Options};
+    let profiles = all_profiles(&[]);
+    let mut on1 = channel("CH117");
+    on1.profile = "custom".into();
+    on1.custom = Some(by_hand());
+    on1.gpu = Some(1);
+    let p = plan(&on1, &profiles).unwrap();
+    assert_eq!(p.outputs[0]["rendition"]["video"]["gpu"], 1);
+    let back = channel_of(&p, &profiles, "x");
+    assert_eq!((back.gpu, back.profile.as_str()), (Some(1), "custom"), "the card is the channel's, and the profile is still the one it was");
+    let mut auto = on1.clone();
+    auto.name = "CH118".into();
+    auto.gpu = None;
+    assert_eq!(plan(&auto, &profiles).unwrap().outputs[0]["rendition"]["video"]["gpu"], "auto", "left out: placed by load");
+    let mut named = channel("NEWS");
+    named.profile = "h264-720p-1500".into();
+    let back = channel_of(&plan(&named, &profiles).unwrap(), &profiles, "x");
+    assert_eq!((back.profile.as_str(), back.gpu), ("h264-720p-1500", None), "a built in profile is still named by it");
+
+    let s = Store { channels: vec![on1.clone(), auto.clone()], ..Store::default() };
+    let out = export::text(&s);
+    assert!(out.text.contains("transcoder deviceid=1 "), "{}", out.text);
+    assert_eq!(out.text.matches("deviceid=").count(), 1, "auto writes none: {}", out.text);
+    let doc = Document::parse(&out.text).unwrap();
+    let file = import_with(&doc.config, &Options { deviceid: DeviceId::File }).shows;
+    assert_eq!(file[0].outputs[0]["rendition"]["video"]["gpu"], 1);
+    let spread = import(&doc.config).shows;
+    assert!(spread.iter().all(|p| p.outputs[0]["rendition"]["video"]["gpu"] == "auto"));
 }
 
 #[test]

@@ -105,6 +105,48 @@ pub fn exists(factory: &str) -> bool {
     gst::ElementFactory::find(factory).is_some()
 }
 
+/// `nvh264device1dec` as (`nvh264dec`, 1): the first GPU's element name and
+/// the device a later one's name carries. None for a name without
+/// `device<N>` in it.
+pub fn cuda_base(name: &str) -> Option<(String, u32)> {
+    let at = name.find("device")?;
+    let rest = &name[at + "device".len()..];
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    let n = digits.parse().ok()?;
+    Some((format!("{}{}", &name[..at], &rest[digits.len()..]), n))
+}
+
+/// The CUDA device an NVIDIA element runs on: the decoders' and encoders'
+/// `cuda-device-id` is fixed per element, so an instance made and dropped
+/// says it. Making one opens nothing on the card. None for an element
+/// without one.
+fn device_of(factory: &gst::ElementFactory) -> Option<u32> {
+    let el = factory.create().build().ok()?;
+    el.find_property("cuda-device-id")?;
+    let v = el.property_value("cuda-device-id");
+    v.get::<u32>().ok().or_else(|| v.get::<i32>().ok().and_then(|i| u32::try_from(i).ok()))
+}
+
+/// The element that does `factory`'s work on CUDA device `device`: `factory`
+/// itself when it is that device's, else the one GStreamer registered for
+/// that device under the `device<N>` name. Every NVIDIA element of the
+/// registry is looked at, so a machine whose first card lacks a codec (and
+/// whose numbering therefore shifts) is still answered right.
+pub fn cuda_variant(factory: &str, device: u32) -> Option<String> {
+    let first = gst::ElementFactory::find(factory)?;
+    if device_of(&first).unwrap_or(0) == device {
+        return Some(factory.to_string());
+    }
+    let plugin = first.plugin_name()?;
+    let features = gst::Registry::get().features_by_plugin(&plugin);
+    features
+        .iter()
+        .filter_map(|f| f.downcast_ref::<gst::ElementFactory>().cloned())
+        .filter(|f| cuda_base(f.name().as_str()).is_some_and(|(base, _)| base == factory))
+        .find(|f| device_of(f) == Some(device))
+        .map(|f| f.name().to_string())
+}
+
 /// For a test that needs an optional element: whether it is installed, and
 /// when it is not, a line on stdout saying the test was skipped and why, so
 /// the log shows it rather than a silent pass. `cmafmux` is the usual one: it

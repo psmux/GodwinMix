@@ -13,7 +13,7 @@ use godwinmix_protocol::types::Event;
 use serde_json::{json, Value};
 use tracing::warn;
 
-use super::{keys, Channels, Record, PLUGIN};
+use super::{keys, transcode, Channels, Record, PLUGIN};
 
 impl Channels {
     /// Give the listener the table: at its next start, and now if `now`.
@@ -54,6 +54,23 @@ impl Channels {
     /// governor into the station; until then the channels keep their own.
     pub fn use_governor(&self, governor: Governor) -> bool {
         self.transcode.use_governor(governor)
+    }
+
+    /// The channels' renditions, for the GPU settings and `gpu.rebalance`.
+    pub fn transcode(&self) -> &transcode::Transcode {
+        &self.transcode
+    }
+
+    /// `gpu.rebalance` for the channels: move the fewest, then plan again
+    /// on a thread of its own, since a handler never replans.
+    pub fn rebalance_gpus(&self, only: Option<&[String]>, dry_run: bool) -> godwinmix_protocol::machine::GpuRebalance {
+        let out = self.transcode.rebalance(only, dry_run);
+        if !dry_run && !out.moved.is_empty() {
+            if let Some(me) = self.me.get().and_then(std::sync::Weak::upgrade) {
+                std::thread::spawn(move || me.replan());
+            }
+        }
+        out
     }
 
     /// One channel's plan, for `rendition.plan {scope: "channel:<id>"}`:

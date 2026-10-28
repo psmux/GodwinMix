@@ -20,6 +20,15 @@ use std::collections::BTreeMap;
 /// exercised on a runner with no plugins at all.
 pub trait Registry {
     fn has(&self, factory: &str) -> bool;
+
+    /// The element that does `factory`'s work on CUDA device `device`, when
+    /// this machine has one. GStreamer's NVIDIA plugin registers its decoders
+    /// and encoders once per GPU: `nvh264dec` on the first, then
+    /// `nvh264device1dec` and so on, each knowing its device. The default
+    /// answers `factory` itself for device 0 and nothing for any other.
+    fn on_device(&self, factory: &str, device: u32) -> Option<String> {
+        (device == 0 && self.has(factory)).then(|| factory.to_string())
+    }
 }
 
 pub struct GstRegistry;
@@ -28,9 +37,14 @@ impl Registry for GstRegistry {
     fn has(&self, factory: &str) -> bool {
         crate::probe::exists(factory)
     }
+
+    fn on_device(&self, factory: &str, device: u32) -> Option<String> {
+        crate::probe::cuda_variant(factory, device)
+    }
 }
 
-/// A registry made of names, for tests.
+/// A registry made of names, for tests. A name with `device<N>` in it, the
+/// way GStreamer names a second GPU's element, is that element on device N.
 pub struct FakeRegistry(pub std::collections::BTreeSet<String>);
 
 impl FakeRegistry {
@@ -42,6 +56,13 @@ impl FakeRegistry {
 impl Registry for FakeRegistry {
     fn has(&self, factory: &str) -> bool {
         self.0.contains(factory)
+    }
+
+    fn on_device(&self, factory: &str, device: u32) -> Option<String> {
+        if device == 0 {
+            return self.has(factory).then(|| factory.to_string());
+        }
+        self.0.iter().find(|n| crate::probe::cuda_base(n) == Some((factory.to_string(), device))).cloned()
     }
 }
 

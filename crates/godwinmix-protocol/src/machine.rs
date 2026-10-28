@@ -68,6 +68,46 @@ pub struct GpuDevice {
     /// One a second, oldest first, the last two minutes at most.
     #[serde(default)]
     pub history: Vec<GpuSample>,
+    /// The shows and channels whose conversion runs on this card, by id.
+    /// Filled by a station; empty from a core on its own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channels: Vec<String>,
+}
+
+/// `gpu.rebalance`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GpuRebalanceRequest {
+    /// Only these shows or channels, by id. Left out: every one placed by
+    /// `auto`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub only: Option<Vec<String>>,
+    /// True: answer where each would go, and move nothing.
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+/// One show or channel `gpu.rebalance` placed.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct GpuMove {
+    pub id: String,
+    /// The card it was on, if it was on one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<u32>,
+    pub to: u32,
+}
+
+/// `gpu.rebalance`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct GpuRebalance {
+    /// Each one whose card changes, or would. A move restarts its encode,
+    /// so its HLS output starts a new segment.
+    pub moved: Vec<GpuMove>,
+    /// How many were placed and stay where they are.
+    pub kept: u32,
+    pub dry_run: bool,
+    /// The cards placed on, by CUDA device index.
+    pub gpus: Vec<u32>,
 }
 
 /// `gpu.status`'s answer.

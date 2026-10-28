@@ -62,6 +62,8 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
             Ok(serde_json::to_value(status).unwrap_or_default())
         }
         "governor.calibrate" => calibrate(st, &params),
+        "gpu.status" => super::gpus::status(st, params).await,
+        "gpu.rebalance" => super::gpus::rebalance(st, params),
         m if crate::machine::methods::METHODS.contains(&m) => crate::machine::methods::answer(m, params).await,
         "network.share" => {
             let here = crate::control::methods::network::Here { open: st.tokens.is_open(), quit: &st.quit };

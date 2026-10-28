@@ -115,7 +115,7 @@ fn decode(node: &NodeSpec) -> Result<Built, String> {
     elements.push(decoder);
     match node.text("download") {
         _ if node.cuda() => elements.push(caps("video/x-raw(memory:CUDAMemory)")?),
-        Some(d) => elements.push(make(d)?),
+        Some(d) => elements.push(on_card(make(d)?, node)),
         None => {}
     }
     let tee = tee()?;
@@ -158,6 +158,18 @@ pub(super) fn appsink() -> Result<AppSink, String> {
     sink.set_max_buffers(64);
     sink.set_drop(true);
     Ok(sink)
+}
+
+/// Put a CUDA converter (`cudaconvertscale`, `cudadownload`) on the node's
+/// card. Decoders and encoders are one element per card, named by the plan.
+pub(super) fn on_card(el: gst::Element, node: &NodeSpec) -> gst::Element {
+    if let (Some(gpu), true) = (node.gpu(), el.has_property("cuda-device-id")) {
+        match i32::try_from(gpu) {
+            Ok(id) if el.find_property("cuda-device-id").is_some_and(|p| p.value_type() == glib::Type::I32) => el.set_property("cuda-device-id", id),
+            _ => eprintln!("transcode: {} cannot be put on card {gpu}", el.name()),
+        }
+    }
+    el
 }
 
 /// Set each property that this element has and can read, skipping the rest.

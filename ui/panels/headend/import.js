@@ -15,13 +15,16 @@ import { notesList, streamTable, summary } from "./import-report.js";
 
 const ONCE = "The import reads the config once and does not follow it. To follow a file and answer Flussonic's URLs and API as well, start the station with godwinmix headend --flussonic FILE.";
 
+const DEVICEID = [["spread", "Spread the channels across the GPUs by load (recommended)"], ["file", "Put each channel on the GPU its deviceid names"]];
+
 /** The params of headend.import from what was typed, or `{error}`. */
-export function importParams(how, text, path, dry) {
+export function importParams(how, text, path, dry, deviceid) {
+  const more = deviceid ? { deviceid } : {};
   if (how === "path") {
     const p = String(path || "").trim();
-    return p ? { path: p, dry_run: dry } : { error: "Give the path of the config on the station's machine." };
+    return p ? { path: p, dry_run: dry, ...more } : { error: "Give the path of the config on the station's machine." };
   }
-  return String(text || "").trim() ? { text, dry_run: dry } : { error: "Paste the config first." };
+  return String(text || "").trim() ? { text, dry_run: dry, ...more } : { error: "Paste the config first." };
 }
 
 export async function importFlussonic(client, opts = {}) {
@@ -34,11 +37,14 @@ export async function importFlussonic(client, opts = {}) {
   const path = el("input", { type: "text", spellcheck: false, autocomplete: "off", "aria-label": "Path on the station", placeholder: "/etc/flussonic/flussonic.conf" });
   const tab = (id, label) => el("button.btn.he-tog", { type: "button", "data-how": id, "aria-pressed": String(id === how), text: label });
   const tabs = el("div.he-imp-tabs", { role: "group", "aria-label": "Where the config is" }, [tab("text", "Paste it"), tab("path", "A file on the station")]);
+  const deviceid = el("select", { "aria-label": "What deviceid does" }, DEVICEID.map(([v, t]) => el("option", { value: v, text: t })));
+  const gpus = await client.call("headend.channel.list", {}).then((s) => s.gpus || []).catch(() => []);
+  const deviceField = el("label.field", { hidden: gpus.length < 2 }, [el("span.lbl", { text: "GPUs" }), deviceid, el("span.hint", { text: `This machine has ${gpus.length} NVIDIA cards. Flussonic writes deviceid=0 on every stream unless told otherwise, so taking it as written puts every channel on the first card.` })]);
   const pathField = el("label.field", { hidden: true }, [el("span.lbl", { text: "Path on the station's machine" }), path, el("span.hint", { text: "Read by the station, so it is a path on that machine, not this one." })]);
   const ask = el("div.he-imp-ask", {}, [
     el("p.dim.sm", { style: { marginTop: "0" }, text: "Each stream becomes a channel the station keeps: its input, one HLS output with MPEG-TS and CMAF open to the local network, and the transcoder line as its conversion. You can edit every one of them here afterwards, like a channel added by hand." }),
     following && following.following ? el("p.he-imp-warn", { text: `This station follows ${following.file}. Channels imported here are kept by the station and are not written into that file. The file's own streams can be edited on the channel list too, which takes each one out of the file's hands.` }) : null,
-    tabs, el("div.field", {}, [text]), pathField,
+    tabs, el("div.field", {}, [text]), pathField, deviceField,
     el("p.he-calm", { text: ONCE }),
   ]);
   const shown = el("div.he-imp-report", { hidden: true });
@@ -72,7 +78,7 @@ export async function importFlussonic(client, opts = {}) {
   };
 
   async function send(dry, button) {
-    const params = importParams(how, text.value, path.value, dry);
+    const params = importParams(how, text.value, path.value, dry, gpus.length > 1 ? deviceid.value : undefined);
     if (params.error) return toast({ kind: "warning", text: params.error });
     button.disabled = true;
     try {

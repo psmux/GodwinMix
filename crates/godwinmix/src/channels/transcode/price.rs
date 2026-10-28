@@ -31,7 +31,9 @@ impl Transcode {
         }
         let gov = self.governor.get();
         let machine = self.machine();
-        let model = Model::new(machine, gov.profile(), rooms(&gov, &BTreeMap::new(), machine));
+        // Priced on the card with the most room, where `auto` would put it.
+        let gpu = self.idlest();
+        let model = Model::new(machine, gov.profile(), rooms(&gov, &BTreeMap::new(), machine, gpu), gpu);
         let streams = [Stream { name: "main".into(), since_ms: 0, info: Some(input.clone()) }];
         let planned = plan::plan(&wants, &streams, &model, &BTreeMap::new());
         let refused = planned.outcomes.values().find_map(|o| match o {

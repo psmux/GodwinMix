@@ -17,6 +17,14 @@ pub const BINDINGS: &[Binding] = &[
             memory, encoder_sessions, temperature, power. Read before adding conversions.",
     },
     Binding {
+        method: "gpu.rebalance",
+        tool: "rebalance_gpus",
+        tier: Search,
+        description: "Even the NVIDIA cards out: move the fewest auto placed channels from the busiest \
+            card to the idlest. Each move restarts that channel's encode. dry_run true answers \
+            the moves first; only limits it to some show ids.",
+    },
+    Binding {
         method: "machine.status",
         tool: "machine_status",
         tier: Headend,

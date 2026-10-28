@@ -41,6 +41,24 @@ pub struct HeadendImportRequest {
     /// False makes them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dry_run: Option<bool>,
+    /// What a `transcoder deviceid=N` means. Left out: `[headend]
+    /// flussonic_deviceid`, which is `spread` unless set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deviceid: Option<DeviceIdMode>,
+}
+
+/// What an imported `transcoder deviceid=N` does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceIdMode {
+    /// Every imported channel is placed on the GPU with the least work, as
+    /// `gpu: "auto"`. Flussonic writes `deviceid=0` on every stream unless
+    /// told otherwise, so on a machine with two cards this is what splits
+    /// the channels between them. The recommended choice.
+    #[default]
+    Spread,
+    /// `deviceid=N` puts the channel on GPU N, as written.
+    File,
 }
 
 /// One `stream` of the config, as the show it becomes.

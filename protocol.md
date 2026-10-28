@@ -103,7 +103,8 @@ Keys accepted on every method, handled before a method runs.
 | `gallery.show` | `POST /api/v1/gallery/show` | operate |  | 1 | Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. |
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
-| `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `gpu.rebalance` | `POST /api/v1/gpu/rebalance` | admin |  | 1 | Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it. |
+| `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
 | `headend.channel.add` | `POST /api/v1/headend/channel/add` | admin |  | 1 | Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. |
 | `headend.channel.bulk` | `POST /api/v1/headend/channel/bulk` | admin |  | 1 | The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. |
 | `headend.channel.follow` | `POST /api/v1/headend/channel/follow` | admin |  | 1 | Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. |
@@ -1448,9 +1449,26 @@ MCP tool `governor_status` in the `search` profile: readOnlyHint true, destructi
 }
 ```
 
+#### `gpu.rebalance`
+
+Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.
+
+MCP tool `rebalance_gpus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GpuRebalanceRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GpuRebalance"
+  }
+}
+```
+
 #### `gpu.status`
 
-Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
+Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
 
 MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 

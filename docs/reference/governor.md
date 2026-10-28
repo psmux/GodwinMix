@@ -205,12 +205,24 @@ means a new file.
 |---|---|---|
 | `reserve_cores` | number | Advanced. Cores to keep free, in place of the worked out reserve |
 | `nvenc_session_probe` | count, 1 to 256 | Advanced. Sessions the calibration opens on a hardware encoder before it calls the device unlimited. 8 when left out, which finds a consumer NVIDIA card's limit; a card with that limit lifted sets it higher to find the real one |
-| `nvenc_sessions` | count | Advanced. The session limit of the NVIDIA device, in place of what calibration found |
+| `nvenc_sessions` | count | Advanced. The session limit of each NVIDIA card, in place of what calibration found |
 | `uplink_kbps` | integer | The uplink, when known. Without it nothing is refused for bandwidth |
 
 All four are in **File > Mixer settings**. The two NVENC keys are under
 **Advanced** there, closed until opened, and every one of them waits for a
 restart.
+
+## Several NVIDIA cards
+
+Each card is a device of its own in the book: the first is `nvidia`, as it
+has always been named, so a calibration and `nvenc_sessions` keep meaning
+what they did, and the others are `nvidia:1`, `nvidia:2`. A ticket for a
+conversion put on card 1 is held on `nvidia:1`, and `governor.status`
+lists every card that holds work apart. A card past the first is priced
+and limited as the first is calibrated: the session limit is the driver's,
+which is the same for every card in the machine. Which card a channel goes
+on is the planner's, from what is held on each
+([split channels across GPUs](../how-to/split-channels-across-gpus.md)).
 
 ## Load sampling
 

@@ -18,6 +18,7 @@
 //! plugin pump or the runtime.
 
 mod edit;
+mod gone;
 mod health;
 pub mod hls;
 pub mod inputs;
@@ -42,6 +43,8 @@ mod view;
 pub use edit::{add as add_output, set as set_output};
 pub use plan::room;
 pub use seen::Seen;
+
+
 pub use mixed::{hand_alarms, vitals_settings};
 pub use view::{feed_source, INPUT_SOURCE};
 pub use intake::take as take_event;
@@ -61,6 +64,9 @@ pub struct Direct {
     plugins: OnceLock<Arc<Supervisor>>,
     /// What the host last said about each show.
     pub(crate) seen: Mutex<BTreeMap<String, Seen>>,
+    /// Shows removed lately: their input, what the host said of them, and
+    /// when (`forget`).
+    gone: Mutex<BTreeMap<String, (serde_json::Value, Seen, std::time::Instant)>>,
     /// Inputs opened for `headend.scan` only.
     pub(crate) probes: probe::Probes,
     /// The renditions of direct outputs, planned and admitted like a
@@ -80,6 +86,7 @@ impl Direct {
         Direct {
             plugins: OnceLock::new(),
             seen: Mutex::new(BTreeMap::new()),
+            gone: Mutex::default(),
             probes: probe::Probes::default(),
             transcode: Transcode::new(data_dir),
             hls: hls::Packagers::default(),
@@ -146,10 +153,5 @@ impl Direct {
         let mut g = self.gens.lock();
         g.1 = g.1.max(gen);
         self.handed.notify_all();
-    }
-
-    /// Forget what the host said about a show that went.
-    pub fn forget(&self, id: &str) {
-        self.seen.lock().remove(id);
     }
 }

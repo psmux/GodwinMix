@@ -15,6 +15,7 @@ mod headend_follow;
 mod headend_import;
 mod headend_native;
 mod headend_page;
+mod headend_upgrade;
 mod health_main;
 mod hls_channel;
 mod hls_channel_restart;

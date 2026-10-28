@@ -71,18 +71,22 @@ pub fn list(st: &Station, n: &Native) -> HeadendSetup {
     let mut channels: Vec<ChannelEntry> = s
         .channels
         .iter()
-        .map(|c| ChannelEntry { channel: c.clone(), show: n.keep.id_of(&c.name), follows: None, detached_from: s.detached.get(&c.name).cloned() })
+        .map(|c| ChannelEntry { channel: c.clone(), show: n.keep.id_of(&c.name), follows: None, detached_from: s.detached.get(&c.name).cloned(), on_gpu: None })
         .collect();
     let file = follow::headend(st).map(|h| h.file_text());
     if let (Some(h), Some((f, plans))) = (follow::headend(st), follow::file_plans(st, n)) {
         for p in plans {
             let c = compile::channel_of(&p, &profiles, &f);
-            channels.push(ChannelEntry { show: h.keep.id_of(&p.name), channel: c, follows: Some(f.clone()), detached_from: None });
+            channels.push(ChannelEntry { show: h.keep.id_of(&p.name), channel: c, follows: Some(f.clone()), detached_from: None, on_gpu: None });
         }
+    }
+    let placed = st.direct.transcode.placements();
+    for e in &mut channels {
+        e.on_gpu = e.show.as_ref().and_then(|id| placed.get(id)).copied();
     }
     let mut encoders: Vec<HeadendEncoder> = st.direct.transcode.slots().into_iter().map(|e| HeadendEncoder { codec: format!("{:?}", e.codec).to_lowercase(), on: if e.hardware { "gpu" } else { "cpu" }.into(), id: e.id }).collect();
     encoders.sort_by_key(|e| e.on != "gpu");
-    HeadendSetup { channels, profiles, encoders, following: file }
+    HeadendSetup { channels, profiles, encoders, gpus: st.direct.transcode.gpus(), following: file }
 }
 
 async fn bulk(st: &Arc<Station>, n: &Native, req: ChannelBulkRequest) -> Result<godwinmix_protocol::headend::ChannelChange, RpcError> {
@@ -106,9 +110,21 @@ async fn bulk(st: &Arc<Station>, n: &Native, req: ChannelBulkRequest) -> Result<
         if let Some(card) = &req.interface {
             to.input.interface = Some(card.trim().to_string()).filter(|c| !c.is_empty());
         }
+        if let Some(g) = req.gpu {
+            to.gpu = g.index();
+        }
         changes.push(Change { was: name.clone(), file, to });
     }
     let mut out = edit::replace(n, st, changes).await?;
+    // Spread: placed by load from now on, and evened out at once, once the
+    // channels made again have been planned and placed.
+    if req.gpu.is_some_and(|g| g.index().is_none()) {
+        let ids: Vec<String> = out.done.iter().filter_map(|name| n.keep.id_of(name).or_else(|| follow::headend(st)?.keep.id_of(name))).collect();
+        let (asked, planned) = (st.direct.hand_over(), st.clone());
+        let _ = tokio::task::spawn_blocking(move || planned.direct.wait_handed(asked, std::time::Duration::from_secs(5))).await;
+        st.direct.transcode.unpin(&ids);
+        crate::station::gpus::rebalance_these(st, Some(&ids), false);
+    }
     for name in missing {
         let i = req.names.iter().position(|x| *x == name).unwrap_or(0);
         out.refused.push(edit::refusal(i, &name, format!("there is no channel {name}.")));

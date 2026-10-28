@@ -50,7 +50,9 @@ pub fn governor_status(station: &Station, shed: &[ShedNote]) -> GovernorStatus {
     let cores = cal.machine.cores.max(std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(1));
     let used = if load.samples > 0 { load.own_millicores.max(committed.cpu_millicores) } else { committed.cpu_millicores };
     let mut devices: Vec<String> = profile.devices();
-    for d in station.slots().into_iter().filter_map(|s| s.device) {
+    // Each NVIDIA card past the first (`nvidia:1`) is listed once it holds
+    // work, so every card is reported apart.
+    for d in station.slots().into_iter().filter_map(|s| s.device).chain(held.iter().filter_map(|h| h.device.clone())) {
         if !devices.contains(&d) {
             devices.push(d);
         }

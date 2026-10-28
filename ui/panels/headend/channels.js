@@ -1,7 +1,8 @@
-// Every channel the station knows, in a table: its name, input, profile,
-// state and where it came from, with a tick box each for the changes
-// made to many at once (a profile, on or off, the network card,
-// removal), and Edit and Duplicate on each row. Opened from the band of
+// Every channel the station knows, in a table: its name, input, profile
+// (and its GPU, on a machine with several), state and where it came from,
+// with a tick box each for the changes made to many at once (a profile, on
+// or off, the network card, the GPU or a spread across them, removal), and
+// Edit and Duplicate on each row. Opened from the band of
 // the headend view; reads headend.channel.list each time it changes.
 
 import { el } from "../../shell/dom.js";
@@ -12,6 +13,14 @@ import { inputWords, originOf, profileOf, readSetup } from "./setup.js";
 import { choice, said, text, whyBox } from "./form.js";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** Where a channel's conversion runs, on a machine with several cards. */
+function gpuWords(setup, e) {
+  if ((setup.gpus || []).length < 2) return "";
+  const [set, now] = [e.channel.gpu, e.on_gpu];
+  if (set == null) return now == null ? "GPU: auto" : `GPU ${now}, auto`;
+  return now == null || now === set ? `GPU ${set}` : `GPU ${set}, on GPU ${now}`;
+}
 
 /**
  * @param {object} client
@@ -37,6 +46,11 @@ export async function channelList(client, opts = {}) {
   const count = el("span.hs-count");
   const profile = el("select", { "aria-label": "Profile for the ticked channels" });
   const nic = text("", "eth1", "Network card for the ticked channels", { size: "8" });
+  const card = el("select", { "aria-label": "GPU for the ticked channels" });
+  const gpuRow = el("span.hs-row", { hidden: true }, [
+    el("button.btn", { type: "button", "data-bulk": "spread", text: "Spread across GPUs", title: "Placed by load from now on, and the cards evened out now. A channel that moves restarts its encode." }),
+    card, el("button.btn", { type: "button", "data-bulk": "card", text: "Move to GPU" }),
+  ]);
   const why = whyBox();
   const removeB = el("button.btn.he-danger", { type: "button", "data-bulk": "remove" });
   const bulk = el("div.hs-bulk", { hidden: true }, [
@@ -44,7 +58,8 @@ export async function channelList(client, opts = {}) {
     el("span.hs-row", {}, [profile, el("button.btn", { type: "button", "data-bulk": "profile", text: "Set profile" })]),
     el("button.btn", { type: "button", "data-bulk": "on", text: "Enable" }),
     el("button.btn", { type: "button", "data-bulk": "off", text: "Disable" }),
-    el("span.hs-row", {}, [nic, el("button.btn", { type: "button", "data-bulk": "nic", text: "Move to card" })]),
+    el("span.hs-row", {}, [nic, el("button.btn", { type: "button", "data-bulk": "nic", text: "Move to network card" })]),
+    gpuRow,
     removeB,
   ]);
   const top = el("div.hs-row.hs-listtop", {}, [
@@ -86,7 +101,7 @@ export async function channelList(client, opts = {}) {
         el("td", {}, [box]),
         el("td", { "data-label": "Channel" }, [el("strong", { text: c.name }), c.title ? el("div.he-sub", { text: c.title }) : null]),
         el("td.hs-wrap", { "data-label": "Input", text: inputWords(c.input) }),
-        el("td", { "data-label": "Profile", text: profileOf(setup, c).name || c.profile }),
+        el("td", { "data-label": "Profile" }, [profileOf(setup, c).name || c.profile, gpuWords(setup, e) ? el("div.he-sub", { text: gpuWords(setup, e) }) : null]),
         el("td", { "data-label": "State" }, [el(`span.hs-state.st-${sk}`, { text: sw })]),
         el("td", { "data-label": "From", title: o.full }, [el(`span.hs-from.from-${o.key}`, { text: o.word })]),
         el("td.hs-acts", {}, [
@@ -114,6 +129,12 @@ export async function channelList(client, opts = {}) {
       profile.dataset.ids = want;
       profile.replaceChildren(...setup.profiles.map((p) => el("option", { value: p.id, text: p.name || p.id })));
       if (v) profile.value = v;
+    }
+    const gpus = setup.gpus || [];
+    gpuRow.hidden = gpus.length < 2;
+    if (card.dataset.ids !== gpus.join("|")) {
+      card.dataset.ids = gpus.join("|");
+      card.replaceChildren(...gpus.map((g) => el("option", { value: String(g), text: `GPU ${g}` })));
     }
     const followed = [...picked].filter((x) => (setup.channels.find((e) => e.channel.name === x) || {}).follows).length;
     removeB.textContent = armed > Date.now() ? `Press again to remove ${plural(n, "channel", "channels")}` : "Remove";
@@ -146,6 +167,8 @@ export async function channelList(client, opts = {}) {
     if (!names.length) return;
     if (what === "profile") return run("headend.channel.bulk", { names, profile: profile.value }, (n) => `${plural(n, "channel takes", "channels take")} ${profile.selectedOptions[0].textContent} now.`);
     if (what === "on" || what === "off") return run("headend.channel.bulk", { names, enabled: what === "on" }, (n) => `${plural(n, "channel is", "channels are")} ${what === "on" ? "on" : "off"}.`);
+    if (what === "spread") return run("headend.channel.bulk", { names, gpu: "auto" }, (n) => `${plural(n, "channel is", "channels are")} placed by load and spread across the GPUs.`);
+    if (what === "card") return run("headend.channel.bulk", { names, gpu: Number(card.value) }, (n) => `${plural(n, "channel runs", "channels run")} on GPU ${card.value} now.`);
     if (what === "nic") return run("headend.channel.bulk", { names, interface: nic.value.trim() }, (n) => `${plural(n, "channel joins", "channels join")} on ${nic.value.trim() || "the default route's card"}.`);
     if (what === "remove") {
       if (armed < Date.now()) {

@@ -38,6 +38,8 @@ pub struct Headend {
     pub token: Token,
     /// Rung after the API wrote the file, so it is applied now.
     pub changed: tokio::sync::Notify,
+    /// How the file is read: what its `deviceid` does.
+    pub import: godwinmix_flussonic::import::Options,
 }
 
 impl Headend {
@@ -108,6 +110,7 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
         log: s.log.as_deref().map(|p| Mutex::new(Log::new(p))),
         token: Token::open(),
         changed: tokio::sync::Notify::new(),
+        import: godwinmix_flussonic::import::Options { deviceid: s.deviceid },
     });
     // The station's own methods read it for headend.status. Weak, since the
     // headend holds the station.

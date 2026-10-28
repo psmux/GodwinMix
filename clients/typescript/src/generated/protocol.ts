@@ -480,6 +480,7 @@ export interface ChannelBackup {
 export interface ChannelBulkRequest {
   custom?: TranscodeProfile | null;
   enabled?: boolean | null;
+  gpu?: GpuPick | null;
   interface?: string | null;
   names: string[];
   profile?: string | null;
@@ -498,6 +499,7 @@ export interface ChannelEntry {
   channel: HeadendChannel;
   detached_from?: string | null;
   follows?: string | null;
+  on_gpu?: number | null;
   show?: string | null;
 }
 
@@ -855,6 +857,9 @@ export interface Detected {
   name: string;
   tool: AgentTool;
 }
+
+/** What an imported `transcoder deviceid=N` does. */
+export type DeviceIdMode = "spread" | "file";
 
 /** One device token, without its secret. */
 export interface DeviceToken {
@@ -1627,11 +1632,41 @@ export interface GovernorStatus {
 
 /** One GPU: what it is, its newest reading and the ones before it. */
 export interface GpuDevice {
+  channels?: string[];
   driver?: string | null;
   history?: GpuSample[];
   index: number;
   name: string;
   now: GpuSample;
+}
+
+/** One show or channel `gpu.rebalance` placed. */
+export interface GpuMove {
+  from?: number | null;
+  id: string;
+  to: number;
+}
+
+/**
+ * Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA
+ * device index (0 is the first card), or `"auto"`, the card with the least
+ * work when the channel starts. All three steps stay on that one card, so
+ * a picture never crosses from one card's memory to another's.
+ */
+export type GpuPick = number | GpuWord;
+
+/** `gpu.rebalance`'s answer. */
+export interface GpuRebalance {
+  dry_run: boolean;
+  gpus: number[];
+  kept: number;
+  moved: GpuMove[];
+}
+
+/** `gpu.rebalance`. */
+export interface GpuRebalanceRequest {
+  dry_run?: boolean;
+  only?: string[] | null;
 }
 
 /** One reading of one GPU. A number the driver would not give is left out. */
@@ -1666,6 +1701,9 @@ export interface GpuStatusRequest {
   since_ms?: number | null;
 }
 
+/** The one word [`GpuPick`] takes. */
+export type GpuWord = "auto";
+
 /** `scene.graphic.list`. */
 export interface GraphicListing {
   graphics: GraphicType[];
@@ -1691,6 +1729,7 @@ export interface GroupSourcesRequest {
 export interface HeadendChannel {
   custom?: TranscodeProfile | null;
   enabled?: boolean;
+  gpu?: number | null;
   hls?: ChannelHls;
   input: ChannelInput;
   name: string;
@@ -1728,6 +1767,7 @@ export interface HeadendImportReport {
 
 /** `headend.import`. One of `text` and `path`. */
 export interface HeadendImportRequest {
+  deviceid?: DeviceIdMode | null;
   dry_run?: boolean | null;
   path?: string | null;
   text?: string | null;
@@ -1738,6 +1778,7 @@ export interface HeadendSetup {
   channels: ChannelEntry[];
   encoders: HeadendEncoder[];
   following?: string | null;
+  gpus?: number[];
   profiles: TranscodeProfile[];
 }
 
@@ -4035,6 +4076,7 @@ export interface VideoWant {
   encoder?: EncoderPick | null;
   fit?: Fit | null;
   fps?: Fps | null;
+  gpu?: GpuPick | null;
   height?: number | null;
   keyframe_frames?: number | null;
   keyframe_ms?: number | null;
@@ -4267,6 +4309,7 @@ export interface MethodParams {
   "gallery.show": GalleryShowRequest;
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
+  "gpu.rebalance": GpuRebalanceRequest;
   "gpu.status": GpuStatusRequest;
   "headend.channel.add": ChannelAddRequest2;
   "headend.channel.bulk": ChannelBulkRequest;
@@ -4520,6 +4563,7 @@ export interface MethodResults {
   "gallery.show": GalleryShown;
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
+  "gpu.rebalance": GpuRebalance;
   "gpu.status": GpuStatus;
   "headend.channel.add": ChannelChange;
   "headend.channel.bulk": ChannelChange;
@@ -4828,7 +4872,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/show" } },
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
-  { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
+  { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gpu/rebalance" } },
+  { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
   { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/add" } },
   { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/bulk" } },
   { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/follow" } },
@@ -5422,7 +5467,12 @@ export class GeneratedMethods {
     return this._call("governor.status", {}) as Promise<GovernorStatus>;
   }
 
-  /** Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. */
+  /** Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it. */
+  gpuRebalance(params: GpuRebalanceRequest = {}): Promise<GpuRebalance> {
+    return this._call("gpu.rebalance", params as unknown as Record<string, unknown>) as Promise<GpuRebalance>;
+  }
+
+  /** Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. */
   gpuStatus(params: GpuStatusRequest = {}): Promise<GpuStatus> {
     return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
   }

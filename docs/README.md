@@ -139,6 +139,7 @@ Start here if you have never run it.
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
 * [Replace Flussonic with GodwinMix](how-to/replace-flussonic.md)
 * [Convert broadcast feeds on the GPU](how-to/convert-broadcast-feeds-on-the-gpu.md)
+* [Split channels across GPUs](how-to/split-channels-across-gpus.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Watch a headend of many channels](how-to/watch-a-headend.md)
 * [Read the flow map: what comes in, what each show does with it, what goes out](how-to/read-the-flow-map.md)
