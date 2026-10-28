@@ -20,7 +20,7 @@ pub fn add(list: &mut Vec<StoredDestination>, label: Option<String>, uri: &str, 
         spec::check_rendition(&id, r)?;
     }
     let server = spec::address(&name, out.params.as_ref())?;
-    let rendition = out.rendition.clone().filter(|r| crate::channels::transcode::request_for(&id, r).ok().flatten().is_some());
+    let rendition = out.rendition.clone().filter(|r| spec::converts(&id, r));
     // Made under the name first; a wanted id is given by `add` afterwards.
     let made = std::iter::once(name.clone())
         .chain((2..).map(|n| format!("{name}-{n}")))

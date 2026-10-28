@@ -117,6 +117,19 @@ pub struct VideoWant {
     pub gpu: Option<GpuPick>,
 }
 
+impl VideoWant {
+    /// This want with every field it leaves out taken from `base`: a
+    /// ladder's rung over its top rendition, a channel's overrides over its
+    /// profile.
+    pub fn over(&self, base: &VideoWant) -> VideoWant {
+        let mut merged = serde_json::to_value(base).unwrap_or_default();
+        if let (Some(m), Ok(serde_json::Value::Object(mine))) = (merged.as_object_mut(), serde_json::to_value(self)) {
+            m.extend(mine);
+        }
+        serde_json::from_value(merged).unwrap_or_else(|_| self.clone())
+    }
+}
+
 /// The audio an output wants. Every field left out is taken from the source.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct AudioWant {

@@ -42,6 +42,10 @@ pub struct Master {
     /// Every sound track in track order. The first is in `main` when there
     /// is one; each other is its own rendition, its id the rung to ask for.
     pub sounds: Vec<Variant>,
+    /// A ladder's further pictures, each with the first sound muxed in as
+    /// `main` has it, its id the rendition to ask for.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rungs: Vec<Variant>,
 }
 
 /// The listing for `entries`: the last window of them.
@@ -78,7 +82,7 @@ impl Media {
 
 impl Master {
     /// The multivariant playlist. `uri(None)` is `main`'s media playlist,
-    /// `uri(Some(id))` a further sound's.
+    /// `uri(Some(id))` a further sound's or a further rung's.
     pub fn render(&self, uri: impl Fn(Option<&str>) -> String) -> String {
         let mut out = String::from("#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-INDEPENDENT-SEGMENTS\n");
         let Some(main) = &self.main else {
@@ -101,6 +105,9 @@ impl Master {
             first.average = None;
         }
         playlist::stream_inf(&mut out, main, &alone, &uri(None));
+        for rung in &self.rungs {
+            playlist::stream_inf(&mut out, rung, &alone, &uri(Some(&rung.id)));
+        }
         out
     }
 }

@@ -109,9 +109,9 @@ impl Packagers {
             };
             let p = want.spec.params;
             let (show, output) = key.clone();
-            let (source, why_not, sounds) = (want.source, want.why_not, want.sounds);
+            let (source, why_not, sounds, rungs) = (want.source, want.why_not, want.sounds, want.rungs);
             let (segment_ms, part_ms, window_s, segments, access) = (p.segment_ms, p.part_ms, p.window_s, p.segments, p.access);
-            let w = Want { show, output, source, why_not, segment_ms, part_ms, window_s, segments, access, viewer_key, sounds };
+            let w = Want { show, output, source, why_not, segment_ms, part_ms, window_s, segments, access, viewer_key, sounds, rungs };
             let stream = match old {
                 Some(c) if c.stream.params == p && c.stream.viewer_key == w.viewer_key => c.stream,
                 _ => Arc::new(Stream::new(&key.1, p, &w.viewer_key)),

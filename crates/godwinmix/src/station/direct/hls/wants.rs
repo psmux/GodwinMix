@@ -1,7 +1,7 @@
 //! Which HLS outputs should run, and what each one reads.
 
 use crate::station::packager::tracks::{self, Sound};
-use crate::station::packager::wire::Source;
+use crate::station::packager::wire::{rung_track, Rung, Source};
 use super::spec;
 use crate::station::direct::outputs;
 use crate::station::state::Station;
@@ -16,6 +16,8 @@ pub struct Want {
     pub why_not: Option<String>,
     /// The input's sound tracks, with their languages.
     pub sounds: Vec<Sound>,
+    /// A ladder's further pictures that have something to read.
+    pub rungs: Vec<Rung>,
 }
 
 /// Every HLS output that should run, with what it reads.
@@ -33,8 +35,26 @@ pub fn wants(st: &Station) -> BTreeMap<(String, String), Want> {
         };
         for d in outputs::stored(&r.id, &r.outputs).into_iter().filter(|d| d.enabled && d.platform == spec::SCHEME) {
             let (source, why_not) = source_of(st, &r.id, &d, relay.as_ref());
-            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not, sounds: sounds.clone() });
+            let rungs = rungs_of(st, &r.id, &d, relay.as_ref(), source.as_ref());
+            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not, sounds: sounds.clone(), rungs });
         }
+    }
+    out
+}
+
+/// A ladder's further rungs that the plan has made, each read off its own
+/// pair. One that comes out the same as the first or an earlier one (a
+/// 1080p rung that matched a 720p source, say) is that rendition already,
+/// and is left out of the master.
+fn rungs_of(st: &Station, show: &str, d: &StoredDestination, relay: Option<&(String, String)>, first: Option<&Source>) -> Vec<Rung> {
+    let mut out: Vec<Rung> = Vec::new();
+    for r in crate::station::direct::rungs::further(d) {
+        let Some(source) = source_of(st, show, &r, relay).0 else { continue };
+        if first == Some(&source) || out.iter().any(|o| o.source == source) {
+            continue;
+        }
+        let name = r.id.rsplit(crate::station::direct::rungs::SEP).next().unwrap_or_default();
+        out.push(Rung { id: rung_track(name), source });
     }
     out
 }

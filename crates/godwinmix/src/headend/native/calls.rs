@@ -5,6 +5,7 @@ use super::edit::{self, Change};
 use super::{compile, follow, ops, Native};
 use crate::station::state::Station;
 use godwinmix_protocol::error::RpcError;
+use godwinmix_protocol::rendition::VideoWant;
 use godwinmix_protocol::headend::{
     ChannelAddRequest, ChannelBulkRequest, ChannelEntry, ChannelNames, ChannelUpdateRequest, HeadendEncoder, HeadendSetup, ProfileRemoveRequest, ProfileSaveRequest, ScanRequest,
 };
@@ -106,6 +107,9 @@ async fn bulk(st: &Arc<Station>, n: &Native, req: ChannelBulkRequest) -> Result<
         }
         if let Some(on) = req.enabled {
             to.enabled = on;
+        }
+        if let Some(v) = &req.video_overrides {
+            to.video_overrides = Some(v.clone()).filter(|v| *v != VideoWant::default());
         }
         if let Some(card) = &req.interface {
             to.input.interface = Some(card.trim().to_string()).filter(|c| !c.is_empty());

@@ -6,6 +6,7 @@ use super::caps::{self, Read};
 use super::flv::{self, Kind, Tag};
 use super::output::End;
 use super::session::Session;
+use super::rung::Zero;
 use super::tracks::Sound;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::DestinationState as S;
@@ -29,7 +30,16 @@ struct Learned {
     session: Option<Session>,
 }
 
-pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, named: &[Sound], sound: &dyn Fn(bool, &str) -> String) -> End {
+/// What a connection's session shares with the rest of its output: the
+/// sound tracks' names, a ladder's further rungs, and the zero they time
+/// their frames from.
+pub(super) struct Shared<'a> {
+    pub named: &'a [Sound],
+    pub rungs: &'a [String],
+    pub zero: &'a Zero,
+}
+
+pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, shared: &Shared, sound: &dyn Fn(bool, &str) -> String) -> End {
     let mut at = Learned::default();
     loop {
         if stop.load(Ordering::Relaxed) {
@@ -57,7 +67,7 @@ pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Boa
             Kind::Audio => caps::audio(&tag.body),
             Kind::Script => continue,
         };
-        if let Some(end) = take(&mut at, stream, &tag, &read, board, named, sound) {
+        if let Some(end) = take(&mut at, stream, &tag, &read, board, shared, sound) {
             return end;
         }
     }
@@ -67,7 +77,7 @@ pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Boa
 /// a frame. Answers how the connection ends, when this tag ends it. A
 /// sound track whose header comes after the start, or caps that change,
 /// build the pipeline again.
-fn take(at: &mut Learned, stream: &Arc<Stream>, tag: &Tag, read: &Read, board: &Board, named: &[Sound], sound: &dyn Fn(bool, &str) -> String) -> Option<End> {
+fn take(at: &mut Learned, stream: &Arc<Stream>, tag: &Tag, read: &Read, board: &Board, shared: &Shared, sound: &dyn Fn(bool, &str) -> String) -> Option<End> {
     match (read, tag.kind) {
         (Read::Unsupported(codec), kind) => return Some(End::Refused(sound(kind == Kind::Audio, codec))),
         (Read::Header(c), Kind::Video) => {
@@ -90,8 +100,11 @@ fn take(at: &mut Learned, stream: &Arc<Stream>, tag: &Tag, read: &Read, board: &
                 return None;
             }
             let sounds: Vec<(u8, gst::Caps)> = at.audio.iter().map(|(t, c)| (*t, c.clone())).collect();
-            match Session::start(stream, video, &sounds, tag.ms, named) {
-                Ok(s) => at.session = Some(s),
+            match Session::start(stream, video, &sounds, tag.ms, shared.named, shared.rungs) {
+                Ok(s) => {
+                    at.session = Some(s);
+                    shared.zero.moved(tag.ms);
+                }
                 Err(e) => return Some(End::Lost(e)),
             }
         }

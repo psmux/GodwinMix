@@ -16,10 +16,11 @@
 //! and nothing else: the station starts the process again.
 
 use super::board::Board;
-use super::feed::session;
+use super::feed::{session, Shared};
+use super::rung::Zero;
 use super::flv;
 use super::tracks::Sound;
-use super::wire::Source;
+use super::wire::{Rung, Source};
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::DestinationState as S;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,18 +55,31 @@ pub enum End {
 }
 
 impl Packager {
-    /// Start one. With no source yet it runs nothing, waits, and says why.
-    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, named: Vec<Sound>, sound: impl Fn(bool, &str) -> String + Send + 'static) -> Packager {
+    /// Start one, with a thread for each of a ladder's further `rungs`.
+    /// With no source yet it runs nothing, waits, and says why.
+    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, named: Vec<Sound>, rungs: Vec<Rung>, sound: impl Fn(bool, &str) -> String + Send + 'static) -> Packager {
         let (stop, board) = (Arc::new(AtomicBool::new(false)), Arc::new(Board::default()));
         let Some(src) = source else {
             board.set(S::Waiting, why_not);
             return Packager { stream, board, stop };
         };
-        let (st, b, s) = (stream.clone(), board.clone(), stop.clone());
+        let zero = Arc::new(Zero::default());
+        let ids: Vec<String> = rungs.iter().map(|r| r.id.clone()).collect();
+        let (st, b, s, z) = (stream.clone(), board.clone(), stop.clone(), zero.clone());
         let name = format!("gmx-hls-{}", stream.id);
-        let ran = std::thread::Builder::new().name(name).spawn(move || run(&src, &st, &b, &s, &named, &sound));
+        let ran = std::thread::Builder::new().name(name).spawn(move || {
+            let shared = Shared { named: &named, rungs: &ids, zero: &z };
+            run(&src, &st, &b, &s, &shared, &sound)
+        });
         if let Err(e) = ran {
             board.set(S::Failed, Some(format!("no thread for the packager ({e}); remove the output and add it again")));
+        }
+        for r in rungs {
+            let (st, s, z) = (stream.clone(), stop.clone(), zero.clone());
+            let name = format!("gmx-hls-{}-{}", stream.id, r.id);
+            if let Err(e) = std::thread::Builder::new().name(name).spawn(move || super::rung::run(&r, &st, &z, &s)) {
+                tracing::warn!(error = %e, "no thread for a ladder's rung; the master goes without it");
+            }
         }
         Packager { stream, board, stop }
     }
@@ -81,7 +95,7 @@ impl Drop for Packager {
     }
 }
 
-fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, named: &[Sound], sound: &dyn Fn(bool, &str) -> String) {
+fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, shared: &Shared, sound: &dyn Fn(bool, &str) -> String) {
     let (mut ever, mut retry) = (false, FIRST_RETRY);
     while !stop.load(Ordering::Relaxed) {
         if board.state() != S::Failed {
@@ -93,7 +107,7 @@ fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, nam
                     board.reconnected();
                 }
                 ever = true;
-                session(reader, stream, board, stop, named, sound)
+                session(reader, stream, board, stop, shared, sound)
             }
             Err(e) => End::Lost(format!("the relay at {} did not answer ({e})", src.relay)),
         };

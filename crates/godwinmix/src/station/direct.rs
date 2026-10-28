@@ -28,6 +28,7 @@ pub mod outputs;
 mod plan;
 pub mod probe;
 mod rate;
+pub mod rungs;
 mod seen;
 mod table;
 #[cfg(test)]

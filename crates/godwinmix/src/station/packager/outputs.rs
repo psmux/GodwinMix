@@ -3,7 +3,8 @@
 
 use super::output::Packager;
 use super::wire::{Report, Want, CHANNEL};
-use godwinmix_core::hls::Stream;
+use super::session::VIDEO;
+use godwinmix_core::hls::{Stream, TrackKind};
 use parking_lot::Mutex;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -36,8 +37,12 @@ impl Outputs {
                 Some(r) if r.want.params() == want.params() && r.want.viewer_key == want.viewer_key => r.packager.stream.clone(),
                 _ => Arc::new(Stream::new(&want.output, want.params(), &want.viewer_key)),
             };
+            // A rung no longer asked for leaves the master with its track.
+            for t in stream.tracks().iter().filter(|t| t.kind == TrackKind::Video && t.id != VIDEO && !want.rungs.iter().any(|r| r.id == t.id)) {
+                stream.remove_track(&t.id);
+            }
             let sound = refusal(&want.show, &want.output);
-            let packager = Packager::start(stream, want.source.clone(), want.why_not.clone(), want.sounds.clone(), sound);
+            let packager = Packager::start(stream, want.source.clone(), want.why_not.clone(), want.sounds.clone(), want.rungs.clone(), sound);
             running.insert(key, Running { want, packager });
         }
     }

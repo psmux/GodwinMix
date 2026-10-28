@@ -104,16 +104,29 @@ pub fn read(uri: &str) -> HlsSpec {
     HlsSpec { params, viewer_key: p.viewer_key }
 }
 
-/// A rendition an HLS output of a direct show can carry: one, not a ladder.
+/// A rendition an HLS output of a direct show can carry: one, or a ladder
+/// whose every rung converts the picture, each a variant of the master
+/// playlist (`station::direct::rungs`).
 pub fn check_rendition(id: &str, choice: &RenditionChoice) -> Result<(), RpcError> {
     let expanded = godwinmix_render::presets::expand(id, choice).map_err(|e| RpcError::invalid_params(e).with("field", "rendition"))?;
-    if expanded.is_some_and(|r| r.len() > 1) {
-        let msg = "an HLS output of a show without compositing carries one rendition, and that is a ladder. \
-                   Ask for one, such as {\"preset\": \"youtube-720p30\"} or {\"audio\": {\"codec\": \"aac\"}}, or turn \
-                   compositing on with show.set and add an hls/output with the ladder inside the show.";
-        return Err(RpcError::invalid_params(msg).with("field", "rendition").with("ladder", true));
+    let rungs = expanded.unwrap_or_default();
+    if rungs.len() > 1 {
+        if let Some(i) = rungs.iter().position(|r| r.video.is_none() || r.no_video) {
+            let msg = format!(
+                "rendition {} of the ladder asks for no picture, and each rung of a ladder is a picture of its own. Give it video \
+                 with a size and a bitrate, or take it out.",
+                i + 1
+            );
+            return Err(RpcError::invalid_params(msg).with("field", "rendition").with("ladder", true));
+        }
     }
     Ok(())
+}
+
+/// Whether a rendition asks for anything, a ladder's rungs counted.
+pub fn converts(id: &str, choice: &RenditionChoice) -> bool {
+    let rungs = godwinmix_render::presets::expand(id, choice).ok().flatten().unwrap_or_default();
+    rungs.iter().any(|r| r.video.is_some() || r.audio.is_some() || r.no_video || r.no_audio)
 }
 
 #[cfg(test)]
@@ -148,6 +161,8 @@ mod tests {
         let short: HlsOutputParams = serde_json::from_value(json!({"viewer_key": "abc"})).unwrap();
         assert_eq!(check(&short).unwrap_err().data["field"], "params.viewer_key");
         let ladder: RenditionChoice = serde_json::from_value(json!({"preset": "abr-ladder-4"})).unwrap();
-        assert_eq!(check_rendition("v", &ladder).unwrap_err().data["ladder"], true);
+        assert!(check_rendition("v", &ladder).is_ok() && converts("v", &ladder));
+        let no_picture: RenditionChoice = serde_json::from_value(json!({"ladder": [{"video": {"height": 720}}, {"audio": {"codec": "aac"}}]})).unwrap();
+        assert_eq!(check_rendition("v", &no_picture).unwrap_err().data["ladder"], true);
     }
 }
