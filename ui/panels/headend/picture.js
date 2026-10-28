@@ -82,7 +82,8 @@ export function rungFrom(f, keep = {}) {
 
 /** The next rung down: the step below the smallest picture there is. */
 export function nextRung(video, rungs) {
-  const heights = [video && video.height, ...(rungs || []).map((r) => r.height)].filter(Boolean);
+  const top = video && (video.match_source ? video.match_source.max_height : video.height);
+  const heights = [top, ...(rungs || []).map((r) => r.height)].filter(Boolean);
   const low = heights.length ? Math.min(...heights) : 1080;
   const [width, height, bitrate_kbps] = STEPS.find(([, h]) => h < low) || STEPS.at(-1);
   return { width, height, bitrate_kbps };
@@ -92,7 +93,9 @@ export function nextRung(video, rungs) {
 export function ladderProblem(video, rungs) {
   if (!rungs.length) return "";
   if (!video) return "A ladder needs the picture converted: pick a video codec first.";
-  const heights = [video.height, ...rungs.map((r) => r.height)].filter(Boolean);
+  // A main picture that follows larger sources may share its height with
+  // a rung: the rung is the step down from what an HD source makes.
+  const heights = [video.match_source ? null : video.height, ...rungs.map((r) => r.height)].filter(Boolean);
   return new Set(heights).size === heights.length ? "" : "Two sizes in the ladder are the same. Change or remove one.";
 }
 

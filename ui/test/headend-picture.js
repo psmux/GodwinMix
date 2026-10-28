@@ -29,6 +29,7 @@ async function modelTests(test, eq, ok) {
   const s = await import("../panels/headend/setup.js");
   const pic = await import("../panels/headend/picture.js");
   const { renditionWords } = await import("../panels/headend/import-report.js");
+  const stubs = await import("./headend-stub.js");
   const want = {
     video: { ...h264(1280, 720, 1500), fps: { num: 25, den: 1 }, aspect: "4:3", deinterlace_method: "greedyh", match_source: { max_height: 1080, bitrate_kbps: 4500 } },
     ladder: [{ width: 854, height: 480, bitrate_kbps: 800 }],
@@ -45,11 +46,18 @@ async function modelTests(test, eq, ok) {
     eq(pic.rungFrom({ size: "640x360", bitrate_kbps: "500", fps: "", preset: "" }, { width: 854, height: 480, fit: "crop", match_source: { max_height: 1080 } }), { fit: "crop", width: 640, height: 360, bitrate_kbps: 500 });
     eq(pic.nextRung({ height: 720 }, []), { width: 1024, height: 576, bitrate_kbps: 1100 });
     ok(/same/.test(pic.ladderProblem({ height: 720 }, [{ height: 720 }])));
+    eq(pic.ladderProblem({ height: 720, match_source: { max_height: 1080 } }, [{ height: 720 }]), "", "a 720p rung under 1080p of HD sources is no clash");
+    eq(pic.nextRung({ height: 720, match_source: { max_height: 1080 } }, []).height, 720, "and it is the step offered first");
   });
   test("overrides: each choice left empty is the profile's, and off takes no method", () => {
     eq(pic.overridesFrom({ aspect: "", deinterlace: "", deinterlace_method: "", fit: "" }), {});
     eq(pic.overridesFrom({ aspect: "16:9", deinterlace: "off", deinterlace_method: "linear", fit: "crop" }), { aspect: "16:9", deinterlace: "off", fit: "crop" });
     eq(pic.overrideWords({ aspect: "4:3", deinterlace: "on", deinterlace_method: "greedyh" }), "shown as 4:3, deinterlace on, greedyh lines");
+  });
+  test("the built in ladder of HD sources is described as what it makes", () => {
+    const { BUILTINS } = stubs;
+    const p = BUILTINS.find((x) => x.id === "h264-hd-1080p-720p-ladder");
+    ok(/larger sources at their own size up to 1080p at 4.5 Mb\/s · also 720p 1.5 Mb\/s for HLS/.test(s.profileWords(p)), s.profileWords(p));
   });
   test("a conversion's words say the shape, a method other than YADIF, match source and the ladder", () => {
     eq(renditionWords(want), "H.264 · 1280×720 · 25 fps · 1.5 Mb/s · pad #000000 · shown as 4:3 · deinterlace auto with greedyh · larger sources at their own size up to 1080p at 4.5 Mb/s · also 480p 800 kb/s for HLS · AAC 128 kb/s");
