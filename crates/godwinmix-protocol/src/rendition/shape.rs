@@ -75,7 +75,7 @@ pub enum Deinterlace {
 #[serde(rename_all = "lowercase")]
 pub enum DeinterlaceMethod {
     /// Looks at the fields before and after: no combing on movement and no
-    /// flicker on still detail. About 3 ms of one core a 1080i frame.
+    /// flicker on still detail.
     #[default]
     Yadif,
     /// Motion adaptive, a little cheaper than YADIF and a little softer.
