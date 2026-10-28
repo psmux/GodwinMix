@@ -87,7 +87,7 @@ async function profileTests(test, eq, ok) {
   button(m, "Add a size").click();
   button(m, "Add a size").click();
   const rungs = () => [...m.querySelectorAll(".hs-rung")];
-  test("Add a size steps down from the smallest picture there is", () => eq(rungs().map((r) => by(r, "Rung size").value), ["1024x576", "854x480"]));
+  test("Add a size steps down from the tallest the main picture makes, then from the smallest rung", () => eq(rungs().map((r) => by(r, "Rung size").value), ["1280x720", "1024x576"]));
   by(rungs()[0], "Remove this size").click();
   put(rungs()[0], "Rung bitrate", "900");
   put(rungs()[0], "Rung frame rate", "25/1");
@@ -97,7 +97,7 @@ async function profileTests(test, eq, ok) {
   test("the profile is saved with its shape, method, match source and the one rung left", () => {
     const p = last(stub, "headend.profile.save").params.profile;
     eq([p.video.aspect, p.video.deinterlace_method, p.video.fps, p.video.match_source], ["16:9", "linear", { num: 25, den: 1 }, { max_height: 1080, bitrate_kbps: 4500 }]);
-    eq(p.ladder, [{ width: 854, height: 480, bitrate_kbps: 900, fps: { num: 25, den: 1 } }]);
+    eq(p.ladder, [{ width: 1024, height: 576, bitrate_kbps: 900, fps: { num: 25, den: 1 } }]);
   });
   await wait(30);
   button(m.querySelector('.hs-pcard[data-id="steps"]'), "Edit").click();
