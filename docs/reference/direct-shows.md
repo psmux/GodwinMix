@@ -213,5 +213,4 @@ listening port are needed; a `channel:` input has no channels to read here.
 
 ## What is not here yet
 
-* A ladder of renditions for a direct show's HLS output: it carries one.
 * Per output CPU, which needs a per thread clock this host does not read.

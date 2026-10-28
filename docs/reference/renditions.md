@@ -41,9 +41,12 @@ starts no thread and touches no GStreamer element.
 | `video.bitrate_tolerance` | fraction | 0.25 |
 | `video.keyframe_ms` | ms | the ladder's interval (below) |
 | `video.keyframe_frames` | frames at the source's rate | `keyframe_ms`; when set it wins, so 50 is 1668 ms at 29.97 and 834 ms at 59.94 |
-| `video.fit` | `pad`, `crop`, `stretch` | `pad`: the whole picture in the size asked for, with bars |
+| `video.fit` | `pad`, `crop`, `stretch` | `pad`: the whole picture in the size asked for, with bars. `pad` and `crop` go by the shape the picture is shown at (its pixel aspect), so 704x480 shown at 16:9 fills a 16:9 frame |
+| `video.aspect` | `auto`, `16:9`, `4:3` | `auto`: the shape the stream says. The others override it for a source flagged wrong |
 | `video.pad_color` | `#rrggbb` | black. Only black is drawn today: neither scaler has a border colour, so another colour plans as a scale of its own and comes out black |
-| `video.deinterlace` | `off`, `on`, `auto` | `off`: an interlaced picture is scaled as the frame it is, both fields woven |
+| `video.deinterlace` | `off`, `on`, `auto` | `off`: an interlaced picture is scaled as the frame it is, both fields woven. `auto` deinterlaces what the decoder marks as interlaced, `on` every picture |
+| `video.deinterlace_method` | `yadif`, `greedyh`, `linear` | `yadif`. On the CPU whichever: on an NVIDIA card the picture goes down for it and back up, and the scale and the encode stay on the card |
+| `video.match_source` | `{max_height, bitrate_kbps?}` | none. A source taller than `height` is made at its own height up to `max_height`, the frame's shape kept, at `bitrate_kbps` there (else the asked bitrate grown by the area) |
 | `video.preset` | the encoder's own word, `p1` on NVENC, `veryfast` on x264 | the catalogue's |
 | `video.bframes` | count | the catalogue's (none, for live) |
 | `video.encoder` | `gpu`, `cpu` | a GPU encoder first, the CPU when the GPU is full or has none of the codec |
@@ -56,10 +59,14 @@ starts no thread and touches no GStreamer element.
 
 An empty request is a plain copy of the source.
 
-`fit`, `pad_color` and `deinterlace` are what a scale does, so two requests
-for one size with different fits get a scale each: the scale's id gains
-`:crop`, `:stretch`, `:pad-ff0000`, `:di` (deinterlace on) or `:da` (auto).
-A plain scale keeps the id it always had. `preset` and `bframes` add `:p<x>`
+`fit`, `pad_color`, `aspect` and `deinterlace` are what a scale does, so two
+requests for one size with different fits get a scale each: the scale's id
+gains `:crop`, `:stretch`, `:pad-ff0000`, `:di` (deinterlace on) or `:da`
+(auto), `-greedyh` or `-linear` for a method other than YADIF, and `:a16x9`
+or `:a4x3` for an overridden shape. A plain scale keeps the id it always had.
+The deinterlace itself is one stage per source and method,
+`deinterlace:main:da`, at the source's own size and rate, which every scale
+that asks for it reads. `preset` and `bframes` add `:p<x>`
 and `:b<n>` to the encode's id. A deinterlace on a source that says it is
 interlaced is never a copy.
 

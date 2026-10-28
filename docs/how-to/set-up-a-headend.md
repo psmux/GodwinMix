@@ -124,15 +124,25 @@ The built in profiles:
 | 480p H.264, 800 kbit/s | 854x480 |
 | 720p H.264, 1.5 Mbit/s | 1280x720 |
 | 1080p H.264, 4 Mbit/s | 1920x1080 |
+| 1080p H.264 of HD sources, else 720p | 1920x1080 at 4.5 Mbit/s of a source taller than 720, 1280x720 at 1.5 Mbit/s of the rest |
+| 1080p and 720p of HD sources, else 720p | the same, with a 720p variant under the 1080p one for viewers on weak connections |
 
-Each picture profile fits the picture into its size with black bars,
-deinterlaces what the stream marks as interlaced, puts a keyframe every two
-seconds and converts every sound track to AAC at 128 kbit/s.
+Each picture profile fits the picture into its size by the shape it is
+shown at, with black bars (a 16:9 SD picture fills a 16:9 frame, a 4:3 one
+is laid in with bars at the sides), deinterlaces what the stream marks as
+interlaced, puts a keyframe every two seconds and converts every sound
+track to AAC at 128 kbit/s.
 
 Save your own from the profiles list: codec, size and how the picture fits
-(bars, crop or stretch), bitrate, keyframe interval in seconds or frames,
-deinterlacing, sound codec, bitrate and whether to convert the first sound
-track or all of them. The encoder is Auto by default: a GPU encoder first
+(bars, crop or stretch), frame rate, bitrate, keyframe interval in seconds
+or frames, deinterlacing and its method (YADIF, Greedy H or linear; the
+deinterlace runs on the CPU, the scale and the encode stay on the GPU),
+under Advanced the source's shape (as the stream says, or 16:9 or 4:3
+whatever it says), the encoder's preset and B frames, HD sources at their
+own size up to a height you pick with the bitrate there, more sizes for
+HLS (a ladder: each one a variant of the channel's master playlist, every
+one with the same sound), sound codec, bitrate and whether to convert the
+first sound track or all of them. The encoder is Auto by default: a GPU encoder first
 (NVENC, Quick Sync, VideoToolbox) and the CPU when the GPU is full or has
 no encoder for that codec. Pick GPU or CPU to keep a profile on one of
 them; GPU is offered only on a machine that has one. A profile some
@@ -140,13 +150,16 @@ channel takes cannot be removed until you say which profile those
 channels move to.
 
 A channel can also carry a conversion of its own, without a profile: pick
-Custom in its editor.
+Custom in its editor. Or keep its profile and set its picture overrides:
+the source's shape, deinterlacing and its method, and the fit, for this
+channel alone, over whatever its profile says. That is the place for a
+broadcaster that flags its 16:9 picture as 4:3.
 
 ## Change many channels at once
 
 In the channel list, tick the channels and pick an action: give them a
-profile, enable or disable them, move their multicast inputs to another
-network card, or remove them. Only a change of input, conversion or
+profile, set or clear their picture overrides, enable or disable them, move
+their multicast inputs to another network card, or remove them. Only a change of input, conversion or
 outputs restarts a channel; a title or enabling one moves it in place.
 
 ## When a Flussonic config is followed as well

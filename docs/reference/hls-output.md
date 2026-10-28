@@ -258,7 +258,7 @@ process of the station) and served from the station's port. It is added with
 | Its id | the output's `id` | the name in `hls://<name>`, or `output` |
 | `params` | the table above | the same names, defaults and limits |
 | Rungs | `programme`, or one per ladder rung, and `audio` | `main`, and `audio`, `audio1`, `audio2` for each sound track |
-| `rendition` | none, a preset or a ladder | none (a copy), or one rendition; a ladder is refused with `data.ladder: true` |
+| `rendition` | none, a preset or a ladder | none (a copy), one rendition, or a ladder whose every rung has a picture: each rung a variant, `main` then `main-<rung>` (`main-720p`), the sound the first rung's. A rung that asks for no picture is refused with `data.ladder: true` |
 | Served by | the show, relayed by the station | the station's port: the station lets the player in, its HLS packager answers |
 | Link | `playback.master_url_path` in `output.list` | `playback.master_url_path` on the output in `show.list` |
 | Its params, read back | `low_latency`, `segment_ms`, `part_ms`, `window` in `output.list` | `params` on the output in `show.list`, as `show.output.set` takes them, less the viewer key, while the output runs |
