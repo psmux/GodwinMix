@@ -51,11 +51,13 @@ pub struct Tracks {
     pub muxed: bool,
 }
 
-/// Which tracks a playlist or a segment carries: `tracks-v1a1` is the video
-/// and the first sound, `tracks-a2` the second sound alone.
+/// Which tracks a playlist or a segment carries: `tracks-v1a1` is the first
+/// picture and the first sound, `tracks-v2a1` a ladder's second picture with
+/// it, `tracks-a2` the second sound alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Select {
-    pub video: bool,
+    /// The picture, from 1, when it carries one.
+    pub video: Option<u8>,
     pub audio: Option<u8>,
 }
 

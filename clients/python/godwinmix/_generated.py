@@ -554,6 +554,8 @@ class ChannelBulkRequest(TypedDict, total=False):
     names: List[str]
     profile: Optional[str]
     # A profile for every one of them.
+    video_overrides: Union[VideoWant, None]
+    # Every one of them takes these picture settings over its profile's (see `HeadendChannel.video_overrides`), in place of any it had. `{}` clears them, so each takes its profile as it is.
 
 class ChannelChange(TypedDict, total=False):
     """What an add, an update or a removal did."""
@@ -2020,6 +2022,8 @@ class HeadendChannel(TypedDict, total=False):
     # A profile's id from `headend.channel.list` (`copy` passes the input through as it comes), or `custom` with `custom` set.
     title: Optional[str]
     # What the screen and the show list call it. Left out: the name.
+    video_overrides: Union[VideoWant, None]
+    # This channel's own picture settings, over its profile's: each field set here replaces the profile's on every rendition, and the rest come from the profile. For what one channel needs and its profile should not say: `aspect` for a broadcaster that flags its picture wrong, `deinterlace`, `fit`. Left out: the profile as it is.
 
 class HeadendEncoder(TypedDict, total=False):
     """An encoder this machine has, for the profile editor's choice."""
@@ -2057,6 +2061,8 @@ class HeadendImportReport(TypedDict, total=False):
 class HeadendImportRequest(TypedDict, total=False):
     """`headend.import`. One of `text` and `path`."""
 
+    deinterlace: Union[DeinterlaceMode, None]
+    # What a `transcoder deinterlace=false`, or a line with no `deinterlace`, means. Left out: `[headend] flussonic_deinterlace`, which is `auto` unless set.
     deviceid: Union[DeviceIdMode, None]
     # What a `transcoder deviceid=N` means. Left out: `[headend] flussonic_deviceid`, which is `spread` unless set.
     dry_run: Optional[bool]
@@ -2529,6 +2535,14 @@ class MarkRequest(TypedDict, total=False):
 
     label: Optional[str]
     # What to call the group of changes that follows. Omit it to end the group, so the next change is its own undo step.
+
+class MatchSource(TypedDict, total=False):
+    """A rendition that follows a larger source's size, up to a limit."""
+
+    bitrate_kbps: Optional[int]
+    # The bitrate at `max_height`. Left out, the rendition's own bitrate grown by the picture's area, so 1500 kbit/s at 720p is 3375 at 1080p.
+    max_height: int
+    # The tallest picture made, such as 1080.
 
 class MediaCount(TypedDict, total=False):
     """One tag and how many files have it."""
@@ -4451,6 +4465,8 @@ class TranscodeProfile(TypedDict, total=False):
     # True for a built in profile, which cannot be changed or removed. Set by the station; ignored when sent.
     id: str
     # A slug. The built in ones are listed by `headend.channel.list`.
+    ladder: List[VideoWant]
+    # Further pictures of the same programme for the HLS output, each a variant of its own in the master playlist beside `video`, so a player on a weak connection can step down: 720p under a 1080p `video`, say. Every one shares the sound. A field left out of one is taken from `video`, so a rung can be just a size and a bitrate. The channel's other outputs carry `video` alone. Needs `video`.
     name: str
     # What the screen calls it.
     video: Union[VideoWant, None]
@@ -4576,6 +4592,8 @@ class VideoShape(TypedDict, total=False):
 class VideoWant(TypedDict, total=False):
     """The video an output wants. Every field left out is taken from the source."""
 
+    aspect: Union[SourceAspect, None]
+    # The shape the source's picture is shown at, which `pad` and `crop` fit by. Left out (`auto`), the shape the stream says: a 704x480 picture flagged 16:9 fills a 16:9 frame. `16:9` or `4:3` overrides it for a broadcaster that flags its picture wrong.
     bframes: Optional[int]
     # B frames between references. The catalogue's (none, for live) when left out.
     bitrate_kbps: Optional[int]
@@ -4585,6 +4603,8 @@ class VideoWant(TypedDict, total=False):
     codec: Union[VideoCodec, None]
     deinterlace: Union[Deinterlace, None]
     # Off when left out: an interlaced picture is scaled as it comes.
+    deinterlace_method: Union[DeinterlaceMethod, None]
+    # How a deinterlace makes the missing lines. `yadif` when left out. It runs on the CPU whatever the method: GStreamer has no GPU deinterlace, so on an NVIDIA card the picture goes down for it and back up, and the scale and the encode stay on the card.
     encoder: Union[EncoderPick, None]
     # Only a GPU encoder, or only one on the CPU. Left out, the planner takes a GPU encoder first and the CPU when the GPU is full or has none of this codec.
     fit: Union[Fit, None]
@@ -4597,6 +4617,8 @@ class VideoWant(TypedDict, total=False):
     # Keyframe interval in frames of the source's own rate, as Flussonic's `gop` is written. Taken over `keyframe_ms` when both are set.
     keyframe_ms: Optional[int]
     # Keyframe interval. Renditions in one ladder share it.
+    match_source: Union[MatchSource, None]
+    # Convert a larger source at its own size: a source taller than `height` comes out at its own height, up to `max_height`, with the frame's shape kept, and a smaller one at `width` x `height`. So one profile at 1280x720 with `max_height` 1080 makes 1080p of an HD source and 720p of the rest.
     pad_color: Optional[str]
     # The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
     preset: Optional[str]
@@ -4834,6 +4856,12 @@ ChannelProtocol = Literal['rtmp', 'srt', 'whip']
 # Whether an interlaced picture is made progressive.
 Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
 
+# How a deinterlace makes the lines of the field it does not have.
+DeinterlaceMethod = Literal['yadif', 'greedyh', 'linear']
+
+# What an imported `transcoder deinterlace=false` does.
+DeinterlaceMode = Literal['auto', 'file']
+
 # Where a destination has got to.
 DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
 
@@ -4944,6 +4972,9 @@ ShowState = Literal['starting', 'running', 'stopped', 'failed']
 
 # What a show does to make its outputs, which is what its load pays for.
 ShowWork = Literal['mix', 'transcode', 'copy']
+
+# The shape a source's picture is shown at.
+SourceAspect = Literal['auto', '16:9', '4:3']
 
 SourceState = Literal['connecting', 'live', 'stalled', 'failed']
 
@@ -6408,6 +6439,7 @@ class GeneratedMethods:
         gpu: Optional[Union[GpuPick, None]] = None,
         interface: Optional[str] = None,
         profile: Optional[str] = None,
+        video_overrides: Optional[Union[VideoWant, None]] = None,
     ) -> ChannelChange:
         """The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on."""
         params: Dict[str, Any] = {}
@@ -6422,6 +6454,8 @@ class GeneratedMethods:
             params["interface"] = interface
         if profile is not None:
             params["profile"] = profile
+        if video_overrides is not None:
+            params["video_overrides"] = video_overrides
         return await self._call("headend.channel.bulk", params)
 
     async def headend_channel_follow(
@@ -6470,6 +6504,7 @@ class GeneratedMethods:
     async def headend_import(
         self,
         *,
+        deinterlace: Optional[Union[DeinterlaceMode, None]] = None,
         deviceid: Optional[Union[DeviceIdMode, None]] = None,
         dry_run: Optional[bool] = None,
         path: Optional[str] = None,
@@ -6477,6 +6512,8 @@ class GeneratedMethods:
     ) -> HeadendImportReport:
         """Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."""
         params: Dict[str, Any] = {}
+        if deinterlace is not None:
+            params["deinterlace"] = deinterlace
         if deviceid is not None:
             params["deviceid"] = deviceid
         if dry_run is not None:

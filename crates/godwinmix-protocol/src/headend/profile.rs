@@ -3,7 +3,7 @@
 //! `headend.profile.save`. Changing a profile changes every channel that
 //! takes it, which is how a whole headend moves to another bitrate.
 
-use crate::rendition::{AudioCodec, AudioWant, Deinterlace, Fit, Tracks, VideoCodec, VideoWant};
+use crate::rendition::{AudioCodec, AudioWant, Deinterlace, Fit, MatchSource, Tracks, VideoCodec, VideoWant};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -91,16 +91,24 @@ fn builtin(id: &str, name: &str, video: Option<VideoWant>, audio: Option<AudioWa
     TranscodeProfile { id: id.into(), name: name.into(), builtin: true, video, audio, ladder: Vec::new() }
 }
 
+/// 720p, and an HD source at 1080p, 4.5 Mbit/s.
+fn hd_or_720p() -> VideoWant {
+    VideoWant { match_source: Some(MatchSource { max_height: 1080, bitrate_kbps: Some(4500) }), ..h264(1280, 720, 1500) }
+}
+
 /// The id of the profile that passes the input through.
 pub const COPY: &str = "copy";
 /// The `profile` a channel names when it carries its own conversion.
 pub const CUSTOM: &str = "custom";
 
 /// The profiles every station has. Each picture one fits the picture into
-/// its size with black bars, deinterlaces what the stream marks as
-/// interlaced, puts a keyframe every two seconds and converts every sound
-/// track to AAC at 128 kbit/s. None of them pins the encoder: the planner
-/// takes a GPU first and the CPU when the GPU is full or missing.
+/// its size by its shape, with black bars, deinterlaces what the stream
+/// marks as interlaced, puts a keyframe every two seconds and converts
+/// every sound track to AAC at 128 kbit/s. None of them pins the encoder:
+/// the planner takes a GPU first and the CPU when the GPU is full or
+/// missing. The last two follow the source: 1080p of an HD one and 720p of
+/// the rest, and the last adds a 720p variant under an HD source's 1080p
+/// for a viewer on a weak connection.
 pub fn builtins() -> Vec<TranscodeProfile> {
     vec![
         builtin(COPY, "Pass through", None, None),
@@ -108,6 +116,11 @@ pub fn builtins() -> Vec<TranscodeProfile> {
         builtin("h264-480p-800", "480p H.264, 800 kbit/s", Some(h264(854, 480, 800)), Some(sound())),
         builtin("h264-720p-1500", "720p H.264, 1.5 Mbit/s", Some(h264(1280, 720, 1500)), Some(sound())),
         builtin("h264-1080p-4000", "1080p H.264, 4 Mbit/s", Some(h264(1920, 1080, 4000)), Some(sound())),
+        builtin("h264-hd-1080p-else-720p", "1080p H.264 of HD sources, else 720p", Some(hd_or_720p()), Some(sound())),
+        TranscodeProfile {
+            ladder: vec![VideoWant { width: Some(1280), height: Some(720), bitrate_kbps: Some(1500), ..VideoWant::default() }],
+            ..builtin("h264-hd-1080p-720p-ladder", "1080p and 720p of HD sources, else 720p", Some(hd_or_720p()), Some(sound()))
+        },
     ]
 }
 

@@ -66,8 +66,8 @@ impl Cmaf {
     async fn playlist(&self, at: &At, sel: Select) -> Result<(String, u64, Vec<Seg>), Missing> {
         let listed = self.listed(at).await?;
         let want = match (sel.video, sel.audio) {
-            (true, None) => listed.iter().find(|(t, _)| t.kind == Kind::Video),
-            (false, Some(n)) => listed.iter().find(|(t, _)| t.kind == Kind::Audio && t.number == n),
+            (Some(v), None) => listed.iter().find(|(t, _)| t.kind == Kind::Video && t.number == v),
+            (None, Some(n)) => listed.iter().find(|(t, _)| t.kind == Kind::Audio && t.number == n),
             _ => return Err(Missing::Unsupported("CMAF segments carry the video and each sound apart; ask for tracks-v1 or tracks-a<n>".into())),
         };
         let (_, uri) = want.ok_or_else(|| Missing::Gone(format!("show {} has no such track", at.show)))?;

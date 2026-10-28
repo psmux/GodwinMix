@@ -9,6 +9,7 @@
 mod codecs;
 mod input;
 mod options;
+mod picture;
 mod want;
 
 pub use options::{Deinterlacing, DeviceId, Options};
@@ -126,8 +127,9 @@ fn plan(cfg: &Config, s: &Stream, notes: &mut Vec<Note>, opts: &Options) -> Opti
     let mut outputs = vec![hls];
     for (i, push) in s.pushes.iter().enumerate() {
         let mut out = json!({ "id": format!("push-{}", i + 1), "uri": push });
+        // A push sends one stream: a ladder's first picture.
         if let Some(r) = &rendition {
-            out["rendition"] = r.clone();
+            out["rendition"] = r.get("ladder").and_then(|l| l.get(0)).cloned().unwrap_or_else(|| r.clone());
         }
         outputs.push(out);
     }

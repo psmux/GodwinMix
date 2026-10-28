@@ -71,8 +71,11 @@ fn an_hls_output_is_named_by_its_address_and_keeps_its_params_on_it() {
     assert_eq!(list[0].server, "hls://viewers?segment_ms=1000&window=6");
     let not_hls = add(&mut list, "feed", &spec(json!({"uri": "udp://h:1", "params": {"window": 6}}))).unwrap_err();
     assert_eq!(not_hls.data["field"], "params");
-    let ladder = add(&mut list, "feed", &spec(json!({"uri": "hls://abr", "rendition": {"preset": "abr-ladder-4"}}))).unwrap_err();
-    assert_eq!(ladder.data["ladder"], true);
+    // A ladder is kept whole: each rung a variant of the output's master.
+    let ladder = add(&mut list, "feed", &spec(json!({"uri": "hls://abr", "rendition": {"preset": "abr-ladder-4"}}))).unwrap();
+    assert_eq!(ladder, "abr");
+    assert_eq!(crate::station::direct::rungs::further(list.last().unwrap()).len(), 3);
+    list.pop();
     let short = add(&mut list, "feed", &spec(json!({"uri": "hls://x", "params": {"segment_ms": 100}}))).unwrap_err();
     assert_eq!(short.data["field"], "params");
     let req = |v| serde_json::from_value::<ShowOutputSetRequest>(v).unwrap();

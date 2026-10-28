@@ -901,6 +901,11 @@ pub struct ChannelBulkRequest {
     /// A profile for every one of them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
+    /// Every one of them takes these picture settings over its profile's
+    /// (see `HeadendChannel.video_overrides`), in place of any it had. `{}`
+    /// clears them, so each takes its profile as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_overrides: Option<VideoWant>,
 }
 
 /// What an add, an update or a removal did.
@@ -1489,6 +1494,16 @@ pub struct Crop {
 pub type Deinterlace = String;
 /// The values api_level 1 knows for [`Deinterlace`].
 pub const DEINTERLACE_VALUES: &[&str] = &["auto", "off", "on"];
+
+/// How a deinterlace makes the lines of the field it does not have.
+pub type DeinterlaceMethod = String;
+/// The values api_level 1 knows for [`DeinterlaceMethod`].
+pub const DEINTERLACE_METHOD_VALUES: &[&str] = &["yadif", "greedyh", "linear"];
+
+/// What an imported `transcoder deinterlace=false` does.
+pub type DeinterlaceMode = String;
+/// The values api_level 1 knows for [`DeinterlaceMode`].
+pub const DEINTERLACE_MODE_VALUES: &[&str] = &["auto", "file"];
 
 /// One destination as a client sees it. The key never appears: `has_key`
 /// says whether there is one.
@@ -3240,6 +3255,13 @@ pub struct HeadendChannel {
     /// What the screen and the show list call it. Left out: the name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// This channel's own picture settings, over its profile's: each field
+    /// set here replaces the profile's on every rendition, and the rest
+    /// come from the profile. For what one channel needs and its profile
+    /// should not say: `aspect` for a broadcaster that flags its picture
+    /// wrong, `deinterlace`, `fit`. Left out: the profile as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_overrides: Option<VideoWant>,
 }
 
 /// An encoder this machine has, for the profile editor's choice.
@@ -3290,6 +3312,11 @@ pub struct HeadendImportReport {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HeadendImportRequest {
+    /// What a `transcoder deinterlace=false`, or a line with no
+    /// `deinterlace`, means. Left out: `[headend] flussonic_deinterlace`,
+    /// which is `auto` unless set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deinterlace: Option<DeinterlaceMode>,
     /// What a `transcoder deviceid=N` means. Left out: `[headend]
     /// flussonic_deviceid`, which is `spread` unless set.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -4041,6 +4068,18 @@ pub struct MarkRequest {
     /// group, so the next change is its own undo step.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+}
+
+/// A rendition that follows a larger source's size, up to a limit.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MatchSource {
+    /// The bitrate at `max_height`. Left out, the rendition's own bitrate
+    /// grown by the picture's area, so 1500 kbit/s at 720p is 3375 at 1080p.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// The tallest picture made, such as 1080.
+    pub max_height: u32,
 }
 
 /// One tag and how many files have it.
@@ -6485,6 +6524,11 @@ pub struct SnapshotRequest {
     pub width: Option<u32>,
 }
 
+/// The shape a source's picture is shown at.
+pub type SourceAspect = String;
+/// The values api_level 1 knows for [`SourceAspect`].
+pub const SOURCE_ASPECT_VALUES: &[&str] = &["auto", "16:9", "4:3"];
+
 /// What a source's audio controls read back as, which is what the audio
 /// endpoint answers with.
 ///
@@ -7132,6 +7176,13 @@ pub struct TranscodeProfile {
     /// A slug. The built in ones are listed by `headend.channel.list`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// Further pictures of the same programme for the HLS output, each a
+    /// variant of its own in the master playlist beside `video`, so a
+    /// player on a weak connection can step down: 720p under a 1080p
+    /// `video`, say. Every one shares the sound. A field left out of one is
+    /// taken from `video`, so a rung can be just a size and a bitrate. The
+    /// channel's other outputs carry `video` alone. Needs `video`.
+    pub ladder: Vec<VideoWant>,
     /// What the screen calls it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -7324,6 +7375,12 @@ pub struct VideoShape {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VideoWant {
+    /// The shape the source's picture is shown at, which `pad` and `crop`
+    /// fit by. Left out (`auto`), the shape the stream says: a 704x480
+    /// picture flagged 16:9 fills a 16:9 frame. `16:9` or `4:3` overrides
+    /// it for a broadcaster that flags its picture wrong.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aspect: Option<SourceAspect>,
     /// B frames between references. The catalogue's (none, for live) when
     /// left out.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -7341,6 +7398,12 @@ pub struct VideoWant {
     /// Off when left out: an interlaced picture is scaled as it comes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deinterlace: Option<Deinterlace>,
+    /// How a deinterlace makes the missing lines. `yadif` when left out.
+    /// It runs on the CPU whatever the method: GStreamer has no GPU
+    /// deinterlace, so on an NVIDIA card the picture goes down for it and
+    /// back up, and the scale and the encode stay on the card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deinterlace_method: Option<DeinterlaceMethod>,
     /// Only a GPU encoder, or only one on the CPU. Left out, the planner
     /// takes a GPU encoder first and the CPU when the GPU is full or has
     /// none of this codec.
@@ -7368,6 +7431,13 @@ pub struct VideoWant {
     /// Keyframe interval. Renditions in one ladder share it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub keyframe_ms: Option<u32>,
+    /// Convert a larger source at its own size: a source taller than
+    /// `height` comes out at its own height, up to `max_height`, with the
+    /// frame's shape kept, and a smaller one at `width` x `height`. So one
+    /// profile at 1280x720 with `max_height` 1080 makes 1080p of an HD
+    /// source and 720p of the rest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub match_source: Option<MatchSource>,
     /// The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pad_color: Option<String>,

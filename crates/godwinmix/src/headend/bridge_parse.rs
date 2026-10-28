@@ -28,8 +28,8 @@ pub fn attr(line: &str, key: &str) -> Option<String> {
     None
 }
 
-/// The master: the video rung and the sound, each with the URI of its own
-/// playlist, relative to the master.
+/// The master: each picture (a ladder's first first, numbered from 1) and
+/// each sound, with the URI of its own playlist, relative to the master.
 pub fn master(text: &str) -> Vec<(Track, String)> {
     let mut out = Vec::new();
     let mut lines = text.lines();
@@ -51,7 +51,7 @@ pub fn master(text: &str) -> Vec<(Track, String)> {
                 name: None,
             };
             out.push((track, uri));
-        } else if line.starts_with("#EXT-X-STREAM-INF:") && !out.iter().any(|(t, _): &(Track, String)| t.kind == Kind::Video) {
+        } else if line.starts_with("#EXT-X-STREAM-INF:") {
             let Some(uri) = lines.next().map(str::trim).filter(|u| !u.is_empty() && !u.starts_with('#')) else { continue };
             let codecs = attr(line, "CODECS").unwrap_or_default();
             let (w, h) = attr(line, "RESOLUTION").and_then(|r| r.split_once('x').map(|(w, h)| (w.parse().unwrap_or(0), h.parse().unwrap_or(0)))).unwrap_or((0, 0));
@@ -60,9 +60,10 @@ pub fn master(text: &str) -> Vec<(Track, String)> {
             for (t, _) in out.iter_mut().filter(|(t, _)| t.kind == Kind::Audio) {
                 t.codecs = audio_codec.to_string();
             }
+            let pictures = out.iter().filter(|(t, _): &&(Track, String)| t.kind == Kind::Video).count();
             let track = Track {
                 kind: Kind::Video,
-                number: 1,
+                number: u8::try_from(pictures + 1).unwrap_or(u8::MAX),
                 codecs: video_codec.to_string(),
                 bandwidth: attr(line, "BANDWIDTH").and_then(|b| b.parse().ok()).unwrap_or(0),
                 width: w,
@@ -72,7 +73,7 @@ pub fn master(text: &str) -> Vec<(Track, String)> {
                 lang: None,
                 name: None,
             };
-            out.insert(0, (track, uri.to_string()));
+            out.insert(pictures, (track, uri.to_string()));
         }
     }
     out
@@ -128,6 +129,10 @@ mod tests {
         assert_eq!(t[0].0.kind, Kind::Video);
         assert_eq!((t[0].0.width, t[0].0.codecs.as_str(), t[0].1.as_str()), (1280, "avc1.64001f", "main/index.m3u8"));
         assert_eq!((t[1].0.channels, t[1].0.codecs.as_str(), t[1].1.as_str()), (Some(2), "mp4a.40.2", "audio/index.m3u8"));
+        let ladder = format!("{master}#EXT-X-STREAM-INF:BANDWIDTH=900000,CODECS=\"avc1.4d401e,mp4a.40.2\",RESOLUTION=854x480,AUDIO=\"aud\"\nmain-480p/index.m3u8\n");
+        let t = super::master(&ladder);
+        let pictures: Vec<(u8, u32, &str)> = t.iter().filter(|(t, _)| t.kind == Kind::Video).map(|(t, u)| (t.number, t.height, u.as_str())).collect();
+        assert_eq!(pictures, [(1, 720, "main/index.m3u8"), (2, 480, "main-480p/index.m3u8")]);
         let text = include_str!("../../../godwinmix-core/src/hls/golden/media.m3u8");
         let (_, segs) = media(text);
         assert!(segs.len() >= 2 && segs[0].init.as_deref() == Some("init.mp4"));
