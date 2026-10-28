@@ -3314,7 +3314,7 @@
       "oneOf": [
         {
           "const": "yadif",
-          "description": "Looks at the fields before and after: no combing on movement and no\nflicker on still detail. About 3 ms of one core a 1080i frame.",
+          "description": "Looks at the fields before and after: no combing on movement and no\nflicker on still detail.",
           "type": "string"
         },
         {
