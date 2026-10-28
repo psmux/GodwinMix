@@ -70,6 +70,11 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let enc = element(node, "element")?;
     set_all(&enc, node.raw.get("props"));
     let mut elements = vec![leaky_queue()?];
+    // A picture straight from its decoder (a scale to the source's own size
+    // that has nothing to do) may still say `mixed`, which NVENC refuses: a
+    // 1080i source encoded at 1080 never ran. Taken as woven frames, as a
+    // scale would.
+    reshape(&elements[0], true, None);
     if !node.cuda() {
         elements.push(make("videoconvert")?);
         // 4:2:0, which every player decodes: given the choice, x264 took
