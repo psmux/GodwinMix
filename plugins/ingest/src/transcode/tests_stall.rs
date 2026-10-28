@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gstreamer as gst;
-use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 
 use super::*;
