@@ -1,9 +1,9 @@
 // A stand in for a headend station's own setup, on top of the wall's stub:
-// headend.channel.list, add (with its dry run), update, bulk, remove and
-// follow, headend.profile.save and remove (refused with data.channels when
-// a channel takes the profile), headend.scan after a short listen, and
-// headend.export. Each channel added runs as a direct show in show.list.
-// Shapes are crates/godwinmix-protocol/src/headend.
+// headend.channel.list, add (with its dry run), update, bulk (picture
+// overrides too), remove and follow, headend.profile.save and remove
+// (refused with data.channels when a channel takes the profile),
+// headend.scan after a short listen, and headend.export. Each channel
+// added runs as a direct show in show.list. Shapes are crates/godwinmix-protocol/src/headend.
 
 import { wallStub } from "./wall-stub.js";
 import { RpcError } from "../client/errors.js";
@@ -126,6 +126,10 @@ function methods(stub) {
       if (p.profile) e.channel.profile = p.profile;
       if (p.custom) e.channel.custom = p.custom;
       if (p.enabled !== undefined) e.channel.enabled = p.enabled;
+      if (p.video_overrides) {
+        if (Object.keys(p.video_overrides).length) e.channel.video_overrides = p.video_overrides;
+        else delete e.channel.video_overrides;
+      }
       if (p.interface !== undefined) e.channel.input.interface = p.interface || undefined;
       if (p.gpu !== undefined) {
         if (p.gpu === "auto") delete e.channel.gpu;
