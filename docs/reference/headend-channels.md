@@ -95,7 +95,7 @@ through.
 | `encoder` | `gpu`, `cpu` | see below |
 
 Measured on an RTX 4060 Ti with a current desktop CPU, a deinterlace costs
-about 14% of one core for each 1080i channel and about 5% for each 480i
+about 9% of one core for each 1080i channel and about 5% for each 480i
 one, with the GPU's own use of it a few percent; a progressive picture
 passes for nothing to speak of. Linear is far cheaper and softer.
 

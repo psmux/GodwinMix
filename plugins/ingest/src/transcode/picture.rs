@@ -16,7 +16,7 @@ use super::spec::NodeSpec;
 /// On the GPU the picture goes down in I420, which YADIF has a fast path
 /// for (measured on 1080i, about half the time it takes on NV12), and the
 /// result goes back up for the scale. Measured in a headend, a 480i channel
-/// costs about 5% of one core and a 1080i one about 14%; the rest of the
+/// costs about 5% of one core and a 1080i one about 9%; the rest of the
 /// work, the conversion, the scale and the encode, stays on the card.
 pub(super) fn deinterlace(node: &NodeSpec, always: bool) -> Result<Vec<gst::Element>, String> {
     let d = make("deinterlace")?;
