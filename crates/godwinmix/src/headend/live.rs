@@ -134,7 +134,7 @@ pub async fn keep(h: Arc<Headend>) {
     loop {
         n += 1;
         tick.tick().await;
-        let running: Vec<(String, String, bool)> = h.running.lock().iter().map(|(n, a)| (n.clone(), a.id.clone(), a.plan.copy)).collect();
+        let running: Vec<(String, String, bool)> = h.shows();
         memory.retain(|n, _| running.iter().any(|(r, _, _)| r == n));
         let mut next = BTreeMap::new();
         for (name, id, copy) in &running {

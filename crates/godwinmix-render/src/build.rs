@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use godwinmix_protocol::rendition::{AudioShape, Cost, Deinterlace, EncoderSlot, VideoShape};
+use godwinmix_protocol::rendition::{AudioShape, Cost, Deinterlace, EncoderPick, EncoderSlot, VideoShape};
 
 use crate::choose::{choose, hold, Used};
 use crate::container::video_slug;
@@ -189,11 +189,22 @@ impl<'m> Builder<'m> {
             });
         }
         let (preset, bframes) = (want.preset.clone(), want.bframes);
-        let id = encode_id(r.source, target, preset.as_deref(), bframes);
+        let mut id = encode_id(r.source, target, preset.as_deref(), bframes);
+        if let Some(pick) = want.encoder {
+            id.push_str(if pick == EncoderPick::Gpu { ":gpu" } else { ":cpu" });
+        }
         if self.share(&id, r.id()) {
             return Ok(id);
         }
-        let choice = match choose(self.model, &self.encoders, target, &self.used) {
+        let picked: Vec<EncoderSlot>;
+        let only = match want.encoder {
+            None => &self.encoders,
+            Some(p) => {
+                picked = self.encoders.iter().filter(|e| e.hardware == (p == EncoderPick::Gpu)).cloned().collect();
+                &picked
+            }
+        };
+        let choice = match choose(self.model, only, target, &self.used) {
             Ok(choice) => choice,
             Err(tried) => return Err(self.no_encoder(r, target, tried)),
         };

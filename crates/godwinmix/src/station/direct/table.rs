@@ -72,7 +72,9 @@ impl Direct {
             })
             .collect();
         self.replan(&shows);
-        Value::Array(shows.iter().map(|(r, o)| self.row(r, o)).collect())
+        let mut rows: Vec<Value> = shows.iter().map(|(r, o)| self.row(r, o)).collect();
+        rows.extend(self.probes.rows());
+        Value::Array(rows)
     }
 
     fn row(&self, r: &Record, outs: &[StoredDestination]) -> Value {

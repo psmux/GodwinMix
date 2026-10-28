@@ -47,6 +47,7 @@ import { sourceBackupFormTests } from "./source-backup-form.js";
 import { headendAdvancedTests } from "./headend-advanced.js";
 import { outputsEditTests } from "./outputs-edit.js";
 import { headendStationTests } from "./headend-station.js";
+import { headendSetupTests } from "./headend-setup.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -3152,6 +3153,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the headend station suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => headendSetupTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the headend setup suite threw: " + e.message);
     console.error(e);
   })
   .then(designerFixtureSuite)

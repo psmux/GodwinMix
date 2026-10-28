@@ -6,6 +6,10 @@
 //! gateway, the caches and the monitoring page in front of it need no change.
 //! The file is watched; an edit restarts only the streams it changed.
 //!
+//! `godwinmix headend --port 8090` with no file is a headend set up on its
+//! own screen: the channels the station keeps (`native/`), served on the
+//! same URLs. Every station keeps such channels, headend mode or not.
+//!
 //! ```text
 //!   flussonic.conf ──watch──► import ──show.add_many──► station (direct shows)
 //!                                                          │
@@ -24,10 +28,12 @@ pub mod calls;
 mod facade;
 mod import_read;
 mod ingest;
+mod keep;
 mod live;
 mod live_tracks;
 mod media;
 pub mod methods;
+pub mod native;
 mod picture;
 mod report;
 mod saved;
@@ -44,8 +50,9 @@ use std::path::PathBuf;
 /// `godwinmix headend`.
 #[derive(clap::Args, Debug, Clone)]
 pub struct Args {
-    /// Flussonic's config. Left out: `flussonic` in the `[headend]` table of
-    /// the GodwinMix config.
+    /// Flussonic's config to follow. Left out: `flussonic` in the
+    /// `[headend]` table of the GodwinMix config, or none: the channels are
+    /// then set up on the headend screen.
     #[arg(long, value_name = "FILE")]
     pub flussonic: Option<PathBuf>,
     /// Answer on this port instead of the file's `http` port, to run beside
@@ -68,7 +75,7 @@ pub struct Args {
 /// What the headend runs with, from the flags and the `[headend]` table.
 #[derive(Debug, Clone)]
 pub struct Settings {
-    pub file: PathBuf,
+    pub file: Option<PathBuf>,
     pub port: Option<u16>,
     pub address: Option<String>,
     pub log: Option<PathBuf>,
@@ -84,9 +91,7 @@ fn table_path(cfg: &Config, key: &str) -> Option<PathBuf> {
 
 pub fn settings(args: &Args, cfg: Option<&Config>) -> Result<Settings> {
     let from_table = |key: &str| cfg.and_then(|c| table_path(c, key));
-    let file = args.flussonic.clone().or_else(|| from_table("flussonic")).context(
-        "headend mode needs Flussonic's config: give --flussonic /etc/flussonic/flussonic.conf, or set flussonic in a [headend] table",
-    )?;
+    let file = args.flussonic.clone().or_else(|| from_table("flussonic"));
     let port = args.port.or_else(|| cfg.and_then(|c| c.extra.get("headend")?.get("port")?.as_integer()).and_then(|p| u16::try_from(p).ok()));
     Ok(Settings {
         file,
@@ -100,13 +105,14 @@ pub fn settings(args: &Args, cfg: Option<&Config>) -> Result<Settings> {
 
 /// `--check`: the import's plan and notes, as text.
 pub fn check(s: &Settings) -> Result<String> {
-    let text = std::fs::read_to_string(&s.file).with_context(|| format!("reading {}", s.file.display()))?;
-    let doc = godwinmix_flussonic::Document::parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", s.file.display()))?;
+    let file = s.file.as_ref().context("--check reads a Flussonic config: give --flussonic FILE")?;
+    let text = std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
+    let doc = godwinmix_flussonic::Document::parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", file.display()))?;
     let import = godwinmix_flussonic::import::import(&doc.config);
     let copies = import.shows.iter().filter(|p| p.copy).count();
     let mut out = format!(
         "{}: {} streams, {} converted and {} copied, {} off\n",
-        s.file.display(),
+        file.display(),
         import.shows.len(),
         import.shows.len() - copies,
         copies,

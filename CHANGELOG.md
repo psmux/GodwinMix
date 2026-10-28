@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+A headend is set up in GodwinMix itself. The headend screen used to offer one way in, importing a Flussonic config; it now has three, and the import is one of them.
+
+* With no channels, the headend screen offers Add a channel, Scan a multicast feed and Import a Flussonic config. The band keeps a button for each, and one for the channel list.
+* Add, edit, duplicate and remove channels on the screen: a name (the public path), an input (UDP or RTP multicast or unicast MPEG-TS with its group, port, card and program number, SRT, RTMP, RTSP, an HLS pull or a file) with an optional backup, a conversion (pass through, a profile, or settings of its own), the HLS output and any UDP, SRT or RTMP outputs, and on or off. The channel list changes many at once: a profile, on or off, the network card, or removal.
+* Scan a multicast feed: give the group, port and card, and the station lists every programme with its name, its picture size and rate, its sound tracks with their languages, whether it is scrambled and whether a channel already takes it. Tick several and add them in one go with one profile. The scan reads the feed through the same input a channel uses.
+* Transcode profiles: five built in (pass through, sound to AAC, and 480p, 720p and 1080p H.264) and any number saved on the station, each with codec, size and fit, bitrate, keyframes, deinterlacing, sound codec, bitrate and tracks, and the encoder on Auto, the GPU or the CPU. Changing a profile changes every channel that takes it.
+* The station keeps the channels and profiles in `headend.json` and runs each channel as the direct show a Flussonic import makes, so the tiles, health and the Flussonic compatible URLs work the same for both. A Flussonic import now makes channels the station keeps, which are edited like any other.
+* With a Flussonic file followed, editing or removing one of its streams on the screen takes that stream out of the file's hands, and the screen says so before saving. Follow the file again gives it back.
+* `godwinmix headend` runs with no `--flussonic`, and with `--port` answers Flussonic's paths and API for the station's own channels.
+* A rendition can keep its encoder on the GPU or on the CPU (`video.encoder`).
+* New station methods: `headend.channel.list`, `add`, `update`, `bulk`, `remove` and `follow`, `headend.profile.save` and `remove`, `headend.scan` and `headend.export`, each an agent tool behind `search_tools`. See [Set up a headend in GodwinMix](docs/how-to/set-up-a-headend.md) and [the reference](docs/reference/headend-channels.md).
+
 ## 0.3.17 (2026-10-24)
 
 Headend mode: GodwinMix runs a box of off air channels on one GPU in place of Flussonic, reading Flussonic's config and answering its URLs and API, so the gateways, caches, players and monitoring around it keep working. A new flow map shows any station's inputs, shows, conversions and outputs live.

@@ -44,10 +44,18 @@ fn allowed(h: &Headend, headers: &HeaderMap, peer: SocketAddr, want: Access) -> 
     Err(Box::new(refused))
 }
 
+/// The file's streams, less any the station's own channels hold, then
+/// those channels as the streams they would be in Flussonic's language.
 fn answered(h: &Headend, name: Option<&str>) -> Vec<(godwinmix_flussonic::model::Stream, Live)> {
+    let native = super::native::Native::of(&h.st);
+    let owned = native.owned();
+    let mut streams: Vec<godwinmix_flussonic::model::Stream> = h.doc.lock().config.streams.iter().filter(|s| !owned.contains(&s.name)).cloned().collect();
+    streams.extend(native.streams());
     let live = h.live.read();
-    let doc = h.doc.lock();
-    doc.config.streams.iter().filter(|s| name.is_none_or(|n| s.name == n)).map(|s| (s.clone(), live.get(&s.name).cloned().unwrap_or_default())).collect()
+    streams.into_iter().filter(|s| name.is_none_or(|n| s.name == n)).map(|s| {
+        let l = live.get(&s.name).cloned().unwrap_or_default();
+        (s, l)
+    }).collect()
 }
 
 async fn list(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> Response {
@@ -67,13 +75,18 @@ async fn one(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: 
     }
 }
 
+fn no_file() -> Response {
+    refuse(StatusCode::CONFLICT, "this headend follows no Flussonic config, so there is no file to edit. Set its channels up on the headend screen, or with headend.channel.add on the station's control port.")
+}
+
 /// Write the document back to the file, atomically, and apply it.
 async fn save(h: &Arc<Headend>) -> Result<(), Box<Response>> {
+    let Some(file) = &h.file else { return Err(Box::new(no_file())) };
     let text = h.doc.lock().text();
-    let tmp = h.file.with_extension("conf.godwinmix-tmp");
+    let tmp = file.with_extension("conf.godwinmix-tmp");
     std::fs::write(&tmp, &text)
-        .and_then(|_| std::fs::rename(&tmp, &h.file))
-        .map_err(|e| Box::new(refuse(StatusCode::INTERNAL_SERVER_ERROR, format!("could not write {}: {e}", h.file.display()))))?;
+        .and_then(|_| std::fs::rename(&tmp, file))
+        .map_err(|e| Box::new(refuse(StatusCode::INTERNAL_SERVER_ERROR, format!("could not write {}: {e}", file.display()))))?;
     super::apply::apply_file(h, false).await;
     h.changed.notify_one();
     Ok(())
@@ -82,6 +95,9 @@ async fn save(h: &Arc<Headend>) -> Result<(), Box<Response>> {
 async fn put(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Path(name): Path<String>, body: axum::body::Bytes) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Edit) {
         return *r;
+    }
+    if h.file.is_none() {
+        return no_file();
     }
     let Ok(v) = serde_json::from_slice::<Value>(&body) else { return refuse(StatusCode::BAD_REQUEST, "the body is not JSON") };
     let edited = {
@@ -102,6 +118,9 @@ async fn delete(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, header
     if let Err(r) = allowed(&h, &headers, peer, Access::Edit) {
         return *r;
     }
+    if h.file.is_none() {
+        return no_file();
+    }
     if let Err(e) = h.doc.lock().remove_stream(&name) {
         return refuse(StatusCode::NOT_FOUND, e.to_string());
     }
@@ -121,7 +140,8 @@ async fn config(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, header
 /// No auth: for a probe. Counts only.
 async fn health(State(h): St) -> Response {
     let live = h.live.read();
-    let streams = h.doc.lock().config.streams.len();
     let running = live.values().filter(|l| l.input_live && l.output_live).count();
-    Json(json!({"status": "ok", "server": "godwinmix", "streams": streams, "shows": h.running.lock().len(), "running": running})).into_response()
+    drop(live);
+    let streams = answered(&h, None).len();
+    Json(json!({"status": "ok", "server": "godwinmix", "streams": streams, "shows": h.shows().len(), "running": running})).into_response()
 }

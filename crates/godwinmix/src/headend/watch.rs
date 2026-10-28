@@ -14,16 +14,17 @@ const LOOK: Duration = Duration::from_secs(1);
 const AGAIN: Duration = Duration::from_secs(30);
 
 fn stamp(h: &Headend) -> Option<(SystemTime, u64)> {
-    let m = std::fs::metadata(&h.file).ok()?;
+    let m = std::fs::metadata(h.file.as_ref()?).ok()?;
     Some((m.modified().ok()?, m.len()))
 }
 
 /// Read the file into the headend. False when it would not read.
 pub fn reread(h: &Headend) -> bool {
-    let text = match std::fs::read_to_string(&h.file) {
+    let Some(file) = &h.file else { return false };
+    let text = match std::fs::read_to_string(file) {
         Ok(t) => t,
         Err(e) => {
-            warn!(file = %h.file.display(), error = %e, "headend: the config would not read; the streams keep running as they are");
+            warn!(file = %file.display(), error = %e, "headend: the config would not read; the streams keep running as they are");
             return false;
         }
     };
@@ -33,7 +34,7 @@ pub fn reread(h: &Headend) -> bool {
             true
         }
         Err(e) => {
-            warn!(file = %h.file.display(), error = %e, "headend: the config has a mistake; the streams keep running as they are until it is fixed");
+            warn!(file = %file.display(), error = %e, "headend: the config has a mistake; the streams keep running as they are until it is fixed");
             false
         }
     }
@@ -50,7 +51,7 @@ pub async fn watch(h: Arc<Headend>) {
         let now = stamp(&h);
         if now != seen {
             seen = now;
-            info!(file = %h.file.display(), "headend: the config changed");
+            info!(file = %h.file_text(), "headend: the config changed");
             if reread(&h) {
                 super::apply::apply_file(&h, true).await;
                 applied = Instant::now();

@@ -1,4 +1,5 @@
-//! `headend.import` and `headend.status` as rows of the method table.
+//! `headend.import` and `headend.status` as rows of the method table, and
+//! the headend's own setup (`native/table.rs`).
 //!
 //! The station answers both itself (`calls.rs`). What is registered here is
 //! what a core with no station in front of it answers: it follows no
@@ -20,8 +21,9 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "headend.import",
             Scope::Admin,
-            "Make a Flussonic config into shows without compositing, one per stream, each \
-             with its input, one HLS output and the transcoder line as its rendition. Takes \
+            "Make a Flussonic config into headend channels the station keeps, one per stream, \
+             each a show without compositing with its input, one HLS output and the transcoder \
+             line as its rendition, editable afterwards like any channel set up here. Takes \
              the config's text or a path on the station's machine. A dry run, the default, \
              answers the report (every stream, every line not carried, what the shows \
              would cost) and makes nothing.",
@@ -42,9 +44,10 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(no_params)
         .result(schema_of::<HeadendStatus>),
     );
+    super::native::table::register(reg);
 }
 
-fn alone(method: &str) -> RpcError {
+pub(crate) fn alone(method: &str) -> RpcError {
     RpcError::not_in_state(format!(
         "this core runs one show on its own, with no station, so {method} has nowhere to make shows. \
          Start GodwinMix without --show, and call it on the station's control port."

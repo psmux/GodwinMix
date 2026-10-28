@@ -1,4 +1,6 @@
 // Import a Flussonic config: pasted, or a file on the station's machine.
+// One of the ways to a headend's channels, beside adding one by hand and
+// scanning a feed; each stream becomes a channel the station keeps.
 // The report comes first (headend.import with dry_run, the default): every
 // stream as the show it becomes, what would be refused, every line not
 // carried. Make the shows sends the same config with dry_run false.
@@ -11,7 +13,7 @@ import { errorToast, toast } from "../../shell/toast.js";
 import { sheet } from "./sheet.js";
 import { notesList, streamTable, summary } from "./import-report.js";
 
-const ONCE = "The import makes the shows once and does not follow the config. To follow a file and answer Flussonic's URLs and API as well, start the station with godwinmix headend --flussonic FILE.";
+const ONCE = "The import reads the config once and does not follow it. To follow a file and answer Flussonic's URLs and API as well, start the station with godwinmix headend --flussonic FILE.";
 
 /** The params of headend.import from what was typed, or `{error}`. */
 export function importParams(how, text, path, dry) {
@@ -34,8 +36,8 @@ export async function importFlussonic(client, opts = {}) {
   const tabs = el("div.he-imp-tabs", { role: "group", "aria-label": "Where the config is" }, [tab("text", "Paste it"), tab("path", "A file on the station")]);
   const pathField = el("label.field", { hidden: true }, [el("span.lbl", { text: "Path on the station's machine" }), path, el("span.hint", { text: "Read by the station, so it is a path on that machine, not this one." })]);
   const ask = el("div.he-imp-ask", {}, [
-    el("p.dim.sm", { style: { marginTop: "0" }, text: "Each stream becomes a show without compositing: its input, one HLS output with MPEG-TS and CMAF open to the local network, and the transcoder line as its rendition." }),
-    following && following.following ? el("p.he-imp-warn", { text: `This station follows ${following.file}. Shows made here are not in that file; to change its streams, edit the file.` }) : null,
+    el("p.dim.sm", { style: { marginTop: "0" }, text: "Each stream becomes a channel the station keeps: its input, one HLS output with MPEG-TS and CMAF open to the local network, and the transcoder line as its conversion. You can edit every one of them here afterwards, like a channel added by hand." }),
+    following && following.following ? el("p.he-imp-warn", { text: `This station follows ${following.file}. Channels imported here are kept by the station and are not written into that file. The file's own streams can be edited on the channel list too, which takes each one out of the file's hands.` }) : null,
     tabs, el("div.field", {}, [text]), pathField,
     el("p.he-calm", { text: ONCE }),
   ]);

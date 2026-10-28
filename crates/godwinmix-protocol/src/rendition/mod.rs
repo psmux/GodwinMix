@@ -84,6 +84,11 @@ pub struct VideoWant {
     /// left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bframes: Option<u8>,
+    /// Only a GPU encoder, or only one on the CPU. Left out, the planner
+    /// takes a GPU encoder first and the CPU when the GPU is full or has
+    /// none of this codec.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<EncoderPick>,
 }
 
 /// The audio an output wants. Every field left out is taken from the source.

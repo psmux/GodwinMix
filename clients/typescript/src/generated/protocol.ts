@@ -456,10 +456,49 @@ export interface ChannelAddRequest {
   secret?: string | null;
 }
 
+/** `headend.channel.add`: one channel or many, made in one go. */
+export interface ChannelAddRequest2 {
+  channels: HeadendChannel[];
+  dry_run?: boolean;
+}
+
 /** What `channel.add` answers: the channel and its first key. */
 export interface ChannelAdded {
   channel: Channel;
   key: NewKey;
+}
+
+/** A channel's backup input: an input with no backup of its own. */
+export interface ChannelBackup {
+  interface?: string | null;
+  params?: Record<string, unknown>;
+  program?: number | null;
+  uri: string;
+}
+
+/** `headend.channel.bulk`: the same change to many channels. */
+export interface ChannelBulkRequest {
+  custom?: TranscodeProfile | null;
+  enabled?: boolean | null;
+  interface?: string | null;
+  names: string[];
+  profile?: string | null;
+}
+
+/** What an add, an update or a removal did. */
+export interface ChannelChange {
+  done: string[];
+  dry_run: boolean;
+  refused: ShowRefused[];
+  restarted?: string[];
+}
+
+/** A channel as `headend.channel.list` answers it. */
+export interface ChannelEntry {
+  channel: HeadendChannel;
+  detached_from?: string | null;
+  follows?: string | null;
+  show?: string | null;
 }
 
 /** A channel's feed as a list shows it. */
@@ -471,6 +510,23 @@ export interface ChannelFeed {
   show?: string | null;
   state: FeedState;
   uri_host?: string | null;
+}
+
+/** The channel's HLS output, which every channel has. */
+export interface ChannelHls {
+  access?: string;
+  segment_ms?: number;
+  segments?: string;
+  window?: number | null;
+}
+
+/** Where a channel's programme comes from. */
+export interface ChannelInput {
+  backup?: ChannelBackup | null;
+  interface?: string | null;
+  params?: Record<string, unknown>;
+  program?: number | null;
+  uri: string;
 }
 
 /** One key, as a list shows it. */
@@ -508,6 +564,21 @@ export interface ChannelList {
   hosts?: string[];
   listeners?: Listener[];
   rtmp: RtmpInfo;
+}
+
+/** `headend.channel.remove` and `headend.channel.follow`. */
+export interface ChannelNames {
+  names: string[];
+}
+
+/**
+ * One output beside the HLS one: a UDP multicast or unicast out, an SRT
+ * or RTMP push.
+ */
+export interface ChannelOutput {
+  copy?: boolean;
+  id?: string;
+  uri: string;
 }
 
 /**
@@ -562,6 +633,12 @@ export interface ChannelThumbnailRequest {
   id: string;
   stream?: string | null;
   width?: number | null;
+}
+
+/** `headend.channel.update`: one channel, replaced whole. */
+export interface ChannelUpdateRequest {
+  channel: HeadendChannel;
+  name: string;
 }
 
 /** One key this call changed, and when the change takes effect. */
@@ -847,6 +924,9 @@ export interface EditBeginRequest {
   live?: boolean;
   scene: string;
 }
+
+/** Where a rendition's picture is encoded, when it must be one or the other. */
+export type EncoderPick = "gpu" | "cpu";
 
 export interface EnrolRequest {
   address?: string | null;
@@ -1607,6 +1687,32 @@ export interface GroupSourcesRequest {
   sources: string[];
 }
 
+/** One channel. */
+export interface HeadendChannel {
+  custom?: TranscodeProfile | null;
+  enabled?: boolean;
+  hls?: ChannelHls;
+  input: ChannelInput;
+  name: string;
+  origin?: string | null;
+  outputs?: ChannelOutput[];
+  profile?: string;
+  title?: string | null;
+}
+
+/** An encoder this machine has, for the profile editor's choice. */
+export interface HeadendEncoder {
+  codec: string;
+  id: string;
+  on: string;
+}
+
+/** `headend.export`: the channels kept here in Flussonic's config language. */
+export interface HeadendExport {
+  notes?: string[];
+  text: string;
+}
+
 /** `headend.import`'s answer: the report, then what was made. */
 export interface HeadendImportReport {
   converted: number;
@@ -1625,6 +1731,14 @@ export interface HeadendImportRequest {
   dry_run?: boolean | null;
   path?: string | null;
   text?: string | null;
+}
+
+/** `headend.channel.list`. */
+export interface HeadendSetup {
+  channels: ChannelEntry[];
+  encoders: HeadendEncoder[];
+  following?: string | null;
+  profiles: TranscodeProfile[];
 }
 
 /** `headend.status`: whether this station runs in headend mode. */
@@ -2726,6 +2840,23 @@ export interface PreviewSocket {
   transport: string;
 }
 
+/** `headend.profile.save` and `headend.profile.remove`. */
+export interface ProfileChange {
+  channels: string[];
+  id: string;
+}
+
+/** `headend.profile.remove`. */
+export interface ProfileRemoveRequest {
+  id: string;
+  move_to?: string | null;
+}
+
+/** `headend.profile.save`. */
+export interface ProfileSaveRequest {
+  profile: TranscodeProfile;
+}
+
 /**
  * What `program.get` answers with, and what `program.take` returns so that no
  * follow up read is needed.
@@ -2915,6 +3046,49 @@ export interface Rtmps {
 export interface SaveRequest {
   name: string;
   out?: string | null;
+}
+
+/** `headend.scan`. */
+export interface ScanRequest {
+  interface?: string | null;
+  uri: string;
+  wait_ms?: number | null;
+}
+
+/** `headend.scan`'s answer. */
+export interface ScanResult {
+  error?: string | null;
+  listened_ms: number;
+  programs: ScannedProgram[];
+  uri: string;
+}
+
+/** One program of the multiplex. */
+export interface ScannedProgram {
+  channel?: string | null;
+  kbps?: number | null;
+  name?: string;
+  number: number;
+  provider?: string;
+  scrambled?: boolean;
+  streams: string[];
+  tracks?: ScannedTrack[];
+}
+
+/**
+ * One elementary stream of a program, as its PMT names it and its frames
+ * show it.
+ */
+export interface ScannedTrack {
+  channels?: number | null;
+  codec: string;
+  fps?: number | null;
+  height?: number | null;
+  interlaced?: boolean;
+  kind: string;
+  lang?: string | null;
+  pid?: number | null;
+  width?: number | null;
 }
 
 /** `scene.list`. */
@@ -3732,6 +3906,19 @@ export interface ToolCallRequest {
 /** Which sound tracks a rendition converts. */
 export type Tracks = "first" | "all";
 
+/**
+ * One conversion. `video` and `audio` are a rendition's wants: left out,
+ * that half is passed through as it comes, so a profile with neither is a
+ * pass through.
+ */
+export interface TranscodeProfile {
+  audio?: AudioWant | null;
+  builtin?: boolean;
+  id?: string;
+  name?: string;
+  video?: VideoWant | null;
+}
+
 /** Where an item sits and how it is sized. */
 export interface Transform {
   align?: Align;
@@ -3845,6 +4032,7 @@ export interface VideoWant {
   bitrate_tolerance?: number | null;
   codec?: VideoCodec | null;
   deinterlace?: Deinterlace | null;
+  encoder?: EncoderPick | null;
   fit?: Fit | null;
   fps?: Fps | null;
   height?: number | null;
@@ -4080,7 +4268,17 @@ export interface MethodParams {
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
   "gpu.status": GpuStatusRequest;
+  "headend.channel.add": ChannelAddRequest2;
+  "headend.channel.bulk": ChannelBulkRequest;
+  "headend.channel.follow": ChannelNames;
+  "headend.channel.list": Record<string, never>;
+  "headend.channel.remove": ChannelNames;
+  "headend.channel.update": ChannelUpdateRequest;
+  "headend.export": Record<string, never>;
   "headend.import": HeadendImportRequest;
+  "headend.profile.remove": ProfileRemoveRequest;
+  "headend.profile.save": ProfileSaveRequest;
+  "headend.scan": ScanRequest;
   "headend.status": Record<string, never>;
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
@@ -4323,7 +4521,17 @@ export interface MethodResults {
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
   "gpu.status": GpuStatus;
+  "headend.channel.add": ChannelChange;
+  "headend.channel.bulk": ChannelChange;
+  "headend.channel.follow": ChannelChange;
+  "headend.channel.list": HeadendSetup;
+  "headend.channel.remove": ChannelChange;
+  "headend.channel.update": ChannelChange;
+  "headend.export": HeadendExport;
   "headend.import": HeadendImportReport;
+  "headend.profile.remove": ProfileChange;
+  "headend.profile.save": ProfileChange;
+  "headend.scan": ScanResult;
   "headend.status": HeadendStatus;
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
@@ -4621,7 +4829,17 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
-  { name: "headend.import", summary: "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/import" } },
+  { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/add" } },
+  { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/bulk" } },
+  { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/follow" } },
+  { name: "headend.channel.list", summary: "Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/headend/channel/list" } },
+  { name: "headend.channel.remove", summary: "Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/headend/channel/remove" } },
+  { name: "headend.channel.update", summary: "Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/update" } },
+  { name: "headend.export", summary: "The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/headend/export" } },
+  { name: "headend.import", summary: "Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/import" } },
+  { name: "headend.profile.remove", summary: "Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/headend/profile/remove" } },
+  { name: "headend.profile.save", summary: "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/profile/save" } },
+  { name: "headend.scan", summary: "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/headend/scan" } },
   { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/headend/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
@@ -5209,9 +5427,59 @@ export class GeneratedMethods {
     return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
   }
 
-  /** Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. */
+  /** Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. */
+  headendChannelAdd(params: ChannelAddRequest2): Promise<ChannelChange> {
+    return this._call("headend.channel.add", params as unknown as Record<string, unknown>) as Promise<ChannelChange>;
+  }
+
+  /** The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. */
+  headendChannelBulk(params: ChannelBulkRequest): Promise<ChannelChange> {
+    return this._call("headend.channel.bulk", params as unknown as Record<string, unknown>) as Promise<ChannelChange>;
+  }
+
+  /** Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. */
+  headendChannelFollow(params: ChannelNames): Promise<ChannelChange> {
+    return this._call("headend.channel.follow", params as unknown as Record<string, unknown>) as Promise<ChannelChange>;
+  }
+
+  /** Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has. */
+  headendChannelList(): Promise<HeadendSetup> {
+    return this._call("headend.channel.list", {}) as Promise<HeadendSetup>;
+  }
+
+  /** Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back. */
+  headendChannelRemove(params: ChannelNames): Promise<ChannelChange> {
+    return this._call("headend.channel.remove", params as unknown as Record<string, unknown>) as Promise<ChannelChange>;
+  }
+
+  /** Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow. */
+  headendChannelUpdate(params: ChannelUpdateRequest): Promise<ChannelChange> {
+    return this._call("headend.channel.update", params as unknown as Record<string, unknown>) as Promise<ChannelChange>;
+  }
+
+  /** The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for. */
+  headendExport(): Promise<HeadendExport> {
+    return this._call("headend.export", {}) as Promise<HeadendExport>;
+  }
+
+  /** Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. */
   headendImport(params: HeadendImportRequest = {}): Promise<HeadendImportReport> {
     return this._call("headend.import", params as unknown as Record<string, unknown>) as Promise<HeadendImportReport>;
+  }
+
+  /** Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead. */
+  headendProfileRemove(params: ProfileRemoveRequest): Promise<ProfileChange> {
+    return this._call("headend.profile.remove", params as unknown as Record<string, unknown>) as Promise<ProfileChange>;
+  }
+
+  /** Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change. */
+  headendProfileSave(params: ProfileSaveRequest): Promise<ProfileChange> {
+    return this._call("headend.profile.save", params as unknown as Record<string, unknown>) as Promise<ProfileChange>;
+  }
+
+  /** Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add. */
+  headendScan(params: ScanRequest): Promise<ScanResult> {
+    return this._call("headend.scan", params as unknown as Record<string, unknown>) as Promise<ScanResult>;
   }
 
   /** Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. */
