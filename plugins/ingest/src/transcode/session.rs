@@ -7,12 +7,13 @@
 //!                                   └──► renditions hub ──► restream senders
 //! ```
 //!
-//! The reader is an ordinary hub reader with a bounded queue: if the decoder
-//! cannot keep up, the thread waits on it, the queue fills, and whole GOPs
-//! are dropped there, counted, and the publisher never notices. There is one
-//! reader and one decode however many destinations the stream converts for.
+//! The reader is an ordinary hub reader with a bounded queue. The thread
+//! never waits on a decoder: one that cannot keep up, or has stopped, loses
+//! whole GOPs at its own input (`input.rs`), and the publisher never
+//! notices. There is one reader and one decode however many destinations
+//! the stream converts for.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -39,6 +40,9 @@ struct Shared {
     failed: Mutex<HashMap<String, String>>,
     /// When each failed node was last built again.
     restarted: Mutex<HashMap<String, Instant>>,
+    /// Nodes that failed again too soon after their last build, to be built
+    /// again once `AGAIN` has passed.
+    owed: Mutex<HashSet<String>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -56,7 +60,7 @@ impl Session {
         let router = Arc::new(Router::new(renditions, app));
         router.set_nodes(&nodes.iter().map(|n| (n.id.clone(), n.raw.clone())).collect::<Vec<_>>());
         router.set_outputs(outputs);
-        let shared = Arc::new(Shared { router, input: Input::default(), graph: Mutex::default(), nodes: Mutex::new(nodes), failed: Mutex::default(), restarted: Mutex::default() });
+        let shared = Arc::new(Shared { router, input: Input::default(), graph: Mutex::default(), nodes: Mutex::new(nodes), failed: Mutex::default(), restarted: Mutex::default(), owed: Mutex::default() });
         let stop = Arc::new(AtomicBool::new(false));
         let (me, halt, app, stream) = (shared.clone(), stop.clone(), app.to_string(), stream.to_string());
         let thread = std::thread::Builder::new().name(format!("gmx-transcode-{stream}")).spawn(move || run(&me, &halt, &hub, &app, &stream)).ok();
@@ -88,6 +92,11 @@ impl Session {
 
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub fn pipeline(&self) -> Option<gstreamer::Pipeline> {
+        lock(&self.shared.graph).as_ref().map(|g| g.pipeline().clone())
     }
 
     /// Whether its thread has taken its pipeline down and ended.
@@ -152,29 +161,36 @@ fn begin(s: &Shared) {
     let nodes = lock(&s.nodes).clone();
     graph.apply(&nodes, &s.input, &route);
     *lock(&s.failed) = graph.failed.clone();
+    lock(&s.owed).clear();
     *lock(&s.graph) = Some(graph);
 }
 
 /// Errors since the last look. A node that failed is built again with
 /// everything reading it, at most once every `AGAIN`: an AAC encoder that
 /// refused one odd frame of a broadcast stayed down for good before, and
-/// its output went on without sound.
+/// its output went on without sound. One that fails again sooner is owed a
+/// build once `AGAIN` has passed: its error has left the bus by then, and
+/// an NVENC encoder that failed twice in a row at a headend's start was
+/// never built again.
 fn errors(s: &Shared) {
     let mut graph = lock(&s.graph);
     let Some(graph) = graph.as_mut() else { return };
-    let mut again = Vec::new();
+    let mut owed = lock(&s.owed);
     for (node, why) in graph.errors() {
         eprintln!("transcode: {node}: {why}");
         lock(&s.failed).insert(node.clone(), why);
-        let mut tried = lock(&s.restarted);
-        if tried.get(&node).is_none_or(|t| t.elapsed() >= AGAIN) {
-            tried.insert(node.clone(), Instant::now());
-            again.push(node);
-        }
+        owed.insert(node);
     }
+    let mut tried = lock(&s.restarted);
+    let again: Vec<String> = owed.iter().filter(|n| tried.get(*n).is_none_or(|t| t.elapsed() >= AGAIN)).cloned().collect();
     if again.is_empty() {
         return;
     }
+    for node in &again {
+        owed.remove(node);
+        tried.insert(node.clone(), Instant::now());
+    }
+    drop((owed, tried));
     eprintln!("transcode: building {} again", again.join(", "));
     graph.take_down(again.clone(), &s.input);
     let route: Arc<dyn Route> = s.router.clone();

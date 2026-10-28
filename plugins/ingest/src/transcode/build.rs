@@ -105,7 +105,9 @@ pub(super) fn element(node: &NodeSpec, key: &str) -> Result<gst::Element, String
 }
 
 fn decode(node: &NodeSpec) -> Result<Built, String> {
-    let src = AppSrc::builder().format(gst::Format::Time).is_live(true).block(true).max_bytes(4 * 1024 * 1024).build();
+    // Never blocking: a push waits on nothing, and `Input::push` skips a
+    // full one (see there).
+    let src = AppSrc::builder().format(gst::Format::Time).is_live(true).block(false).max_bytes(4 * 1024 * 1024).build();
     let mut elements: Vec<gst::Element> = vec![src.clone().upcast()];
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);

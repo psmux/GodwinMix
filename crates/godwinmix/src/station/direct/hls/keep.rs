@@ -84,7 +84,9 @@ async fn serve(st: &Station, proc: &mut Proc) -> Option<String> {
         }
         match proc.reports(&st.http).await {
             Ok(r) => {
-                hls.reported(r);
+                for show in hls.reported(r) {
+                    st.direct.announce_health(st, &show);
+                }
                 misses = 0;
             }
             Err(e) => {

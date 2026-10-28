@@ -233,5 +233,8 @@ fn a_node_that_cannot_be_built_fails_its_destination_with_the_reason() {
     drop(source);
 }
 
+#[path = "tests_stall.rs"]
+mod stall;
+
 #[path = "tests_hevc.rs"]
 mod hevc;
