@@ -170,7 +170,11 @@ impl<'m> Builder<'m> {
             aspect: want.aspect.unwrap_or_default(),
         };
         let resized = (target.width, target.height, target.fps) != (src.width, src.height, src.fps);
-        if resized || look.deinterlace != Deinterlace::Off || look.aspect != SourceAspect::Auto {
+        // An interlaced picture always goes through a scale, which weaves or
+        // deinterlaces it: straight from the decoder, its `mixed` caps were
+        // refused by NVENC, and a 1080i source encoded at 1080 never ran.
+        let reshaped = look.deinterlace != Deinterlace::Off || look.aspect != SourceAspect::Auto || r.info.interlaced;
+        if resized || reshaped {
             let source = r.source.to_string();
             let (width, height, fps) = (target.width, target.height, target.fps);
             let id = scale_id(&source, target, &look);
