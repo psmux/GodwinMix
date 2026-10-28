@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.19 (2026-10-28)
 
 * A converted channel whose encoder failed twice in a row, as one NVENC encoder did when fifty channels started at once, sent nothing until its show was stopped and started again. The second failure came inside the five seconds between two builds of a node, so the node was never built again; and the failure stopped the decode's stream, whose input then filled and held the stream's thread for good. A node that fails again too soon is now built again once the five seconds are over, and the thread never waits on a decoder: one that takes nothing more loses whole GOPs at its own input instead. A converted pair whose name was still held by the stream's last session is tried again a second later instead of never.
 * A show whose output keeps trying to connect while its input is live is in alarm (`output-failed`, with how long and why) once a minute has passed, and the station's log says so once. Its health read `ok` the whole time before. An HLS output that loses its connection waits 1, 2, 4 up to 16 s between tries, and 1 s again once it has been live.
