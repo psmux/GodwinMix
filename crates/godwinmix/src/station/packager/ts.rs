@@ -68,7 +68,7 @@ impl Cutters {
     /// A ladder's further rung `id`: its picture with the first sound, the
     /// one rendition it has. The other sounds are the first rung's.
     pub fn rung(stream: &Arc<Stream>, id: &str, video: &gst::Caps, sounds: &[(u8, gst::Caps)], base: u32) -> Cutters {
-        let mut cut = TsCut::new(stream, stream.add_ts(id, None), base);
+        let mut cut = TsCut::following(stream, stream.add_ts(id, None), base, id);
         let hevc = video.structure(0).is_some_and(|s| s.name() == "video/x-h265");
         cut.extend(config(video, if hevc { UnitKind::HevcConfig } else { UnitKind::AvcConfig }));
         if let Some((_, caps)) = sounds.iter().find(|(t, _)| *t == 0) {

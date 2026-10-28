@@ -36,6 +36,9 @@ pub struct TsCut {
     /// A further sound alone, cut by its frames' times; else `main`, cut at
     /// the picture's keyframes.
     alone: bool,
+    /// The CMAF picture whose cuts this follows: the stream's first, or a
+    /// ladder's further picture of the same id, whose keyframes are its own.
+    picture: Option<String>,
     mux: Muxer,
     /// The tag time at zero running time on the CMAF pipeline.
     base: u32,
@@ -50,7 +53,14 @@ impl TsCut {
     pub fn new(stream: &Arc<Stream>, track: Arc<TsTrack>, base: u32) -> TsCut {
         let (p, alone) = (stream.params, track.sound.is_some());
         let (hold_ms, min_ns, stream) = ((p.window_s * 1000).max(4 * p.segment_ms), p.mux_durations().0, Arc::downgrade(stream));
-        TsCut { stream, track, alone, mux: Muxer::default(), base, min_ns, hold_ms, queue: VecDeque::new(), open: None, last_len: 0 }
+        TsCut { stream, track, alone, picture: None, mux: Muxer::default(), base, min_ns, hold_ms, queue: VecDeque::new(), open: None, last_len: 0 }
+    }
+
+    /// A ladder's further picture with the first sound: cut where its own
+    /// CMAF track `picture` is cut, since its encoder's keyframes need not
+    /// fall where the first picture's do.
+    pub fn following(stream: &Arc<Stream>, track: Arc<TsTrack>, base: u32, picture: &str) -> TsCut {
+        TsCut { picture: Some(picture.to_string()), ..TsCut::new(stream, track, base) }
     }
 }
 
@@ -68,7 +78,12 @@ impl TsCut {
     }
 
     fn drain(&mut self) {
-        let Some(leader) = self.stream.upgrade().and_then(|s| s.leader()) else { return };
+        let Some(leader) = self.stream.upgrade().and_then(|s| match &self.picture {
+            Some(id) => s.track(id),
+            None => s.leader(),
+        }) else {
+            return;
+        };
         while let Some(u) = self.queue.front() {
             if u.is_config() {
                 let Some(u) = self.queue.pop_front() else { break };
