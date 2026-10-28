@@ -76,6 +76,7 @@ pub fn channel_of(p: &ShowPlan, profiles: &[TranscodeProfile], origin: &str) -> 
         input: input_of(&p.input),
         profile,
         custom,
+        video_overrides: None,
         hls: hls_of(&hls["params"]),
         outputs,
         gpu,

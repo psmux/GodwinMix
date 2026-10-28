@@ -23,6 +23,7 @@ fn channel(name: &str) -> HeadendChannel {
         input: ChannelInput { uri: "udp://@239.0.0.1:5000".into(), program: Some(2), interface: Some("eth1".into()), ..ChannelInput::default() },
         profile: "copy".into(),
         custom: None,
+        video_overrides: None,
         hls: ChannelHls::default(),
         outputs: Vec::new(),
         gpu: None,
@@ -30,7 +31,8 @@ fn channel(name: &str) -> HeadendChannel {
     }
 }
 
-/// The transcoder line of the sample, as someone would set it up by hand.
+/// The transcoder line of the sample, as someone would set it up by hand:
+/// its `deinterlace=false` is read as auto.
 fn by_hand() -> TranscodeProfile {
     TranscodeProfile {
         video: Some(VideoWant {
@@ -41,7 +43,7 @@ fn by_hand() -> TranscodeProfile {
             keyframe_frames: Some(50),
             fit: Some(Fit::Pad),
             pad_color: Some("#000000".into()),
-            deinterlace: Some(Deinterlace::Off),
+            deinterlace: Some(Deinterlace::Auto),
             preset: Some("p1".into()),
             ..VideoWant::default()
         }),
