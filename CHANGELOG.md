@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+Audio buses, on `feat/audio-buses`.
+
+* The programme mix has a master fader and mute (`audio.master.set`, `[audio.master]`), kept across restarts in the runtime store like a source's fader. At unity it costs nothing.
+* Buses: mixes of their own beside the programme, each with a master, a mute and a meter. An ordinary bus carries each source at the level of its send (`audio.send.set`, `sends` in `[[audio.bus]]`), after the source's fader and following its mute. Nothing is built for buses until the first one is added, and the last one to go leaves the programme pipeline as it was. A bus goes in and comes out live with no gap in the programme's sound.
+* A mix minus is a bus with `minus = "guest-1"`: the programme as heard, following every take and crossfade, without that one source. It is a bus option so the guest invites can ask for one per guest.
+* Cue and solo: a bus with `cue = true` carries the sources marked with `audio.cue.set`, muted ones too, and the programme while none is marked. `solo` clears every other mark. Nothing on air changes.
+* A bus plays on a sound card on the mixer's machine (`device`, by name, id or number from `audio.device.list`, or `default`), in a pipeline of its own so a card that fails costs that bus only. It can be heard in a browser at `/pcm/bus:<id>` and `/opus/bus:<id>`.
+* An output takes its sound from a bus with `audio = "<bus id>"`, through an encoder for that bus that runs while an output reads it. Left out, it is the programme's sound as before.
+* The audio panel has a master strip, a bus picker with the picked bus's fader, mute, meter, sound card and a listen button, a form to add a bus, and Cue, Solo and a send fader on each source.
+* `event/meters` carries each bus's peaks in `buses`. New methods `audio.master.set`, `audio.bus.list`, `audio.bus.add`, `audio.bus.set`, `audio.bus.remove`, `audio.send.set`, `audio.cue.set` and `audio.device.list`, with agent tools behind `search_tools`. See [Mix audio with buses](docs/how-to/mix-audio-with-buses.md) and [the reference](docs/reference/audio-buses.md).
+
 ## 0.3.19 (2026-10-28)
 
 * A converted channel whose encoder failed twice in a row, as one NVENC encoder did when fifty channels started at once, sent nothing until its show was stopped and started again. The second failure came inside the five seconds between two builds of a node, so the node was never built again; and the failure stopped the decode's stream, whose input then filled and held the stream's thread for good. A node that fails again too soon is now built again once the five seconds are over, and the thread never waits on a decoder: one that takes nothing more loses whole GOPs at its own input instead. A converted pair whose name was still held by the stream's last session is tried again a second later instead of never.
