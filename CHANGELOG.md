@@ -33,6 +33,7 @@ The camera, the microphone, the screen and web pages work in the Intel Mac app. 
 * Installing the `.msi` over a desktop app that is open closes the app first, as the setup `.exe` already did. Windows used to close only the mixer, the app started it again as it does after a crash, and the upgrade left part of GStreamer for the next restart of the machine.
 * A colour correction filter, `color/filter`: brightness, contrast, gamma, saturation and hue, on a scene item, a source or the programme, with sliders in the composer that change the picture on air. It works in place through two lookup tables: nothing with every setting at 0 and 2% of one core at 1080p30 with all five on an Apple silicon MacBook. An OBS colour correction comes across with its settings, which used to arrive under this name and do nothing. See [Correct a camera's colour](docs/how-to/correct-a-cameras-colour.md).
 * The composer's Add a filter list no longer offers the sound filters, which do nothing on an item; they are in the Audio panel's FX.
+* A loudness target, `loudness/filter`: it measures BS.1770 loudness over EBU R128's three second window and rides the gain towards `target_lufs` (-14 by default, where YouTube and Spotify play), at a speed you set, holding still in a pause. On the programme with a limiter after it, a stream sits at the level every platform expects. A stereo 1 kHz tone at 0 dBFS reads 0 LUFS, as EBU Tech 3341 asks, and it costs 0.07% of one core. It is in the Audio panel's FX as Loudness target.
 
 ## 0.3.20 (2026-10-29)
 

@@ -7,7 +7,7 @@ of them can be added, changed or removed while you are live.
 
 What there is: a low cut and tone controls (`eq/filter`), a noise gate, an
 expander, a compressor, a limiter, a delay to bring sound back in line with a
-late picture, noise suppression, and a plain gain. The settings of each are in
+late picture, noise suppression, a loudness target, and a plain gain. The settings of each are in
 [the sound filters reference](../reference/sound-filters.md).
 
 ## From the page
@@ -66,6 +66,7 @@ A limiter there stops one loud source from distorting every destination.
 | Steady hiss, hum or fan noise under the voice | `denoise/filter` |
 | A speaker who is loud then quiet | `compressor/filter` |
 | A shout or a dropped microphone distorting the stream | `limiter/filter`, on the source or on the programme |
+| The stream as a whole too quiet or too loud next to other channels | `loudness/filter` on the programme, `target_lufs` -14 for YouTube, then a `limiter/filter` |
 | Lips moving before the words, from a late camera | `delay/filter` on the microphone, `delay_ms` as late as the picture is |
 | A source that is simply too quiet or too loud | the fader first, `gain/filter` when it needs more than the fader gives |
 
@@ -80,7 +81,7 @@ and are added with it. A filter switched off in OBS comes across switched off.
 
 Measured on an Apple silicon MacBook with 48 kHz stereo, as a share of one
 core per filter: gain, EQ, gate, expander, limiter and delay each under 0.05%,
-the compressor 0.07%, and noise suppression about 1%. A Raspberry Pi 4 has not
+the compressor and the loudness target 0.07% each, and noise suppression about 1%. A Raspberry Pi 4 has not
 been measured yet; expect several times those figures. The command that
 measured them:
 

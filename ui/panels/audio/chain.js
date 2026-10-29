@@ -29,6 +29,9 @@ export const KINDS = {
   'expander/filter': { name: 'Expander', knobs: [
     ['threshold_db', 'Threshold', -70, 0, 1, -40, 'dB'], ['ratio', 'Ratio', 1, 10, 0.5, 2, ':1']] },
   'denoise/filter': { name: 'Noise suppression', knobs: [['amount', 'Amount', 0, 1, 0.05, 1, '']] },
+  'loudness/filter': { name: 'Loudness target', knobs: [
+    ['target_lufs', 'Target', -30, -10, 1, -14, 'LUFS'], ['max_boost_db', 'Most lift', 0, 24, 1, 12, 'dB'],
+    ['speed_db_per_s', 'Speed', 0.5, 10, 0.5, 2, 'dB/s']] },
   'delay/filter': { name: 'Delay', knobs: [['delay_ms', 'Delay', 0, 2000, 5, 0, 'ms']] },
   'gain/filter': { name: 'Gain', knobs: [['gain_db', 'Gain', -30, 30, 0.5, 0, 'dB']] },
 };

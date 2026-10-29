@@ -1,8 +1,8 @@
 # Sound filters
 
-Eight filter types work on sound: `gain/filter`, `eq/filter`, `gate/filter`,
-`expander/filter`, `compressor/filter`, `limiter/filter`, `delay/filter` and
-`denoise/filter`. Each goes on one source or on the programme with
+Nine filter types work on sound: `gain/filter`, `eq/filter`, `gate/filter`,
+`expander/filter`, `compressor/filter`, `limiter/filter`, `delay/filter`,
+`denoise/filter` and `loudness/filter`. Each goes on one source or on the programme with
 `filter.add` or a `[[filters]]` entry (see
 [clean up a microphone](../how-to/clean-up-a-microphone.md)). Each runs in
 place on the thread that carries the samples, adds no delay unless this page
@@ -90,6 +90,23 @@ nothing leaves it above `threshold_db`.
 The timestamps are left alone, so the mixer sees no change in timing. A change
 of delay on air starts again from silence, which is a short gap. OBS's
 `async_delay_filter` is a picture delay and is not read as this one.
+
+## `loudness/filter`
+
+Rides the level towards a loudness target. The loudness is ITU-R BS.1770's,
+K-weighted and taken over EBU R128's short-term window of three seconds; a
+stereo 1 kHz tone at 0 dBFS reads 0 LUFS, as EBU Tech 3341 says it should. The
+gain moves towards the target at no more than `speed_db_per_s`, and holds still
+while the sound is under `gate_lufs`, so a pause between words is not lifted.
+It follows the average, so put a `limiter/filter` after it to catch the peaks.
+
+| Setting | Default | Range | What it does |
+|---|---|---|---|
+| `target_lufs` | -14 | -40 to -5 | the loudness to ride towards. YouTube and Spotify play at about -14, a podcast at -16, EBU broadcast at -23 |
+| `max_boost_db` | 12 | 0 to 30 | the most it lifts a quiet source |
+| `max_cut_db` | 12 | 0 to 30 | the most it takes off a loud one |
+| `speed_db_per_s` | 2 | 0.1 to 20 | how fast the gain may move |
+| `gate_lufs` | -50 | -70 to -20 | under this the gain holds still |
 
 ## `denoise/filter`
 
