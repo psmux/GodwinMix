@@ -10,7 +10,7 @@ Guest invites, the way vMix Call and Wirecast Rendezvous have them.
 * Revoking ends the guest's camera and return at once, well inside a second, and the link lets nobody in again. An invite that runs out does the same.
 * Talkback: hold Talk on a guest's card, or Talk to everyone, and the operator's browser microphone goes into that return only. `guest.talkback.set` does the same from anywhere, and can make any input the talkback source. The talkback source is kept muted on the programme, and stays muted if somebody unmutes it.
 * A Guests panel (View > Guests, or More on a phone): invite, copy the link, show the code, each guest's state (invited, joining, live, gone) and picture, Take, Mute, Talk and Revoke. It loads when first shown.
-* Up to eight guests at once. COST_LINE See [Invite a guest](docs/how-to/invite-a-guest.md) and [the reference](docs/reference/guest-invites.md).
+* Up to eight guests at once. A live guest costs the mixer about 6% of one core on an Apple M4 Pro, eight about half of one. See [Invite a guest](docs/how-to/invite-a-guest.md) and [the reference](docs/reference/guest-invites.md).
 * MCP tools `create_guest_invite` and `list_guests`, behind `search_tools`.
 
 ## 0.3.20 (2026-10-29)

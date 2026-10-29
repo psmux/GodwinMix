@@ -199,7 +199,18 @@ with `guest_cost`:
 GMX_GUESTS=4 cargo test -p godwinmix-core --release --test guest_cost -- --ignored --nocapture guests_cost
 ```
 
-FIGURES_GO_HERE
+| Guests live | The mixer, percent of one core | Each guest |
+|---|---|---|
+| none | 6.5 to 6.9 | |
+| 1 | 13.0 | 6.3 |
+| 4 | 28.9 | 5.5 |
+| 8 | 54.9 | 6.1 |
+
+A 1280x720 canvas at 30 frames with one test source on air, each guest
+sending 1280x720 H.264 at 30 frames and 2.5 Mbps with Opus, and watching
+their return. The machine was shared with other work (load average 6 to 8),
+which is most of the spread. So a live guest costs about 6 percent of one
+core on this Mac, and eight about half of one.
 
 The guests' browsers run in child processes and are not counted. Most of a
 guest is the decode of their 720p camera; the rest is the bus, its AAC
