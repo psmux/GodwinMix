@@ -52,7 +52,9 @@ Start here if you have never run it.
 * [Make your plugin editable in every designer](how-to/extend-the-designer.md)
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
+* [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
+* [Use the teleprompter](how-to/use-the-teleprompter.md): scripts on the desk, any number of screens in step, a mirror for the glass, keys and pedals
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
   Bitfocus Companion and Elgato Stream Deck
@@ -100,6 +102,7 @@ Start here if you have never run it.
 * [Show live data on air: RSS, JSON, a sheet or a websocket](how-to/show-live-data.md)
 * [Put a presenter on a green screen into a designed studio](how-to/green-screen-presenter.md)
 * [Key out a green or blue screen on any item](how-to/chroma-key.md)
+* [Clean up a microphone with sound filters](how-to/clean-up-a-microphone.md)
 * [Replace the background behind a person, with or without a green screen](how-to/replace-the-background.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
 * [Keep the show on air when a feed drops](how-to/keep-the-show-on-air-when-a-feed-drops.md): a backup source that takes over by itself and hands back when the feed is steady
@@ -178,6 +181,8 @@ Start here if you have never run it.
 * [Live data: the feed methods, events, formats and limits](reference/live-data.md)
 * [Feed paths and templates](reference/feed-paths.md)
 * [The chroma key](reference/chroma-key.md)
+* [Sound filters](reference/sound-filters.md)
+* [Audio buses: the master, buses, cue and mix minus](reference/audio-buses.md)
 * [The cutout: a person with no screen behind them](reference/cutout.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
@@ -221,6 +226,7 @@ Start here if you have never run it.
 * [Media library folders and tags](reference/media-library.md)
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
+* [The prompter](reference/prompter.md): `prompter.*`, rows, the shared position, its events and `/prompter/`
 * [Recording outputs](reference/recording.md)
 * [Setup on first use](reference/setup.md)
 * [Show health: alarms, thresholds and thumbnails](reference/show-health.md)

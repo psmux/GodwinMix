@@ -410,6 +410,7 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
 mod allocation;
+mod audio_desk;
 mod catch_up;
 mod clip_act;
 mod clip_end;
@@ -570,6 +571,9 @@ pub enum Command {
         media: Vec<Option<f64>>,
         reply: oneshot::Sender<AudioOutcome>,
     },
+    /// One `audio.*` call: the master, the buses, the sends and cue. See
+    /// `crate::buses`. No reply for one the mixer sends itself.
+    Audio(crate::buses::AudioCall, Option<audio_desk::AudioReply>),
     /// Move a seekable source to a position, in milliseconds from its start.
     Seek {
         source: SourceId,
@@ -652,6 +656,16 @@ pub struct FilterStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceId>,
     pub side: String,
+    /// The settings in force, as `filter.set` last left them.
+    #[serde(default, skip_serializing_if = "crate::config::Params::is_empty")]
+    pub params: crate::config::Params,
+}
+
+/// A change to the configured filter list. See `Mixer::remember_filter`.
+enum FilterChange<'a> {
+    Added(&'a crate::config::FilterConfig),
+    Set(&'a str, &'a crate::config::Params),
+    Removed(&'a str),
 }
 
 /// What `filter.set` answers with.
@@ -814,6 +828,16 @@ impl MixerHandle {
     ) -> Result<AudioOutcome> {
         let (tx, rx) = oneshot::channel();
         self.ask(Command::SetAudio { source, gain, muted, page, media, reply: tx }, rx).await
+    }
+
+    /// One `audio.*` call, answered with the whole desk or the refusal. See
+    /// `crate::buses`.
+    pub async fn audio(
+        &self,
+        call: crate::buses::AudioCall,
+    ) -> Result<Result<godwinmix_protocol::buses::AudioStatus, crate::buses::Refusal>> {
+        let (tx, rx) = oneshot::channel();
+        self.ask(Command::Audio(call, Some(tx)), rx).await
     }
 
     /// Move a source and get back where it actually landed. Waits on a value
@@ -1173,6 +1197,9 @@ pub struct Mixer {
 
     program: gst::Pipeline,
     amix: gst::Element,
+    /// The master, the buses and cue. Nothing in it is built until a bus is
+    /// asked for. See `crate::buses`.
+    desk: crate::buses::Desk,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
     /// The raw programme tees, where a preview or monitoring branch hangs off.
@@ -1771,6 +1798,9 @@ impl Mixer {
         crate::probe::set_bool(&amix, "ignore-inactive-pads", true);
         crate::probe::set_int(&amix, "min-upstream-latency", MIN_UPSTREAM_LATENCY_NS);
         let amix_caps = gstutil::capsfilter("amix-caps", &canvas.audio())?;
+        // The programme master. At unity and unmuted a `volume` passes its
+        // buffers through untouched, so this costs nothing until it is moved.
+        let master = make("volume", "pgm-master")?;
         let araw_tee = make("tee", "araw-tee")?;
         araw_tee.set_property("allow-not-linked", true);
 
@@ -1834,7 +1864,7 @@ impl Mixer {
         let mut slate_chain: Vec<gst::Element> = vec![slate.clone(), slate_caps.clone()];
         slate_chain.extend(upload_bridge(gfx, "slate")?);
 
-        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &level, &araw_tee, &silence, &silence_caps];
+        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &master, &level, &araw_tee, &silence, &silence_caps];
         let all: Vec<&gst::Element> = fixed
             .into_iter()
             .chain(vchain.iter())
@@ -1850,7 +1880,7 @@ impl Mixer {
         gst::Element::link_many(rchain.iter().collect::<Vec<_>>())
             .context("linking program return video")?;
 
-        gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
+        gst::Element::link_many([&amix, &amix_caps, &master, &level, &araw_tee])
             .context("linking audio mixer")?;
         link_from(&araw_tee, &achain).context("linking audio encoder")?;
 
@@ -1973,6 +2003,21 @@ impl Mixer {
             rendered::programme_info(&cfg),
         );
 
+        let mut desk = crate::buses::Desk::new(
+            &program,
+            &canvas,
+            MIN_UPSTREAM_LATENCY_NS,
+            crate::buses::encode::EncodeWith { chosen: sel.audio_encode.clone(), vars },
+            master,
+            cfg.audio.clone(),
+        );
+        desk.set_notify({
+            let h = handle.clone();
+            Arc::new(move |found| {
+                let _ = h.send(Command::Audio(crate::buses::AudioCall::DeviceFound(found), None));
+            })
+        });
+
         let mixer = Self {
             cfg,
             canvas,
@@ -1980,6 +2025,7 @@ impl Mixer {
             origin: Instant::now(),
             program,
             amix,
+            desk,
             venc_tee,
             aenc_tee,
             vraw_tee: vraw_tee.clone(),
@@ -2100,6 +2146,9 @@ impl Mixer {
         self.watches
             .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
         self.program.set_state(gst::State::Playing).context("starting program pipeline")?;
+        // The configured buses, before the sources: each source joins them as
+        // it is added.
+        self.desk.start();
 
         for src in self.cfg.sources.clone() {
             let id = src.id.clone();
@@ -2426,6 +2475,7 @@ impl Mixer {
             }
         }
         info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
+        self.join_buses(&cfg.id);
         // An id that is live again has nothing left to restore under it.
         self.removed.retain(|c| c.id != cfg.id);
         self.unstarted.forget(&cfg.id);
@@ -2631,19 +2681,27 @@ impl Mixer {
                 type_id: f.spec.type_id.clone(),
                 source: None,
                 side: f.spec.side.as_str().to_string(),
+                params: self.configured_params(f.id()).unwrap_or_else(|| f.spec.params.clone()),
             })
             .collect();
         for slot in &self.sources {
             for f in slot.input.filters() {
+                let params = self.configured_params(&f.0).unwrap_or_default();
                 all.push(FilterStatus {
                     id: f.0,
                     type_id: f.1,
                     source: Some(slot.input.id.clone()),
                     side: f.2,
+                    params,
                 });
             }
         }
         all
+    }
+
+    /// A filter's settings as the configured list holds them.
+    fn configured_params(&self, id: &str) -> Option<crate::config::Params> {
+        self.cfg.filters.iter().find(|f| f.id == id).map(|f| f.params.clone())
     }
 
     /// Put a source pipeline on the programme's clock and base time.
@@ -2662,6 +2720,29 @@ impl Mixer {
         if let Some(base) = self.program.base_time() {
             pipeline.set_base_time(base);
         }
+    }
+
+    /// Keep the configured filter list in step with what was put in place,
+    /// and save it. That list is what a source rebuilt after a stall puts back
+    /// on, and what the next start reads from the runtime store, so a
+    /// microphone's EQ set from the desk outlives a restart of either.
+    fn remember_filter(&mut self, change: FilterChange<'_>) {
+        let list = &mut self.cfg.filters;
+        match change {
+            FilterChange::Added(cfg) => {
+                list.retain(|f| f.id != cfg.id);
+                list.push(cfg.clone());
+            }
+            FilterChange::Set(id, params) => {
+                if let Some(f) = list.iter_mut().find(|f| f.id == id) {
+                    for (k, v) in params {
+                        f.params.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            FilterChange::Removed(id) => list.retain(|f| f.id != id),
+        }
+        self.persist_runtime();
     }
 
     /// The configured filters that name one source.
@@ -2826,6 +2907,8 @@ impl Mixer {
             anyhow::bail!("no such source {id}");
         };
         self.detach_source_feed(id);
+        // Off the buses first, so the held branch is the one it always was.
+        self.desk.leave_source(id);
         let slot = self.sources.remove(pos);
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
@@ -3049,6 +3132,8 @@ impl Mixer {
             crate::slow_step!("take off programme", id, self.take(None, None))?;
         }
         self.detach_source_feed(id);
+        // Off every bus before the branch comes down. See `buses::send`.
+        crate::slow_step!("desk.leave_source", id, self.desk.leave_source(id));
         let slot = self.sources.remove(pos);
         self.overlay.detach(id);
         if let Some(mv) = &mut self.multiview {
@@ -3383,6 +3468,9 @@ impl Mixer {
         struct Stored<'a> {
             sources: &'a [SourceConfig],
             outputs: &'a [OutputConfig],
+            filters: &'a [crate::config::FilterConfig],
+            #[serde(skip_serializing_if = "godwinmix_protocol::buses::AudioConfig::is_default")]
+            audio: &'a godwinmix_protocol::buses::AudioConfig,
             /// The `[ui]` section `gmx preset apply` wrote, carried through
             /// untouched. Without this, adding one source from the UI would
             /// throw away the layout and theme the preset chose.
@@ -3393,9 +3481,9 @@ impl Mixer {
             .ok()
             .and_then(|text| text.parse::<toml::Table>().ok())
             .and_then(|table| table.get("ui").cloned());
-        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, ui }) {
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, filters: &self.cfg.filters, audio: &self.cfg.audio, ui }) {
             Ok(b) => format!(
-                "# Sources and outputs managed from the GodwinMix UI or API.\n\
+                "# Sources, outputs and filters managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
                  # Delete this file to go back to the config file's lists.\n\n{b}"
             ),
@@ -4222,6 +4310,7 @@ impl Mixer {
             Command::Multiview(_) => "multiview demand",
             Command::Encoder(_) => "encoder demand",
             Command::Preview(_) => "preview demand",
+            Command::Audio(..) => "audio",
             Command::Shutdown => "core.shutdown",
         }
     }
@@ -4362,6 +4451,7 @@ impl Mixer {
             Command::Seek { source, position_ms, reply } => {
                 let _ = reply.send(self.seek(&source, position_ms));
             }
+            Command::Audio(call, reply) => self.audio_call(call, reply),
             Command::SourceInput { source, reply } => {
                 let _ = reply.send(self.sources.iter().find(|s| s.input.id == source).map(|s| s.input.clone()));
             }
@@ -4421,14 +4511,24 @@ impl Mixer {
             }
             Command::AddFilter(cfg, ack) => {
                 let r = self.add_filter(&cfg);
+                if r.is_ok() {
+                    self.remember_filter(FilterChange::Added(&cfg));
+                }
                 reply(ack, &r);
                 r?;
             }
             Command::SetFilter { id, params, reply } => {
-                let _ = reply.send(self.set_filter(&id, &params));
+                let outcome = self.set_filter(&id, &params);
+                if outcome == FilterOutcome::Applied {
+                    self.remember_filter(FilterChange::Set(&id, &params));
+                }
+                let _ = reply.send(outcome);
             }
             Command::RemoveFilter(id, ack) => {
                 let r = self.remove_filter(&id);
+                if r.is_ok() {
+                    self.remember_filter(FilterChange::Removed(&id));
+                }
                 reply(ack, &r);
                 r?;
             }
@@ -4521,6 +4621,7 @@ impl Mixer {
                 // would attribute `pgm-alevel-cam-1` to a source called `cam`.
                 if src == "pgm-level" {
                     let _ = self.events.send(Event::AudioLevel { peak_db });
+                } else if self.bus_level(&src, &peak_db) {
                 } else if let Some(slot) = self.sources.iter().find(|s| s.branch.owns_meter(&src)) {
                     let _ = self.events.send(Event::SourceAudioLevel {
                         source: slot.input.id.clone(),
@@ -5196,6 +5297,7 @@ impl Mixer {
             uptime_secs: self.origin.elapsed().as_secs(),
             running_time_ms: self.running_time().map(|t| t.mseconds()).unwrap_or(0),
             ad: self.ad.clone(),
+            audio: Some(self.audio_status()),
             backend: BackendInfo {
                 video_decoder: self.backends.video_decode.element.to_string(),
                 video_encoder: self.backends.video_encode.element.to_string(),
@@ -5342,6 +5444,7 @@ impl Mixer {
 
     fn release_encoder_for(&mut self, id: &OutputId) {
         self.output_leases.remove(id);
+        self.desk.release_output(id);
         self.sync_encoder();
     }
 
@@ -5592,6 +5695,8 @@ impl Mixer {
         // source's, which lives in that source's pipeline.
         let (pipeline, tee) = if target == "program" || target == "programme" {
             (self.program.clone(), self.araw_tee.clone())
+        } else if let Some(bus) = crate::buses::bus_of_target(target) {
+            (self.program.clone(), self.bus_tap_tee(bus)?)
         } else {
             let slot = self
                 .sources
@@ -5716,6 +5821,7 @@ impl Mixer {
         self.drop_source_feeds();
         self.pool.teardown();
         self.audio_taps.clear();
+        self.desk.shutdown();
         #[cfg(unix)]
         self.local_previews.clear();
         self.output_leases.clear();
@@ -5971,6 +6077,8 @@ mod tests {
     mod preview_churn;
     mod preview_rate;
     mod slow_restart;
+    mod buses;
+    mod buses_outlets;
     mod sound_only;
     mod supervision;
     mod stale_work;
@@ -6215,6 +6323,7 @@ mod tests {
             sources: vec![],
             outputs: vec![],
             filters: vec![],
+            audio: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
@@ -6256,6 +6365,7 @@ mod tests {
             sources: vec![],
             outputs: vec![],
             filters: vec![],
+            audio: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],

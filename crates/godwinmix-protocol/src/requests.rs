@@ -836,6 +836,10 @@ pub struct Meters {
     pub program: Vec<f64>,
     /// Peak dBFS per channel, per source id.
     pub sources: Map<String, Value>,
+    /// Peak dBFS per channel, per audio bus id, after the bus master. Left out
+    /// while there are no buses.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub buses: Map<String, Value>,
 }
 
 /// `event/resync`: the client fell behind and the stream has a hole in it.

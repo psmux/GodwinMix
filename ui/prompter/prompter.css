@@ -1,0 +1,39 @@
+/* The prompter page: white words on black, as large as the width allows,
+   and a bar that a tap brings up and that goes again by itself. */
+
+html, body { margin: 0; height: 100%; background: #000; color: #f4f4f4; overflow: hidden; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+body.idle { cursor: none; }
+.prompter { position: fixed; inset: 0; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+
+.prompter-frame { position: absolute; inset: 0; }
+.prompter-frame.mirrored { transform: scaleX(-1); }
+.prompter-track { position: absolute; top: 0; font-weight: 600; will-change: transform; }
+.prompter-track .row { height: var(--lh); white-space: pre; overflow: hidden; }
+.prompter-track .row.marker { color: #ffd34d; }
+.prompter-track strong { font-weight: 800; }
+.prompter-track em { font-style: italic; }
+
+/* The cue line: a band across the screen where the words being read sit,
+   with an arrow at the left edge. */
+.prompter-cue { position: absolute; left: 0; right: 0; pointer-events: none;
+  border-top: 2px solid rgba(255, 80, 80, 0.55); border-bottom: 2px solid rgba(255, 80, 80, 0.55);
+  background: rgba(255, 255, 255, 0.04); }
+.prompter-cue::before { content: ""; position: absolute; left: 4px; top: 50%; transform: translateY(-50%);
+  border: 14px solid transparent; border-left: 20px solid #ff5050; }
+
+.prompter-empty { position: absolute; inset: auto 16px 45% 16px; margin: 0; text-align: center; font-size: 22px; color: #bbb; }
+.prompter-empty[hidden] { display: none; }
+
+.pbar { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+  background: rgba(20, 20, 20, 0.92); display: flex; flex-direction: column; gap: 8px;
+  transform: translateY(110%); transition: transform 0.2s ease; }
+.pbar.shown { transform: none; }
+.prow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.pbtn { min-height: 48px; min-width: 72px; padding: 0 16px; font: inherit; font-size: 16px; color: #fff;
+  background: #333; border: 1px solid #555; border-radius: 8px; }
+.pbtn:active { background: #555; }
+.pstatus { text-align: center; font-size: 14px; color: #aaa; min-height: 1em; }
+.pnote { position: absolute; top: 12px; left: 12px; right: 12px; padding: 12px; border-radius: 8px;
+  background: #5a1d1d; color: #fff; font-size: 16px; text-align: center; }
+.pnote[hidden], .pnote:empty { display: none; }

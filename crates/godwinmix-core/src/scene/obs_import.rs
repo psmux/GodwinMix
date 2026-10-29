@@ -96,11 +96,25 @@ pub struct ImportedSource {
     pub params: Value,
 }
 
+/// A sound filter, which stays on its source as OBS has it, in the shape of a
+/// config `[[filters]]` entry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImportedFilter {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// The imported source it goes on, by id.
+    pub source: String,
+    #[serde(skip_serializing_if = "Value::is_null")]
+    pub params: Value,
+}
+
 /// What one import produced.
 #[derive(Debug, Clone)]
 pub struct Import {
     pub document: Collection,
     pub sources: Vec<ImportedSource>,
+    pub sound_filters: Vec<ImportedFilter>,
     pub report: Report,
 }
 
@@ -109,10 +123,30 @@ impl Import {
     /// as, a config file.
     pub fn to_config_toml(&self) -> Result<String> {
         #[derive(Serialize)]
+        struct Attach<'a> {
+            source: &'a str,
+        }
+        #[derive(Serialize)]
+        struct Entry<'a> {
+            id: &'a str,
+            #[serde(rename = "type")]
+            kind: &'a str,
+            attach: Attach<'a>,
+            #[serde(skip_serializing_if = "Value::is_null")]
+            params: &'a Value,
+        }
+        #[derive(Serialize)]
         struct Wrapper<'a> {
             sources: &'a [ImportedSource],
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            filters: Vec<Entry<'a>>,
         }
-        let body = toml::to_string_pretty(&Wrapper { sources: &self.sources })
+        let filters = self
+            .sound_filters
+            .iter()
+            .map(|f| Entry { id: &f.id, kind: &f.kind, attach: Attach { source: &f.source }, params: &f.params })
+            .collect();
+        let body = toml::to_string_pretty(&Wrapper { sources: &self.sources, filters })
             .context("writing the imported sources as TOML")?;
         Ok(format!(
             "# Sources imported from the OBS scene collection {:?}.\n\

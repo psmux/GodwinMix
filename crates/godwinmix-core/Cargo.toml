@@ -77,6 +77,10 @@ ring = { workspace = true }
 # so any runtime from 1.20 on serves it. See `plugin/filters/matte/`.
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "api-20", "cuda", "openvino"], optional = true }
 
+# Noise suppression (`denoise/filter`), when the `denoise` feature is on: RNNoise
+# in pure Rust, its model compiled in. See `plugin/filters/audio/denoise.rs`.
+nnnoiseless = { version = "0.5.2", default-features = false, optional = true }
+
 # The platform's own accelerator for the cutout: registration code only, the
 # runtime that carries it is still found at run time.
 [target.'cfg(windows)'.dependencies]
@@ -94,6 +98,9 @@ default = []
 # model on whatever the machine has: DirectML, CoreML, CUDA, OpenVINO or the
 # CPU. Adds the `ort` bindings and no native code.
 matte = ["dep:ort", "dep:libloading"]
+# Noise suppression for a microphone (`denoise/filter`): RNNoise as the pure
+# Rust `nnnoiseless`, run on the CPU. No native code and no model file.
+denoise = ["dep:nnnoiseless"]
 
 [dev-dependencies]
 # Paused time, so the multiview linger tests assert on two seconds without

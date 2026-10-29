@@ -282,7 +282,9 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             payload(json!({ "id": id, "binding": binding, "failures": failures })),
         ),
         Event::SetupChanged { setup } => ("setup.changed", payload(json!({ "setup": setup }))),
-        Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } => return None,
+        Event::PrompterChanged { state } => ("prompter.changed", payload(json!(state))),
+        Event::PrompterScriptChanged { changed } => ("prompter.script.changed", payload(json!(changed))),
+        Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } | Event::BusAudioLevel { .. } => return None,
     })
 }
 
@@ -292,6 +294,7 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
 pub struct MeterBatch {
     program: Option<Vec<f64>>,
     sources: Map<String, Value>,
+    buses: Map<String, Value>,
 }
 
 impl MeterBatch {
@@ -305,12 +308,16 @@ impl MeterBatch {
                 self.sources.insert(source.clone(), json!(peak_db));
                 true
             }
+            Event::BusAudioLevel { bus, peak_db } => {
+                self.buses.insert(bus.clone(), json!(peak_db));
+                true
+            }
             _ => false,
         }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.program.is_none() && self.sources.is_empty()
+        self.program.is_none() && self.sources.is_empty() && self.buses.is_empty()
     }
 
     /// Take what has gathered, leaving the batch empty.
@@ -321,6 +328,7 @@ impl MeterBatch {
         Some(Meters {
             program: self.program.take().unwrap_or_default(),
             sources: std::mem::take(&mut self.sources),
+            buses: std::mem::take(&mut self.buses),
         })
     }
 }

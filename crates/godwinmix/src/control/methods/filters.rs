@@ -1,7 +1,7 @@
 //! `filter.add`, `filter.set`, `filter.remove` and `filter.list`.
 //!
-//! A filter is a piece of picture processing hung on one source or on the
-//! programme. The mixer owns the pads; everything here does is turn a call
+//! A filter is a piece of picture or sound processing hung on one source or
+//! on the programme. The mixer owns the pads; everything here does is turn a call
 //! into a `MixerHandle` request and turn the refusal back into an error that
 //! names the next step.
 
@@ -28,8 +28,9 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "add_filter",
             Tier::Search,
-            "Put a picture filter on one source or on the whole programme without \
-             stopping anything. `type` is a filter type id from `list_plugins`, `id` is \
+            "Put a picture or sound filter on one source or on the whole programme without \
+             stopping anything. Sound filters are gain, eq, gate, expander, compressor, \
+             limiter, delay and denoise, each `<name>/filter`. `type` is a filter type id from `list_plugins`, `id` is \
              the name you will use to change or remove it, `source` names the source it \
              belongs to (leave it out and set `programme: true` for the whole output), \
              and `params` is that filter's own settings.",
@@ -125,6 +126,9 @@ pub struct FilterRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub side: String,
+    /// The settings in force, as `filter.set` last left them.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub params: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -163,6 +167,10 @@ fn record(status: godwinmix_core::mixer::FilterStatus) -> FilterRecord {
         type_id: status.type_id,
         source: status.source,
         side: status.side,
+        params: match serde_json::to_value(&status.params) {
+            Ok(Value::Object(map)) => map,
+            _ => Map::new(),
+        },
     }
 }
 
@@ -177,7 +185,7 @@ async fn read_back(call: &Call, id: &str) -> Result<FilterRecord, RpcError> {
         .ok_or_else(|| RpcError::not_found("filter", id, &[]))
 }
 
-async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
+pub(crate) async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddFilterRequest = call.params(&params)?;
     if req.source.is_none() && !req.programme {
         return Err(RpcError::invalid_params(

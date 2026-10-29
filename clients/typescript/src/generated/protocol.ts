@@ -209,6 +209,19 @@ export type Audio = "follow" | "always" | "never";
 
 export type AudioCodec = "aac" | "opus" | "mp3" | "ac3" | "pcm" | "other";
 
+/** One sound card a bus can be played on. */
+export interface AudioDevice {
+  api?: string | null;
+  id: string;
+  index: number;
+  name: string;
+}
+
+/** `audio.device.list`. */
+export interface AudioDeviceList {
+  devices: AudioDevice[];
+}
+
 /**
  * `source.audio.set` takes an id as well as the levels: the id comes off the
  * path on REST and out of the params on `/rpc`, and both land in one object.
@@ -227,6 +240,13 @@ export interface AudioShape {
   channels: number;
   codec: AudioCodec;
   sample_rate: number;
+}
+
+/** The audio desk as `audio.bus.list` and the status snapshot report it. */
+export interface AudioStatus {
+  buses: BusStatus[];
+  cue?: string[];
+  master: MasterConfig;
 }
 
 /** The audio an output wants. Every field left out is taken from the source. */
@@ -363,6 +383,60 @@ export interface BundleAsset {
   path: string;
   sha256: string;
   size: number;
+}
+
+/**
+ * One bus: a mix of its own beside the programme.
+ *
+ * Three kinds, decided by two keys. With neither, it carries each source at
+ * the level its `sends` give it (a source with no send is not on it). With
+ * `minus`, it is the programme as heard, without that one source: a guest's
+ * return. With `cue`, it carries the sources marked cue at unity, and the
+ * programme while nothing is marked.
+ */
+export interface BusConfig {
+  cue?: boolean;
+  device?: string | null;
+  gain?: number;
+  id: string;
+  minus?: string | null;
+  muted?: boolean;
+  name?: string | null;
+  sends?: Record<string, unknown>;
+}
+
+/** `audio.bus.remove`, and anything else that names one bus. */
+export interface BusIdRequest {
+  id: string;
+}
+
+/**
+ * `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
+ * on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
+ */
+export interface BusSetRequest {
+  device?: string | null;
+  gain?: number | null;
+  id: string;
+  minus?: string | null;
+  muted?: boolean | null;
+  name?: string | null;
+}
+
+/** One bus and what is using it. */
+export interface BusStatus {
+  cue?: boolean;
+  device?: string | null;
+  device_state?: string | null;
+  gain?: number;
+  id: string;
+  kind: string;
+  listen: string;
+  minus?: string | null;
+  muted?: boolean;
+  name?: string | null;
+  outputs?: string[];
+  sends?: Record<string, unknown>;
 }
 
 /** `governor.calibrate`. */
@@ -780,6 +854,13 @@ export interface Crop {
   top: number;
 }
 
+/** `audio.cue.set`: mark or clear one source for the cue bus. */
+export interface CueSetRequest {
+  cue: boolean;
+  solo?: boolean;
+  source: string;
+}
+
 /** Whether an interlaced picture is made progressive. */
 export type Deinterlace = "off" | "on" | "auto";
 
@@ -1154,6 +1235,7 @@ export interface FilterListing {
 /** One filter as the core reports it. */
 export interface FilterRecord {
   id: string;
+  params?: Record<string, unknown>;
   side: string;
   source?: string | null;
   type: string;
@@ -1902,6 +1984,7 @@ export interface ImportObsRequest {
 
 export interface ImportReport {
   config_toml?: string | null;
+  filters_added?: string[] | null;
   filters_duplicated?: FilterReport[];
   items: number;
   scenes: string[];
@@ -2153,6 +2236,12 @@ export interface Listener {
   transport: string;
 }
 
+/** `prompter.load`: put a script on the prompter, paused at the top. */
+export interface LoadRequest {
+  id: string;
+  play?: boolean;
+}
+
 /** `log.gst`. */
 export interface LogGstRequest {
   categories: string;
@@ -2173,6 +2262,14 @@ export interface LogSetRequest {
   target?: string | null;
 }
 
+/** `prompter.set`: change how the text looks. Only what is named changes. */
+export interface LookRequest {
+  cue?: number | null;
+  line_chars?: number | null;
+  margin?: number | null;
+  mirror?: boolean | null;
+}
+
 /** `machine.status`'s answer: the box, not one process. */
 export interface MachineStatus {
   cores: number;
@@ -2188,6 +2285,24 @@ export interface MachineStatus {
 /** `scene.history.mark`. */
 export interface MarkRequest {
   label?: string | null;
+}
+
+/** A place in a script a person can jump to: a line that starts with `#`. */
+export interface Marker {
+  name: string;
+  row: number;
+}
+
+/** A master fader and mute. */
+export interface MasterConfig {
+  gain?: number;
+  muted?: boolean;
+}
+
+/** `audio.master.set`. Only what is named moves. */
+export interface MasterSetRequest {
+  gain?: number | null;
+  muted?: boolean | null;
 }
 
 /** A rendition that follows a larger source's size, up to a limit. */
@@ -2320,6 +2435,7 @@ export interface MediaTagged {
  * per second, rather than one message per meter as the legacy stream sends.
  */
 export interface Meters {
+  buses?: Record<string, unknown>;
   program: number[];
   sources: Record<string, unknown>;
 }
@@ -2348,6 +2464,7 @@ export type MissingWhy = "failed" | "not_started" | "removed" | "unknown";
 
 export interface MixerStatus {
   ad?: AdStatus | null;
+  audio?: AudioStatus | null;
   backend: BackendInfo;
   multiview: MultiviewStatus;
   outputs: OutputStatus[];
@@ -2739,6 +2856,11 @@ export interface PlanView {
   totals: PlanTotals;
 }
 
+/** `prompter.play`. */
+export interface PlayRequest {
+  speed?: number | null;
+}
+
 /**
  * The links of an output served as HLS from the control port, each with
  * the output's viewer key on it. A channel's watch link is one too:
@@ -2933,6 +3055,25 @@ export type ProgrammeExt = boolean | {
   width?: number | null;
 };
 
+/** `prompter.get`, and the payload of `event/prompter.changed`. */
+export interface PrompterState {
+  at_ms: number;
+  cue: number;
+  line_chars: number;
+  margin: number;
+  markers: Marker[];
+  mirror: boolean;
+  now_ms: number;
+  playing: boolean;
+  position: number;
+  revision: number;
+  rows: number;
+  script?: string | null;
+  speed: number;
+  title?: string | null;
+  updated_ms: number;
+}
+
 /** Where an encoder is pointed for one protocol. */
 export interface PublishAddress {
   example: string;
@@ -3085,6 +3226,21 @@ export interface Resync {
 /** How the programme goes back to a source that came back. */
 export type ReturnMode = "auto" | "manual";
 
+/** One row of a script. */
+export interface Row {
+  line: number;
+  marker?: boolean;
+  text: string;
+}
+
+/** `prompter.rows`: the script on the prompter, broken into rows. */
+export interface RowsAnswer {
+  line_chars: number;
+  rows: Row[];
+  script?: string | null;
+  updated_ms: number;
+}
+
 /** The RTMP port every channel shares. */
 export interface RtmpInfo {
   listening: boolean;
@@ -3195,6 +3351,49 @@ export interface SceneView {
  */
 export type Scope = "plugin" | "read" | "operate" | "admin";
 
+/** One script, as `prompter.script.get` and `prompter.script.save` answer. */
+export interface Script {
+  id: string;
+  text: string;
+  title: string;
+  updated_ms: number;
+}
+
+/** `event/prompter.script.changed`. */
+export interface ScriptChanged {
+  id: string;
+  removed: boolean;
+  updated_ms: number;
+}
+
+/** `prompter.script.get` and `prompter.script.remove`. */
+export interface ScriptIdRequest {
+  id: string;
+}
+
+/** `prompter.script.list`. */
+export interface ScriptList {
+  on?: string | null;
+  scripts: ScriptSummary[];
+}
+
+/** `prompter.script.save`: make a script, or replace one with the same id. */
+export interface ScriptSaveRequest {
+  id?: string | null;
+  text: string;
+  title: string;
+}
+
+/** One script in `prompter.script.list`, without its text. */
+export interface ScriptSummary {
+  bytes: number;
+  id: string;
+  lines: number;
+  markers: string[];
+  title: string;
+  updated_ms: number;
+}
+
 /** `plugin.search`. */
 export interface SearchRequest {
   term?: string;
@@ -3222,6 +3421,22 @@ export interface SearchResults {
 export interface SeekParams {
   id: string;
   position_ms: number;
+}
+
+/** `prompter.seek`: exactly one of these. */
+export interface SeekRequest {
+  by?: number | null;
+  fraction?: number | null;
+  marker?: string | null;
+  row?: number | null;
+  step?: number | null;
+}
+
+/** `audio.send.set`: how much of one source goes to one bus. */
+export interface SendSetRequest {
+  bus: string;
+  level: number;
+  source: string;
 }
 
 /** `core.session_log`. */
@@ -3686,6 +3901,19 @@ export interface SourceStatus {
   uri: string;
   video_idle_ms?: number | null;
   [key: string]: unknown;
+}
+
+/**
+ * `prompter.speed`: one of `speed` or `by`.
+ *
+ * Shaped for something that follows the speaker as well as for a person: a
+ * plugin listening to the voice sends `speed` as often as it likes, and the
+ * screens follow without a jump, since the position carries on from where it
+ * was at the moment of the change.
+ */
+export interface SpeedRequest {
+  by?: number | null;
+  speed?: number | null;
 }
 
 export interface StatsListing {
@@ -4267,6 +4495,14 @@ export interface MethodParams {
   "agent.setup": SetupRequest;
   "agent.state": AgentStateRequest;
   "agent.tools": Record<string, never>;
+  "audio.bus.add": BusConfig;
+  "audio.bus.list": Record<string, never>;
+  "audio.bus.remove": BusIdRequest;
+  "audio.bus.set": BusSetRequest;
+  "audio.cue.set": CueSetRequest;
+  "audio.device.list": Record<string, never>;
+  "audio.master.set": MasterSetRequest;
+  "audio.send.set": SendSetRequest;
   "channel.add": ChannelAddRequest;
   "channel.certificate.generate": CertificateGenerateRequest;
   "channel.certificate.set": CertificateSetRequest;
@@ -4409,6 +4645,18 @@ export interface MethodParams {
   "program.transitions": Record<string, never>;
   "project.export": ExportRequest;
   "project.import": ImportRequest;
+  "prompter.get": Record<string, never>;
+  "prompter.load": LoadRequest;
+  "prompter.pause": Record<string, never>;
+  "prompter.play": PlayRequest;
+  "prompter.rows": Record<string, never>;
+  "prompter.script.get": ScriptIdRequest;
+  "prompter.script.list": Record<string, never>;
+  "prompter.script.remove": ScriptIdRequest;
+  "prompter.script.save": ScriptSaveRequest;
+  "prompter.seek": SeekRequest;
+  "prompter.set": LookRequest;
+  "prompter.speed": SpeedRequest;
   "rendition.plan": PlanRequest;
   "rendition.presets": Record<string, never>;
   "scene.add": AddSceneRequest;
@@ -4521,6 +4769,14 @@ export interface MethodResults {
   "agent.setup": Setup;
   "agent.state": Record<string, unknown>;
   "agent.tools": Detected[];
+  "audio.bus.add": BusStatus;
+  "audio.bus.list": AudioStatus;
+  "audio.bus.remove": BusIdRequest;
+  "audio.bus.set": BusStatus;
+  "audio.cue.set": AudioStatus;
+  "audio.device.list": AudioDeviceList;
+  "audio.master.set": MasterConfig;
+  "audio.send.set": BusStatus;
   "channel.add": ChannelAdded;
   "channel.certificate.generate": CertificateInfo;
   "channel.certificate.set": CertificateInfo;
@@ -4663,6 +4919,18 @@ export interface MethodResults {
   "program.transitions": TransitionCatalogue;
   "project.export": Record<string, unknown>;
   "project.import": Report;
+  "prompter.get": PrompterState;
+  "prompter.load": PrompterState;
+  "prompter.pause": PrompterState;
+  "prompter.play": PrompterState;
+  "prompter.rows": RowsAnswer;
+  "prompter.script.get": Script;
+  "prompter.script.list": ScriptList;
+  "prompter.script.remove": ScriptChanged;
+  "prompter.script.save": Script;
+  "prompter.seek": PrompterState;
+  "prompter.set": PrompterState;
+  "prompter.speed": PrompterState;
   "rendition.plan": PlanView;
   "rendition.presets": PresetsResult;
   "scene.add": SceneView;
@@ -4809,6 +5077,8 @@ export interface EventPayloads {
   "feed.failed": FeedFailedEvent;
   "feed.recovered": FeedRecoveredEvent;
   "presence.changed": PresenceList;
+  "prompter.changed": PrompterState;
+  "prompter.script.changed": ScriptChanged;
   "health": HealthEvent;
 }
 
@@ -4830,6 +5100,14 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/agent/tools" } },
+  { name: "audio.bus.add", summary: "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/bus/add" } },
+  { name: "audio.bus.list", summary: "The programme master, every bus with its sends, and the sources marked cue.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/audio/bus/list" } },
+  { name: "audio.bus.remove", summary: "Take a bus out, live. Refused while an output takes its sound from it.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/audio/bus/remove" } },
+  { name: "audio.bus.set", summary: "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/bus/set" } },
+  { name: "audio.cue.set", summary: "Mark or clear a source for the cue bus. `solo` clears every other mark first.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/cue/set" } },
+  { name: "audio.device.list", summary: "The sound outputs on the mixer's machine that a bus can play on.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/audio/device/list" } },
+  { name: "audio.master.set", summary: "Move the programme's master fader or mute. Only what is named moves.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/master/set" } },
+  { name: "audio.send.set", summary: "Set how much of one source goes to one bus. 0 takes it off the bus.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/send/set" } },
   { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/generate" } },
   { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/set" } },
@@ -4972,6 +5250,18 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/program/transitions" } },
   { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/project/export" } },
   { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/project/import" } },
+  { name: "prompter.get", summary: "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter" } },
+  { name: "prompter.load", summary: "Put a script on the prompter, at the top and paused unless play is true.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/load" } },
+  { name: "prompter.pause", summary: "Stop the prompter where it is.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/pause" } },
+  { name: "prompter.play", summary: "Start the prompter scrolling, at speed when given. From the end it starts again at the top.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/play" } },
+  { name: "prompter.rows", summary: "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/rows" } },
+  { name: "prompter.script.get", summary: "One prompter script with its text.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter/script/get" } },
+  { name: "prompter.script.list", summary: "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter/script/list" } },
+  { name: "prompter.script.remove", summary: "Forget a prompter script. When it is on the prompter the screens go empty.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/script/remove" } },
+  { name: "prompter.script.save", summary: "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/script/save" } },
+  { name: "prompter.seek", summary: "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/seek" } },
+  { name: "prompter.set", summary: "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/set" } },
+  { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/speed" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
   { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/presets" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
@@ -5128,6 +5418,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "feed.failed",
   "feed.recovered",
   "presence.changed",
+  "prompter.changed",
+  "prompter.script.changed",
   "health",
 ];
 
@@ -5167,6 +5459,46 @@ export class GeneratedMethods {
   /** The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. */
   agentTools(): Promise<Detected[]> {
     return this._call("agent.tools", {}) as Promise<Detected[]>;
+  }
+
+  /** Add a bus beside the programme mix, live. Nothing is built for buses until the first one. */
+  audioBusAdd(params: BusConfig): Promise<BusStatus> {
+    return this._call("audio.bus.add", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
+  }
+
+  /** The programme master, every bus with its sends, and the sources marked cue. */
+  audioBusList(): Promise<AudioStatus> {
+    return this._call("audio.bus.list", {}) as Promise<AudioStatus>;
+  }
+
+  /** Take a bus out, live. Refused while an output takes its sound from it. */
+  audioBusRemove(params: BusIdRequest): Promise<BusIdRequest> {
+    return this._call("audio.bus.remove", params as unknown as Record<string, unknown>) as Promise<BusIdRequest>;
+  }
+
+  /** Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card. */
+  audioBusSet(params: BusSetRequest): Promise<BusStatus> {
+    return this._call("audio.bus.set", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
+  }
+
+  /** Mark or clear a source for the cue bus. `solo` clears every other mark first. */
+  audioCueSet(params: CueSetRequest): Promise<AudioStatus> {
+    return this._call("audio.cue.set", params as unknown as Record<string, unknown>) as Promise<AudioStatus>;
+  }
+
+  /** The sound outputs on the mixer's machine that a bus can play on. */
+  audioDeviceList(): Promise<AudioDeviceList> {
+    return this._call("audio.device.list", {}) as Promise<AudioDeviceList>;
+  }
+
+  /** Move the programme's master fader or mute. Only what is named moves. */
+  audioMasterSet(params: MasterSetRequest = {}): Promise<MasterConfig> {
+    return this._call("audio.master.set", params as unknown as Record<string, unknown>) as Promise<MasterConfig>;
+  }
+
+  /** Set how much of one source goes to one bus. 0 takes it off the bus. */
+  audioSendSet(params: SendSetRequest): Promise<BusStatus> {
+    return this._call("audio.send.set", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
   }
 
   /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. */
@@ -5877,6 +6209,66 @@ export class GeneratedMethods {
   /** Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. */
   projectImport(params: ImportRequest): Promise<Report> {
     return this._call("project.import", params as unknown as Record<string, unknown>) as Promise<Report>;
+  }
+
+  /** The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look. */
+  prompterGet(): Promise<PrompterState> {
+    return this._call("prompter.get", {}) as Promise<PrompterState>;
+  }
+
+  /** Put a script on the prompter, at the top and paused unless play is true. */
+  prompterLoad(params: LoadRequest): Promise<PrompterState> {
+    return this._call("prompter.load", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Stop the prompter where it is. */
+  prompterPause(): Promise<PrompterState> {
+    return this._call("prompter.pause", {}) as Promise<PrompterState>;
+  }
+
+  /** Start the prompter scrolling, at speed when given. From the end it starts again at the top. */
+  prompterPlay(params: PlayRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.play", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. */
+  prompterRows(): Promise<RowsAnswer> {
+    return this._call("prompter.rows", {}) as Promise<RowsAnswer>;
+  }
+
+  /** One prompter script with its text. */
+  prompterScriptGet(params: ScriptIdRequest): Promise<Script> {
+    return this._call("prompter.script.get", params as unknown as Record<string, unknown>) as Promise<Script>;
+  }
+
+  /** Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. */
+  prompterScriptList(): Promise<ScriptList> {
+    return this._call("prompter.script.list", {}) as Promise<ScriptList>;
+  }
+
+  /** Forget a prompter script. When it is on the prompter the screens go empty. */
+  prompterScriptRemove(params: ScriptIdRequest): Promise<ScriptChanged> {
+    return this._call("prompter.script.remove", params as unknown as Record<string, unknown>) as Promise<ScriptChanged>;
+  }
+
+  /** Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. */
+  prompterScriptSave(params: ScriptSaveRequest): Promise<Script> {
+    return this._call("prompter.script.save", params as unknown as Record<string, unknown>) as Promise<Script>;
+  }
+
+  /** Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). */
+  prompterSeek(params: SeekRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.seek", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. */
+  prompterSet(params: LookRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.set", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. */
+  prompterSpeed(params: SpeedRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.speed", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
   }
 
   /** What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. */

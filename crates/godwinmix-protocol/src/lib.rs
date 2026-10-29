@@ -44,6 +44,7 @@
 
 pub mod action;
 pub mod backup;
+pub mod buses;
 pub mod destination;
 pub mod devices;
 pub mod rendition;
@@ -69,6 +70,7 @@ pub mod output_error;
 pub mod page;
 pub mod plugin;
 pub mod presence;
+pub mod prompter;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;

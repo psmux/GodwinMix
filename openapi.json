@@ -849,6 +849,52 @@
         ],
         "type": "string"
       },
+      "AudioDevice": {
+        "description": "One sound card a bus can be played on.",
+        "properties": {
+          "api": {
+            "description": "The platform's sound API, when it says: `osxaudio`, `wasapi2`,\n`pulse`, `alsa`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "The id `device` takes, the most stable thing the platform says about it.",
+            "type": "string"
+          },
+          "index": {
+            "description": "Its number in this list, which `device` also takes.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AudioDeviceList": {
+        "description": "`audio.device.list`.",
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/AudioDevice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "type": "object"
+      },
       "AudioSetParams": {
         "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
         "properties": {
@@ -925,6 +971,32 @@
           "channels",
           "sample_rate",
           "bitrate_kbps"
+        ],
+        "type": "object"
+      },
+      "AudioStatus": {
+        "description": "The audio desk as `audio.bus.list` and the status snapshot report it.",
+        "properties": {
+          "buses": {
+            "items": {
+              "$ref": "#/components/schemas/BusStatus"
+            },
+            "type": "array"
+          },
+          "cue": {
+            "description": "The sources marked cue, in the order they were marked.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "master": {
+            "$ref": "#/components/schemas/MasterConfig"
+          }
+        },
+        "required": [
+          "master",
+          "buses"
         ],
         "type": "object"
       },
@@ -1544,6 +1616,193 @@
           "path",
           "sha256",
           "size"
+        ],
+        "type": "object"
+      },
+      "BusConfig": {
+        "description": "One bus: a mix of its own beside the programme.\n\nThree kinds, decided by two keys. With neither, it carries each source at\nthe level its `sends` give it (a source with no send is not on it). With\n`minus`, it is the programme as heard, without that one source: a guest's\nreturn. With `cue`, it carries the sources marked cue at unity, and the\nprogramme while nothing is marked.",
+        "properties": {
+          "cue": {
+            "description": "Make this the cue bus.",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "description": "The bus master, 0.0 to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+            "type": "string"
+          },
+          "minus": {
+            "description": "Make this bus the programme without this source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What the desk shows. The id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sends": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusIdRequest": {
+        "description": "`audio.bus.remove`, and anything else that names one bus.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusSetRequest": {
+        "description": "`audio.bus.set`. Only what is named moves. `device: \"\"` stops playing it\non a sound card, and `minus: \"\"` makes a mix minus bus an ordinary one.",
+        "properties": {
+          "device": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "minus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusStatus": {
+        "description": "One bus and what is using it.",
+        "properties": {
+          "cue": {
+            "description": "Make this the cue bus.",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_state": {
+            "description": "The device it is playing on, once it opened, or why it is not.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "description": "The bus master, 0.0 to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`sends`, `minus` or `cue`.",
+            "type": "string"
+          },
+          "listen": {
+            "description": "Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.",
+            "type": "string"
+          },
+          "minus": {
+            "description": "Make this bus the programme without this source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What the desk shows. The id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputs": {
+            "description": "The outputs that take their sound from this bus.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sends": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "listen"
         ],
         "type": "object"
       },
@@ -3298,6 +3557,26 @@
         ],
         "type": "object"
       },
+      "CueSetRequest": {
+        "description": "`audio.cue.set`: mark or clear one source for the cue bus.",
+        "properties": {
+          "cue": {
+            "type": "boolean"
+          },
+          "solo": {
+            "description": "Clear every other mark first, so only this source is heard: solo.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "cue"
+        ],
+        "type": "object"
+      },
       "Deinterlace": {
         "description": "Whether an interlaced picture is made progressive.",
         "oneOf": [
@@ -4820,6 +5099,11 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "description": "The settings in force, as `filter.set` last left them.",
+            "type": "object"
           },
           "side": {
             "type": "string"
@@ -7948,6 +8232,16 @@
               "null"
             ]
           },
+          "filters_added": {
+            "description": "With `add_sources`: the sound filters put on the added sources, by id.\nA sound filter stays on its source, as in OBS; one the mixer refused is\nin `skipped` with its reason.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "filters_duplicated": {
             "description": "OBS attaches a filter to a source, so a camera keyed in one scene is\nkeyed in all of them. Here filters belong to the item, so a source\nfilter is copied onto each placement and each copy is named here. This\nis the one thing an import changes the meaning of, so it is reported\nrather than left for somebody to find on air.",
             "items": {
@@ -8979,6 +9273,24 @@
         ],
         "type": "object"
       },
+      "LoadRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.load`: put a script on the prompter, paused at the top.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "play": {
+            "default": false,
+            "description": "Start playing at once.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "LogGstRequest": {
         "description": "`log.gst`.",
         "properties": {
@@ -9052,6 +9364,48 @@
         "required": [
           "level"
         ],
+        "type": "object"
+      },
+      "LookRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.set`: change how the text looks. Only what is named changes.",
+        "properties": {
+          "cue": {
+            "default": null,
+            "description": "Where the cue line sits, 0.1 to 0.9 of the height from the top.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "line_chars": {
+            "default": null,
+            "description": "Characters a row holds, 12 to 80. Fewer is bigger.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "margin": {
+            "default": null,
+            "description": "Percent of the width left on each side, 0 to 30.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mirror": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "MachineStatus": {
@@ -9132,6 +9486,61 @@
             "description": "What to call the group of changes that follows. Omit it to end the\ngroup, so the next change is its own undo step.",
             "type": [
               "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Marker": {
+        "description": "A place in a script a person can jump to: a line that starts with `#`.",
+        "properties": {
+          "name": {
+            "description": "The words after the `#`, or `marker <n>` for a bare `#`.",
+            "type": "string"
+          },
+          "row": {
+            "description": "The row it starts on.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "row"
+        ],
+        "type": "object"
+      },
+      "MasterConfig": {
+        "description": "A master fader and mute.",
+        "properties": {
+          "gain": {
+            "default": 1.0,
+            "description": "0.0 silent, 1.0 unity, up to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "muted": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MasterSetRequest": {
+        "description": "`audio.master.set`. Only what is named moves.",
+        "properties": {
+          "gain": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
               "null"
             ]
           }
@@ -9731,6 +10140,17 @@
               }
             ],
             "description": "Present while an ad break is armed or running."
+          },
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The programme master, the buses and the cue marks. Left out by a core\nthat has no audio desk."
           },
           "backend": {
             "$ref": "#/components/schemas/BackendInfo"
@@ -11230,6 +11650,22 @@
         ],
         "type": "object"
       },
+      "PlayRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.play`.",
+        "properties": {
+          "speed": {
+            "default": null,
+            "description": "Rows a second to play at. Left out keeps the speed it has.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "Playback": {
         "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
         "properties": {
@@ -11882,6 +12318,110 @@
         ],
         "type": "object"
       },
+      "PrompterState": {
+        "description": "`prompter.get`, and the payload of `event/prompter.changed`.",
+        "properties": {
+          "at_ms": {
+            "description": "When `position` was true, on the mixer's clock.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cue": {
+            "description": "Where the cue line sits, as a fraction of the screen's height from the\ntop. The row at `position` is drawn on it. 0.1 to 0.9.",
+            "format": "double",
+            "type": "number"
+          },
+          "line_chars": {
+            "description": "The text size, as how many characters a row holds. Fewer is bigger.\nEvery screen fits this many across its own width, so all of them break\nthe rows in the same places. 12 to 80; 32 to start.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "margin": {
+            "description": "Space left on each side, as a percentage of the screen's width. 0 to 30.",
+            "format": "double",
+            "type": "number"
+          },
+          "markers": {
+            "items": {
+              "$ref": "#/components/schemas/Marker"
+            },
+            "type": "array"
+          },
+          "mirror": {
+            "description": "Flip the text left to right, for a screen read through beam splitter\nglass. A screen may override it for itself.",
+            "type": "boolean"
+          },
+          "now_ms": {
+            "description": "The mixer's clock as this was written, so a screen can tell how far\nits own clock is from it.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "playing": {
+            "type": "boolean"
+          },
+          "position": {
+            "description": "Where the prompter was at `at_ms`, in rows from the top. 2.5 is half\nway through the third row.",
+            "format": "double",
+            "type": "number"
+          },
+          "revision": {
+            "description": "Moves on every change, so a screen can drop an answer older than the\nlast event it applied.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "description": "How many rows it makes at `line_chars`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "script": {
+            "description": "The script on the prompter, or null when none is loaded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speed": {
+            "description": "Rows a second. Negative scrolls back. It applies only while `playing`.",
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "description": "Its title.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_ms": {
+            "description": "When its text last changed, in milliseconds since the Unix epoch. A\nscreen asks `prompter.rows` again when this or `line_chars` moves.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated_ms",
+          "rows",
+          "markers",
+          "position",
+          "at_ms",
+          "speed",
+          "playing",
+          "line_chars",
+          "margin",
+          "mirror",
+          "cue",
+          "now_ms",
+          "revision"
+        ],
+        "type": "object"
+      },
       "PublishAddress": {
         "description": "Where an encoder is pointed for one protocol.",
         "properties": {
@@ -12443,6 +12983,64 @@
           }
         ]
       },
+      "Row": {
+        "description": "One row of a script.",
+        "properties": {
+          "line": {
+            "description": "The line it came from, counting from 0.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "marker": {
+            "description": "True for the rows of a marker line, drawn as a heading.",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "The words, with any asterisks still in them.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "line"
+        ],
+        "type": "object"
+      },
+      "RowsAnswer": {
+        "description": "`prompter.rows`: the script on the prompter, broken into rows.",
+        "properties": {
+          "line_chars": {
+            "description": "The width the rows were made at.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            },
+            "type": "array"
+          },
+          "script": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated_ms",
+          "line_chars",
+          "rows"
+        ],
+        "type": "object"
+      },
       "RtmpInfo": {
         "description": "The RTMP port every channel shares.",
         "properties": {
@@ -12846,6 +13444,163 @@
         ],
         "type": "string"
       },
+      "Script": {
+        "description": "One script, as `prompter.script.get` and `prompter.script.save` answer.",
+        "properties": {
+          "id": {
+            "description": "A slug: `evening-news`.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Plain text. A line starting with `#` is a marker, `*word*` is drawn in\nitalics and `**word**` in bold.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_ms": {
+            "description": "When it was last saved, in milliseconds since the Unix epoch.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text",
+          "updated_ms"
+        ],
+        "type": "object"
+      },
+      "ScriptChanged": {
+        "description": "`event/prompter.script.changed`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "removed": {
+            "description": "True when the script was removed.",
+            "type": "boolean"
+          },
+          "updated_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "removed",
+          "updated_ms"
+        ],
+        "type": "object"
+      },
+      "ScriptIdRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.script.get` and `prompter.script.remove`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "ScriptList": {
+        "description": "`prompter.script.list`.",
+        "properties": {
+          "on": {
+            "description": "The one on the prompter now.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scripts": {
+            "description": "Every script, by id.",
+            "items": {
+              "$ref": "#/components/schemas/ScriptSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scripts"
+        ],
+        "type": "object"
+      },
+      "ScriptSaveRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.script.save`: make a script, or replace one with the same id.",
+        "properties": {
+          "id": {
+            "default": null,
+            "description": "A slug. Made from the title when left out: \"Evening news\" is\n`evening-news`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "description": "The words. A line starting with `#` is a marker.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ScriptSummary": {
+        "description": "One script in `prompter.script.list`, without its text.",
+        "properties": {
+          "bytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lines": {
+            "description": "Lines as written, blank ones included.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "markers": {
+            "description": "The names of its markers, in order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "lines",
+          "markers",
+          "bytes",
+          "updated_ms"
+        ],
+        "type": "object"
+      },
       "SearchRequest": {
         "description": "`plugin.search`.",
         "properties": {
@@ -12943,6 +13698,79 @@
         "required": [
           "id",
           "position_ms"
+        ],
+        "type": "object"
+      },
+      "SeekRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.seek`: exactly one of these.",
+        "properties": {
+          "by": {
+            "default": null,
+            "description": "Move this many rows on, or back when negative.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "fraction": {
+            "default": null,
+            "description": "A fraction of the way through: 0 is the top, 1 the end.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "marker": {
+            "default": null,
+            "description": "A marker by name, or by its number counting from 1 as a string (\"2\").",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "row": {
+            "default": null,
+            "description": "A row, from 0. 2.5 is half way through the third row.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "step": {
+            "default": null,
+            "description": "Move this many markers on (1 is the next, -1 the one before). From\ninside a section, -1 goes to the start of that section.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SendSetRequest": {
+        "description": "`audio.send.set`: how much of one source goes to one bus.",
+        "properties": {
+          "bus": {
+            "type": "string"
+          },
+          "level": {
+            "description": "0.0 takes the source off the bus, 1.0 is unity, up to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bus",
+          "source",
+          "level"
         ],
         "type": "object"
       },
@@ -14839,6 +15667,31 @@
         ],
         "type": "object"
       },
+      "SpeedRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.speed`: one of `speed` or `by`.\n\nShaped for something that follows the speaker as well as for a person: a\nplugin listening to the voice sends `speed` as often as it likes, and the\nscreens follow without a jump, since the position carries on from where it\nwas at the moment of the change.",
+        "properties": {
+          "by": {
+            "default": null,
+            "description": "Add this to the speed it has: what a key or a Stream Deck button sends.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speed": {
+            "default": null,
+            "description": "Rows a second, -20 to 20. Negative scrolls back.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "StatsListing": {
         "properties": {
           "instances": {
@@ -16719,6 +17572,290 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/audio/bus/add": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusConfig"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/bus/list": {
+      "get": {
+        "description": "JSON-RPC method `audio.bus.list`. Needs the `read` scope.",
+        "operationId": "audio.bus.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The programme master, every bus with its sends, and the sources marked cue.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/audio/bus/remove": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusIdRequest"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a bus out, live. Refused while an output takes its sound from it.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/bus/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/cue/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.cue.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.cue.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CueSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Mark or clear a source for the cue bus. `solo` clears every other mark first.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/device/list": {
+      "get": {
+        "description": "JSON-RPC method `audio.device.list`. Needs the `read` scope.",
+        "operationId": "audio.device.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioDeviceList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The sound outputs on the mixer's machine that a bus can play on.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/audio/master/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.master.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.master.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterConfig"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move the programme's master fader or mute. Only what is named moves.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/send/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.send.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.send.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set how much of one source goes to one bus. 0 takes it off the bus.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/channels": {
@@ -22080,6 +23217,436 @@
         "x-destructive": true,
         "x-idempotent": false,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/prompter": {
+      "get": {
+        "description": "JSON-RPC method `prompter.get`. Needs the `read` scope.",
+        "operationId": "prompter.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/load": {
+      "post": {
+        "description": "JSON-RPC method `prompter.load`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.load",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a script on the prompter, at the top and paused unless play is true.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/pause": {
+      "post": {
+        "description": "JSON-RPC method `prompter.pause`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.pause",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop the prompter where it is.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/play": {
+      "post": {
+        "description": "JSON-RPC method `prompter.play`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.play",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Start the prompter scrolling, at speed when given. From the end it starts again at the top.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/rows": {
+      "post": {
+        "description": "JSON-RPC method `prompter.rows`. Needs the `read` scope.",
+        "operationId": "prompter.rows",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowsAnswer"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/script/get": {
+      "get": {
+        "description": "JSON-RPC method `prompter.script.get`. Needs the `read` scope.",
+        "operationId": "prompter.script.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Script"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One prompter script with its text.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/script/list": {
+      "get": {
+        "description": "JSON-RPC method `prompter.script.list`. Needs the `read` scope.",
+        "operationId": "prompter.script.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/script/remove": {
+      "post": {
+        "description": "JSON-RPC method `prompter.script.remove`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.script.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Forget a prompter script. When it is on the prompter the screens go empty.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/script/save": {
+      "post": {
+        "description": "JSON-RPC method `prompter.script.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.script.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptSaveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Script"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/seek": {
+      "post": {
+        "description": "JSON-RPC method `prompter.seek`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.seek",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeekRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/set": {
+      "post": {
+        "description": "JSON-RPC method `prompter.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/speed": {
+      "post": {
+        "description": "JSON-RPC method `prompter.speed`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.speed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeedRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
       }
     },
     "/api/v1/rendition/plan": {

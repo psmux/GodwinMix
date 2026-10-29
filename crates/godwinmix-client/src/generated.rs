@@ -414,6 +414,28 @@ pub type AudioCodec = String;
 /// The values api_level 1 knows for [`AudioCodec`].
 pub const AUDIO_CODEC_VALUES: &[&str] = &["aac", "opus", "mp3", "ac3", "pcm", "other"];
 
+/// One sound card a bus can be played on.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioDevice {
+    /// The platform's sound API, when it says: `osxaudio`, `wasapi2`,
+    /// `pulse`, `alsa`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api: Option<String>,
+    /// The id `device` takes, the most stable thing the platform says about it.
+    pub id: String,
+    /// Its number in this list, which `device` also takes.
+    pub index: i64,
+    pub name: String,
+}
+
+/// `audio.device.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioDeviceList {
+    pub devices: Vec<AudioDevice>,
+}
+
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -447,6 +469,16 @@ pub struct AudioShape {
     pub channels: u8,
     pub codec: AudioCodec,
     pub sample_rate: u32,
+}
+
+/// The audio desk as `audio.bus.list` and the status snapshot report it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioStatus {
+    pub buses: Vec<BusStatus>,
+    /// The sources marked cue, in the order they were marked.
+    pub cue: Vec<String>,
+    pub master: MasterConfig,
 }
 
 /// The audio an output wants. Every field left out is taken from the source.
@@ -686,6 +718,104 @@ pub struct BundleAsset {
     pub path: String,
     pub sha256: String,
     pub size: u64,
+}
+
+/// One bus: a mix of its own beside the programme.
+///
+/// Three kinds, decided by two keys. With neither, it carries each source at
+/// the level its `sends` give it (a source with no send is not on it). With
+/// `minus`, it is the programme as heard, without that one source: a guest's
+/// return. With `cue`, it carries the sources marked cue at unity, and the
+/// programme while nothing is marked.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusConfig {
+    /// Make this the cue bus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<bool>,
+    /// Play the bus on a sound card here: `default`, a device name, its id,
+    /// or its number in `audio.device.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The bus master, 0.0 to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    /// A slug: `monitor`, `guest-return`, `recording-b`.
+    pub id: String,
+    /// Make this bus the programme without this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// What the desk shows. The id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Level per source id, 0.0 to 10.0, after the source's own fader and
+    /// mute. Read only on a bus with neither `minus` nor `cue`.
+    pub sends: BTreeMap<String, Value>,
+}
+
+/// `audio.bus.remove`, and anything else that names one bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusIdRequest {
+    pub id: String,
+}
+
+/// `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
+/// on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// One bus and what is using it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusStatus {
+    /// Make this the cue bus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<bool>,
+    /// Play the bus on a sound card here: `default`, a device name, its id,
+    /// or its number in `audio.device.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The device it is playing on, once it opened, or why it is not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_state: Option<String>,
+    /// The bus master, 0.0 to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    /// A slug: `monitor`, `guest-return`, `recording-b`.
+    pub id: String,
+    /// `sends`, `minus` or `cue`.
+    pub kind: String,
+    /// Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
+    pub listen: String,
+    /// Make this bus the programme without this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// What the desk shows. The id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The outputs that take their sound from this bus.
+    pub outputs: Vec<String>,
+    /// Level per source id, 0.0 to 10.0, after the source's own fader and
+    /// mute. Read only on a bus with neither `minus` nor `cue`.
+    pub sends: BTreeMap<String, Value>,
 }
 
 /// `governor.calibrate`.
@@ -1490,6 +1620,17 @@ pub struct Crop {
     pub top: f64,
 }
 
+/// `audio.cue.set`: mark or clear one source for the cue bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CueSetRequest {
+    pub cue: bool,
+    /// Clear every other mark first, so only this source is heard: solo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solo: Option<bool>,
+    pub source: String,
+}
+
 /// Whether an interlaced picture is made progressive.
 pub type Deinterlace = String;
 /// The values api_level 1 knows for [`Deinterlace`].
@@ -2170,6 +2311,8 @@ pub struct FilterListing {
 #[serde(default)]
 pub struct FilterRecord {
     pub id: String,
+    /// The settings in force, as `filter.set` last left them.
+    pub params: BTreeMap<String, Value>,
     pub side: String,
     /// Absent on a programme filter.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3539,6 +3682,11 @@ pub struct ImportReport {
     /// not add the sources itself, which is what the command line wants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_toml: Option<String>,
+    /// With `add_sources`: the sound filters put on the added sources, by id.
+    /// A sound filter stays on its source, as in OBS; one the mixer refused is
+    /// in `skipped` with its reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filters_added: Option<Vec<String>>,
     /// OBS attaches a filter to a source, so a camera keyed in one scene is
     /// keyed in all of them. Here filters belong to the item, so a source
     /// filter is copied onto each placement and each copy is named here. This
@@ -3994,6 +4142,16 @@ pub struct Listener {
     pub transport: String,
 }
 
+/// `prompter.load`: put a script on the prompter, paused at the top.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LoadRequest {
+    pub id: String,
+    /// Start playing at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play: Option<bool>,
+}
+
 /// `log.gst`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4036,6 +4194,23 @@ pub struct LogSetRequest {
     pub target: Option<String>,
 }
 
+/// `prompter.set`: change how the text looks. Only what is named changes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LookRequest {
+    /// Where the cue line sits, 0.1 to 0.9 of the height from the top.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<f64>,
+    /// Characters a row holds, 12 to 80. Fewer is bigger.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_chars: Option<u32>,
+    /// Percent of the width left on each side, 0 to 30.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub margin: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirror: Option<bool>,
+}
+
 /// `machine.status`'s answer: the box, not one process.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4068,6 +4243,37 @@ pub struct MarkRequest {
     /// group, so the next change is its own undo step.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+}
+
+/// A place in a script a person can jump to: a line that starts with `#`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Marker {
+    /// The words after the `#`, or `marker <n>` for a bare `#`.
+    pub name: String,
+    /// The row it starts on.
+    pub row: u32,
+}
+
+/// A master fader and mute.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MasterConfig {
+    /// 0.0 silent, 1.0 unity, up to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+}
+
+/// `audio.master.set`. Only what is named moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MasterSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
 }
 
 /// A rendition that follows a larger source's size, up to a limit.
@@ -4317,6 +4523,9 @@ pub struct MediaTagged {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Meters {
+    /// Peak dBFS per channel, per audio bus id, after the bus master. Left out
+    /// while there are no buses.
+    pub buses: BTreeMap<String, Value>,
     /// Peak dBFS per channel on the programme bus.
     pub program: Vec<f64>,
     /// Peak dBFS per channel, per source id.
@@ -4364,6 +4573,10 @@ pub struct MixerStatus {
     /// Present while an ad break is armed or running.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ad: Option<AdStatus>,
+    /// The programme master, the buses and the cue marks. Left out by a core
+    /// that has no audio desk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioStatus>,
     pub backend: BackendInfo,
     pub multiview: MultiviewStatus,
     pub outputs: Vec<OutputStatus>,
@@ -4968,6 +5181,15 @@ pub struct PlanView {
     pub totals: PlanTotals,
 }
 
+/// `prompter.play`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayRequest {
+    /// Rows a second to play at. Left out keeps the speed it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+}
+
 /// The links of an output served as HLS from the control port, each with
 /// the output's viewer key on it. A channel's watch link is one too:
 /// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
@@ -5296,6 +5518,50 @@ pub struct ProgramState {
 /// `ext.programme`. `true`, `false`, or an object.
 pub type ProgrammeExt = Value;
 
+/// `prompter.get`, and the payload of `event/prompter.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PrompterState {
+    /// When `position` was true, on the mixer's clock.
+    pub at_ms: u64,
+    /// Where the cue line sits, as a fraction of the screen's height from the
+    /// top. The row at `position` is drawn on it. 0.1 to 0.9.
+    pub cue: f64,
+    /// The text size, as how many characters a row holds. Fewer is bigger.
+    /// Every screen fits this many across its own width, so all of them break
+    /// the rows in the same places. 12 to 80; 32 to start.
+    pub line_chars: u32,
+    /// Space left on each side, as a percentage of the screen's width. 0 to 30.
+    pub margin: f64,
+    pub markers: Vec<Marker>,
+    /// Flip the text left to right, for a screen read through beam splitter
+    /// glass. A screen may override it for itself.
+    pub mirror: bool,
+    /// The mixer's clock as this was written, so a screen can tell how far
+    /// its own clock is from it.
+    pub now_ms: u64,
+    pub playing: bool,
+    /// Where the prompter was at `at_ms`, in rows from the top. 2.5 is half
+    /// way through the third row.
+    pub position: f64,
+    /// Moves on every change, so a screen can drop an answer older than the
+    /// last event it applied.
+    pub revision: u64,
+    /// How many rows it makes at `line_chars`.
+    pub rows: u32,
+    /// The script on the prompter, or null when none is loaded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    /// Rows a second. Negative scrolls back. It applies only while `playing`.
+    pub speed: f64,
+    /// Its title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// When its text last changed, in milliseconds since the Unix epoch. A
+    /// screen asks `prompter.rows` again when this or `line_chars` moves.
+    pub updated_ms: u64,
+}
+
 /// Where an encoder is pointed for one protocol.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5554,6 +5820,31 @@ pub type ReturnMode = String;
 /// The values api_level 1 knows for [`ReturnMode`].
 pub const RETURN_MODE_VALUES: &[&str] = &["auto", "manual"];
 
+/// One row of a script.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Row {
+    /// The line it came from, counting from 0.
+    pub line: u32,
+    /// True for the rows of a marker line, drawn as a heading.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker: Option<bool>,
+    /// The words, with any asterisks still in them.
+    pub text: String,
+}
+
+/// `prompter.rows`: the script on the prompter, broken into rows.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RowsAnswer {
+    /// The width the rows were made at.
+    pub line_chars: u32,
+    pub rows: Vec<Row>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    pub updated_ms: u64,
+}
+
 /// The RTMP port every channel shares.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5740,6 +6031,75 @@ pub type Scope = String;
 /// The values api_level 1 knows for [`Scope`].
 pub const SCOPE_VALUES: &[&str] = &["plugin", "read", "operate", "admin"];
 
+/// One script, as `prompter.script.get` and `prompter.script.save` answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Script {
+    /// A slug: `evening-news`.
+    pub id: String,
+    /// Plain text. A line starting with `#` is a marker, `*word*` is drawn in
+    /// italics and `**word**` in bold.
+    pub text: String,
+    pub title: String,
+    /// When it was last saved, in milliseconds since the Unix epoch.
+    pub updated_ms: u64,
+}
+
+/// `event/prompter.script.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptChanged {
+    pub id: String,
+    /// True when the script was removed.
+    pub removed: bool,
+    pub updated_ms: u64,
+}
+
+/// `prompter.script.get` and `prompter.script.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptIdRequest {
+    pub id: String,
+}
+
+/// `prompter.script.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptList {
+    /// The one on the prompter now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<String>,
+    /// Every script, by id.
+    pub scripts: Vec<ScriptSummary>,
+}
+
+/// `prompter.script.save`: make a script, or replace one with the same id.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptSaveRequest {
+    /// A slug. Made from the title when left out: "Evening news" is
+    /// `evening-news`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The words. A line starting with `#` is a marker.
+    pub text: String,
+    pub title: String,
+}
+
+/// One script in `prompter.script.list`, without its text.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptSummary {
+    pub bytes: u32,
+    pub id: String,
+    /// Lines as written, blank ones included.
+    pub lines: u32,
+    /// The names of its markers, in order.
+    pub markers: Vec<String>,
+    pub title: String,
+    pub updated_ms: u64,
+}
+
 /// `plugin.search`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5786,6 +6146,38 @@ pub struct SeekParams {
     /// Milliseconds from the start of the clip. Off either end is clamped
     /// rather than refused, so a scrubber flicked past the end lands there.
     pub position_ms: f64,
+}
+
+/// `prompter.seek`: exactly one of these.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SeekRequest {
+    /// Move this many rows on, or back when negative.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<f64>,
+    /// A fraction of the way through: 0 is the top, 1 the end.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fraction: Option<f64>,
+    /// A marker by name, or by its number counting from 1 as a string ("2").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker: Option<String>,
+    /// A row, from 0. 2.5 is half way through the third row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row: Option<f64>,
+    /// Move this many markers on (1 is the next, -1 the one before). From
+    /// inside a section, -1 goes to the start of that section.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<i32>,
+}
+
+/// `audio.send.set`: how much of one source goes to one bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SendSetRequest {
+    pub bus: String,
+    /// 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
+    pub level: f64,
+    pub source: String,
 }
 
 /// `core.session_log`.
@@ -6658,6 +7050,23 @@ pub struct SourceStatus {
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+/// `prompter.speed`: one of `speed` or `by`.
+///
+/// Shaped for something that follows the speaker as well as for a person: a
+/// plugin listening to the voice sends `speed` as often as it likes, and the
+/// screens follow without a jump, since the position carries on from where it
+/// was at the moment of the change.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpeedRequest {
+    /// Add this to the speed it has: what a key or a Stream Deck button sends.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<f64>,
+    /// Rows a second, -20 to 20. Negative scrolls back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -7744,12 +8153,20 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 250] = [
+pub const METHODS: [MethodInfo; 270] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
     MethodInfo { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/agent/tools")) },
+    MethodInfo { name: "audio.bus.add", summary: "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/bus/add")) },
+    MethodInfo { name: "audio.bus.list", summary: "The programme master, every bus with its sends, and the sources marked cue.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/audio/bus/list")) },
+    MethodInfo { name: "audio.bus.remove", summary: "Take a bus out, live. Refused while an output takes its sound from it.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/audio/bus/remove")) },
+    MethodInfo { name: "audio.bus.set", summary: "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/bus/set")) },
+    MethodInfo { name: "audio.cue.set", summary: "Mark or clear a source for the cue bus. `solo` clears every other mark first.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/cue/set")) },
+    MethodInfo { name: "audio.device.list", summary: "The sound outputs on the mixer's machine that a bus can play on.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/audio/device/list")) },
+    MethodInfo { name: "audio.master.set", summary: "Move the programme's master fader or mute. Only what is named moves.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/master/set")) },
+    MethodInfo { name: "audio.send.set", summary: "Set how much of one source goes to one bus. 0 takes it off the bus.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/send/set")) },
     MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/generate")) },
     MethodInfo { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/set")) },
@@ -7892,6 +8309,18 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/program/transitions")) },
     MethodInfo { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/project/export")) },
     MethodInfo { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/project/import")) },
+    MethodInfo { name: "prompter.get", summary: "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/prompter")) },
+    MethodInfo { name: "prompter.load", summary: "Put a script on the prompter, at the top and paused unless play is true.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/load")) },
+    MethodInfo { name: "prompter.pause", summary: "Stop the prompter where it is.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/pause")) },
+    MethodInfo { name: "prompter.play", summary: "Start the prompter scrolling, at speed when given. From the end it starts again at the top.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/play")) },
+    MethodInfo { name: "prompter.rows", summary: "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/prompter/rows")) },
+    MethodInfo { name: "prompter.script.get", summary: "One prompter script with its text.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/prompter/script/get")) },
+    MethodInfo { name: "prompter.script.list", summary: "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/prompter/script/list")) },
+    MethodInfo { name: "prompter.script.remove", summary: "Forget a prompter script. When it is on the prompter the screens go empty.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/script/remove")) },
+    MethodInfo { name: "prompter.script.save", summary: "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/script/save")) },
+    MethodInfo { name: "prompter.seek", summary: "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/seek")) },
+    MethodInfo { name: "prompter.set", summary: "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/set")) },
+    MethodInfo { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/speed")) },
     MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
     MethodInfo { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/presets")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
@@ -7997,7 +8426,7 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 38] = [
+pub const EVENT_NAMES: [&str; 40] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -8035,6 +8464,8 @@ pub const EVENT_NAMES: [&str; 38] = [
     "feed.failed",
     "feed.recovered",
     "presence.changed",
+    "prompter.changed",
+    "prompter.script.changed",
     "health",
 ];
 
@@ -8090,7 +8521,7 @@ pub enum Event {
     ChannelRemoved(ChannelRemovedEvent),
     /// A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it.
     ChannelRefused(ChannelRefusedEvent),
-    /// Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws.
+    /// Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws.
     Meters(Meters),
     /// Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to.
     Tally(Tally),
@@ -8130,6 +8561,10 @@ pub enum Event {
     FeedRecovered(FeedRecoveredEvent),
     /// Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has.
     PresenceChanged(PresenceList),
+    /// The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed.
+    PrompterChanged(PrompterState),
+    /// A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter.
+    PrompterScriptChanged(ScriptChanged),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -8278,6 +8713,14 @@ impl Event {
                 Ok(payload) => Event::PresenceChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "prompter.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PrompterChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "prompter.script.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PrompterScriptChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -8326,6 +8769,8 @@ impl Event {
             Event::FeedFailed(_) => "feed.failed",
             Event::FeedRecovered(_) => "feed.recovered",
             Event::PresenceChanged(_) => "presence.changed",
+            Event::PrompterChanged(_) => "prompter.changed",
+            Event::PrompterScriptChanged(_) => "prompter.script.changed",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
@@ -8358,6 +8803,46 @@ impl Client {
     /// The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.
     pub async fn agent_tools(&self) -> Result<Vec<Detected>> {
         self.call("agent.tools", &serde_json::json!({})).await
+    }
+
+    /// Add a bus beside the programme mix, live. Nothing is built for buses until the first one.
+    pub async fn audio_bus_add(&self, params: &BusConfig) -> Result<BusStatus> {
+        self.call("audio.bus.add", params).await
+    }
+
+    /// The programme master, every bus with its sends, and the sources marked cue.
+    pub async fn audio_bus_list(&self) -> Result<AudioStatus> {
+        self.call("audio.bus.list", &serde_json::json!({})).await
+    }
+
+    /// Take a bus out, live. Refused while an output takes its sound from it.
+    pub async fn audio_bus_remove(&self, params: &BusIdRequest) -> Result<BusIdRequest> {
+        self.call("audio.bus.remove", params).await
+    }
+
+    /// Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.
+    pub async fn audio_bus_set(&self, params: &BusSetRequest) -> Result<BusStatus> {
+        self.call("audio.bus.set", params).await
+    }
+
+    /// Mark or clear a source for the cue bus. `solo` clears every other mark first.
+    pub async fn audio_cue_set(&self, params: &CueSetRequest) -> Result<AudioStatus> {
+        self.call("audio.cue.set", params).await
+    }
+
+    /// The sound outputs on the mixer's machine that a bus can play on.
+    pub async fn audio_device_list(&self) -> Result<AudioDeviceList> {
+        self.call("audio.device.list", &serde_json::json!({})).await
+    }
+
+    /// Move the programme's master fader or mute. Only what is named moves.
+    pub async fn audio_master_set(&self, params: &MasterSetRequest) -> Result<MasterConfig> {
+        self.call("audio.master.set", params).await
+    }
+
+    /// Set how much of one source goes to one bus. 0 takes it off the bus.
+    pub async fn audio_send_set(&self, params: &SendSetRequest) -> Result<BusStatus> {
+        self.call("audio.send.set", params).await
     }
 
     /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.
@@ -9068,6 +9553,66 @@ impl Client {
     /// Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.
     pub async fn project_import(&self, params: &ImportRequest) -> Result<Report> {
         self.call("project.import", params).await
+    }
+
+    /// The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.
+    pub async fn prompter_get(&self) -> Result<PrompterState> {
+        self.call("prompter.get", &serde_json::json!({})).await
+    }
+
+    /// Put a script on the prompter, at the top and paused unless play is true.
+    pub async fn prompter_load(&self, params: &LoadRequest) -> Result<PrompterState> {
+        self.call("prompter.load", params).await
+    }
+
+    /// Stop the prompter where it is.
+    pub async fn prompter_pause(&self) -> Result<PrompterState> {
+        self.call("prompter.pause", &serde_json::json!({})).await
+    }
+
+    /// Start the prompter scrolling, at speed when given. From the end it starts again at the top.
+    pub async fn prompter_play(&self, params: &PlayRequest) -> Result<PrompterState> {
+        self.call("prompter.play", params).await
+    }
+
+    /// The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.
+    pub async fn prompter_rows(&self) -> Result<RowsAnswer> {
+        self.call("prompter.rows", &serde_json::json!({})).await
+    }
+
+    /// One prompter script with its text.
+    pub async fn prompter_script_get(&self, params: &ScriptIdRequest) -> Result<Script> {
+        self.call("prompter.script.get", params).await
+    }
+
+    /// Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.
+    pub async fn prompter_script_list(&self) -> Result<ScriptList> {
+        self.call("prompter.script.list", &serde_json::json!({})).await
+    }
+
+    /// Forget a prompter script. When it is on the prompter the screens go empty.
+    pub async fn prompter_script_remove(&self, params: &ScriptIdRequest) -> Result<ScriptChanged> {
+        self.call("prompter.script.remove", params).await
+    }
+
+    /// Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.
+    pub async fn prompter_script_save(&self, params: &ScriptSaveRequest) -> Result<Script> {
+        self.call("prompter.script.save", params).await
+    }
+
+    /// Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).
+    pub async fn prompter_seek(&self, params: &SeekRequest) -> Result<PrompterState> {
+        self.call("prompter.seek", params).await
+    }
+
+    /// Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.
+    pub async fn prompter_set(&self, params: &LookRequest) -> Result<PrompterState> {
+        self.call("prompter.set", params).await
+    }
+
+    /// Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.
+    pub async fn prompter_speed(&self, params: &SpeedRequest) -> Result<PrompterState> {
+        self.call("prompter.speed", params).await
     }
 
     /// What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.

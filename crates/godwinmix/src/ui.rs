@@ -86,6 +86,24 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/programme/fullscreen.js", include_str!("../../../ui/panels/programme/fullscreen.js")),
     ("panels/programme/displays.js", include_str!("../../../ui/panels/programme/displays.js")),
     ("panels/programme/programme.css", include_str!("../../../ui/panels/programme/programme.css")),
+    // The teleprompter: alone at /prompter/ for a phone, a tablet or the
+    // monitor under the glass, and the desk panel that writes and drives it.
+    ("prompter/index.html", include_str!("../../../ui/prompter/index.html")),
+    ("prompter/prompter.css", include_str!("../../../ui/prompter/prompter.css")),
+    ("prompter/page.js", include_str!("../../../ui/prompter/page.js")),
+    ("prompter/clock.js", include_str!("../../../ui/prompter/clock.js")),
+    ("prompter/controls.js", include_str!("../../../ui/prompter/controls.js")),
+    ("prompter/follow.js", include_str!("../../../ui/prompter/follow.js")),
+    ("prompter/keys.js", include_str!("../../../ui/prompter/keys.js")),
+    ("prompter/link.js", include_str!("../../../ui/prompter/link.js")),
+    ("prompter/stage.js", include_str!("../../../ui/prompter/stage.js")),
+    ("prompter/text.js", include_str!("../../../ui/prompter/text.js")),
+    ("panels/prompter/entry.js", include_str!("../../../ui/panels/prompter/entry.js")),
+    ("panels/prompter/panel.js", include_str!("../../../ui/panels/prompter/panel.js")),
+    ("panels/prompter/editor.js", include_str!("../../../ui/panels/prompter/editor.js")),
+    ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
+    ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
+    ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
@@ -209,6 +227,13 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/destination.js", include_str!("../../../ui/panels/outputs/destination.js")),
     ("panels/outputs/failure.js", include_str!("../../../ui/panels/outputs/failure.js")),
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
+    ("panels/audio/chain.js", include_str!("../../../ui/panels/audio/chain.js")),
+    ("panels/audio/chain.css", include_str!("../../../ui/panels/audio/chain.css")),
+    ("panels/audio/desk.js", include_str!("../../../ui/panels/audio/desk.js")),
+    ("panels/audio/desk.css", include_str!("../../../ui/panels/audio/desk.css")),
+    ("panels/audio/bus-strip.js", include_str!("../../../ui/panels/audio/bus-strip.js")),
+    ("panels/audio/level.js", include_str!("../../../ui/panels/audio/level.js")),
+    ("panels/audio/listen.js", include_str!("../../../ui/panels/audio/listen.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
     ("panels/outputs/record-stop.js", include_str!("../../../ui/panels/outputs/record-stop.js")),
@@ -701,6 +726,9 @@ where
         // so the bare name is sent on to it.
         .route("/programme", get(|| async { axum::response::Redirect::permanent("programme/") }))
         .route("/programme/", get(|| async { asset("programme/index.html") }))
+        // The prompter page, the same way: its scripts sit beside it.
+        .route("/prompter", get(|| async { axum::response::Redirect::permanent("prompter/") }))
+        .route("/prompter/", get(|| async { asset("prompter/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
@@ -1162,7 +1190,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_398_kb() {
+    fn the_page_a_volunteer_opens_stays_under_399_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1183,6 +1211,11 @@ mod tests {
         // closed show. What closing asks and does loads only when a show is
         // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
         // them for this.
+        //
+        // Raised to 399 kB for the Prompter panel: its entry, which only
+        // defines the element and fetches the panel when it is first shown,
+        // its line in View, and its card and icon on the phone's More screen.
+        // Measured at 407860 bytes.
         //
         // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
         // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
@@ -1228,8 +1261,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 398 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 398 kB budget",
+            bytes < 399 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 399 kB budget",
             eager.len()
         );
     }
@@ -1253,7 +1286,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_507_kb() {
+    fn the_page_with_the_composer_open_stays_under_508_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1272,7 +1305,11 @@ mod tests {
         // own files did not grow. Measured at 516509 bytes. Raised to 507 kB
         // with the page's own budget, for closing a show from its tab, and
         // again the composer's files did not grow: measured at 518135 bytes.
-        assert!(bytes < 507 * 1024, "the page with the composer open is {bytes} bytes, over the 507 kB budget");
+        // Raised to 508 kB for the teleprompter's panel entry, the audio
+        // panel's lazy desk hooks and its FX button, which landed together;
+        // each alone fitted, and the composer's files did not grow. The FX
+        // dialog and the desk load when first used. Measured at 519182 bytes.
+        assert!(bytes < 508 * 1024, "the page with the composer open is {bytes} bytes, over the 508 kB budget");
     }
 
     #[test]
@@ -1413,6 +1450,10 @@ mod tests {
         for entry in ["programme/page.js", "panels/programme/fullscreen.js", "panels/programme/displays.js"] {
             reachable.extend(closure_of(entry));
         }
+        // The prompter: /prompter/ loads page.js itself, and the Prompter
+        // panel's entry fetches the panel the first time it is shown.
+        reachable.extend(closure_of("prompter/page.js"));
+        reachable.extend(closure_of("panels/prompter/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
@@ -1422,6 +1463,11 @@ mod tests {
         // A source's backup line and the programme's list of them, fetched by
         // backup-slot.js when a source first goes down or gets a backup.
         reachable.extend(closure_of("panels/sources/backup-line.js"));
+        // The audio desk: the master, buses, cue and sends, which the audio
+        // panel fetches when it is first put on screen.
+        reachable.extend(closure_of("panels/audio/desk.js"));
+        // A source's sound filters, fetched when its FX button is first pressed.
+        reachable.extend(closure_of("panels/audio/chain.js"));
         reachable.extend(closure_of("panels/multiview/backup-banner.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
@@ -1541,6 +1587,7 @@ mod tests {
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("panels/sources/backup-line.js", "a source that goes down or has a backup"),
+            ("panels/audio/desk.js", "the audio panel on screen"),
             ("panels/multiview/backup-banner.js", "a source on its backup"),
             ("panels/sources/backup-form.js", "the settings drawer"),
             ("panels/sources/page-interact.js", "Interact on a web page source"),

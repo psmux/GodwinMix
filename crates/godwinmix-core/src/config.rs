@@ -73,6 +73,10 @@ pub struct Config {
     /// provided filter and where it goes.
     #[serde(default)]
     pub filters: Vec<FilterConfig>,
+    /// The programme master and the buses beside it. See `crate::buses` and
+    /// `docs/reference/audio-buses.md`.
+    #[serde(default)]
+    pub audio: godwinmix_protocol::buses::AudioConfig,
     /// Settings belonging to a plugin, one table per plugin name, plus the
     /// handful of switches that are about installing plugins rather than about
     /// one plugin. The core never reads inside a plugin's own table; it hands
@@ -1430,6 +1434,10 @@ pub struct OutputConfig {
     /// as it has always been, at no extra cost. See `render/`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<godwinmix_protocol::rendition::RenditionChoice>,
+    /// The audio bus this output takes its sound from. Absent means the
+    /// programme mix, as it always was. See `crate::buses`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<String>,
     /// False once a person has stopped it with `output.stop`: nothing is
     /// built or sent, and the address and key wait here for `output.start`.
     /// Written to the runtime store only when false, so a restart keeps a
@@ -1462,6 +1470,7 @@ impl OutputConfig {
             queue_secs: default_queue_secs(),
             place: None,
             rendition: None,
+            audio: None,
             enabled: true,
             extra: Default::default(),
         }
@@ -1517,6 +1526,11 @@ struct StoredRuntime {
     sources: Option<Vec<SourceConfig>>,
     #[serde(default)]
     outputs: Option<Vec<OutputConfig>>,
+    #[serde(default)]
+    filters: Option<Vec<FilterConfig>>,
+    /// The master and the buses, as the desk last left them.
+    #[serde(default)]
+    audio: Option<godwinmix_protocol::buses::AudioConfig>,
     /// What `gmx preset apply` chose for the surface. Absent means the config
     /// file's own `[ui]` section stands.
     #[serde(default)]
@@ -1695,6 +1709,17 @@ impl Config {
                 );
                 cfg.outputs = recordings::at_boot(&cfg.outputs, outputs);
             }
+            if let Some(filters) = stored.filters {
+                tracing::info!(
+                    path = %store.display(), count = filters.len(),
+                    "using filters managed at runtime"
+                );
+                cfg.filters = filters;
+            }
+            if let Some(audio) = stored.audio {
+                tracing::info!(path = %store.display(), buses = audio.buses.len(), "using the audio desk managed at runtime");
+                cfg.audio = audio;
+            }
             if let Some(ui) = stored.ui {
                 if !ui.is_empty() {
                     cfg.ui = ui;
@@ -1819,6 +1844,8 @@ impl Config {
                 crate::plugin::filters::chroma::validate(&f.params)
                     .with_context(|| format!("filter {}", f.id))?;
             }
+            crate::plugin::filters::audio::validate(&f.type_id, &f.params)
+                .with_context(|| format!("filter {}", f.id))?;
             #[cfg(feature = "matte")]
             if f.type_id == crate::plugin::filters::matte::MANIFEST.provide_id() {
                 crate::plugin::filters::matte::validate(&f.params)
@@ -1835,6 +1862,7 @@ impl Config {
         for o in &self.outputs {
             anyhow::ensure!(seen.insert(&o.id), "duplicate output id {:?}", o.id);
         }
+        crate::buses::check::config(&self.audio, &self.outputs)?;
         Ok(())
     }
 }
@@ -2217,6 +2245,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             sources: vec![],
             outputs: vec![],
             filters: vec![],
+            audio: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],

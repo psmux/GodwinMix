@@ -1209,10 +1209,12 @@ impl InputPipeline {
         );
         let filter = crate::plugin::filter::make(&cfg.type_id)?;
         let (upstream, downstream) = match cfg.attach.side {
-            // The audio insertion point is the audio capsfilter and the proxy
-            // below it; the video one is the video capsfilter and the tee.
+            // Each side's insertion point is its capsfilter and the tee below
+            // it. Audio used to name the proxy, which sits under the tee and
+            // so was never linked to the capsfilter: every sound filter on a
+            // source's input side failed to go in.
             _ if filter.stream() == crate::plugin::filter::Stream::Audio => {
-                (self.acaps.clone(), self.audio_proxy.clone())
+                (self.acaps.clone(), self.atee.clone())
             }
             _ => (self.vcaps.clone(), self.vtee.clone()),
         };

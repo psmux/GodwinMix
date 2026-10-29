@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.20 (2026-10-29)
+
+Sound filters, built in.
+
+* Eight filters work on sound: gain, EQ (a low cut, bass, middle and treble, and up to ten bands of your own), noise gate, expander, compressor, limiter, delay and noise suppression (RNNoise, in pure Rust). Each runs in place on the thread that carries the samples, with no thread or copy of its own: under 0.1% of one core each on an Apple silicon MacBook, and about 1% for noise suppression. They go on a source or on the programme with `filter.add`, or in `[[filters]]`. See [Clean up a microphone](docs/how-to/clean-up-a-microphone.md) and [the reference](docs/reference/sound-filters.md).
+* Each channel of the Audio panel has an FX button: add, set, switch off and remove filters live, or press Voice for a low cut, a gate, a compressor and a limiter in one go.
+* An OBS import brings each source's gain, noise gate, noise suppression, compressor, limiter, expander and three band equaliser across with their settings. They used to arrive under GodwinMix names that nothing ran. They now stay on their source, as in OBS, and are added with it. OBS's video delay is no longer mistaken for a sound delay.
+* A filter added from the page or the API is kept in the runtime store and comes back when the mixer restarts, and when a stalled source is rebuilt. Before, both lost it.
+* `filter.set` changes only the settings it names, as its description says. It used to reset the others to their defaults.
+* A second filter on the same source or the same point of the programme now runs after the first. It used to fail to link, and removing a filter from the middle of a chain relinked the wrong pair.
+* A sound filter on a source's input side went nowhere: it was linked to the proxy below the audio tee, which the capsfilter above was never linked to. It now goes in above the tee.
+* `filter.list` answers with each filter's settings.
+
+Audio buses.
+
+* The programme mix has a master fader and mute (`audio.master.set`, `[audio.master]`), kept across restarts in the runtime store like a source's fader. At unity it costs nothing.
+* Buses: mixes of their own beside the programme, each with a master, a mute and a meter. An ordinary bus carries each source at the level of its send (`audio.send.set`, `sends` in `[[audio.bus]]`), after the source's fader and following its mute. Nothing is built for buses until the first one is added, and the last one to go leaves the programme pipeline as it was. A bus goes in and comes out live with no gap in the programme's sound.
+* A mix minus is a bus with `minus = "guest-1"`: the programme as heard, following every take and crossfade, without that one source. It is a bus option so the guest invites can ask for one per guest.
+* Cue and solo: a bus with `cue = true` carries the sources marked with `audio.cue.set`, muted ones too, and the programme while none is marked. `solo` clears every other mark. Nothing on air changes.
+* A bus plays on a sound card on the mixer's machine (`device`, by name, id or number from `audio.device.list`, or `default`), in a pipeline of its own so a card that fails costs that bus only. It can be heard in a browser at `/pcm/bus:<id>` and `/opus/bus:<id>`.
+* An output takes its sound from a bus with `audio = "<bus id>"`, through an encoder for that bus that runs while an output reads it. Left out, it is the programme's sound as before.
+* The audio panel has a master strip, a bus picker with the picked bus's fader, mute, meter, sound card and a listen button, a form to add a bus, and Cue, Solo and a send fader on each source.
+* `event/meters` carries each bus's peaks in `buses`. New methods `audio.master.set`, `audio.bus.list`, `audio.bus.add`, `audio.bus.set`, `audio.bus.remove`, `audio.send.set`, `audio.cue.set` and `audio.device.list`, with agent tools behind `search_tools`. See [Mix audio with buses](docs/how-to/mix-audio-with-buses.md) and [the reference](docs/reference/audio-buses.md).
+
+A teleprompter, built in. vMix and Wirecast have none, and OBS needs a plugin.
+
+* Scripts are kept on the station by slug id, each with a title and its words. A line that starts with `#` is a marker to jump to, and `*italic*` and `**bold**` are drawn. They live in `godwinmix.prompter.json` beside the config and come back after a restart, paused where the prompter last stopped.
+* `/prompter/` is the screen: a phone, a tablet or the monitor under the glass, full screen, with white words on black and a cue line. Any number of screens follow one state. Each scrolls by itself from the position, the moment it was true on the mixer's clock and the speed, so the mixer sends nothing while the words move. Two screens of 390 and 1920 pixels read 0.004 rows apart at the same moment.
+* The mixer breaks the text into rows at one width in characters for every screen, which is also the text size: every screen fits that many characters across, so a row on a phone is the same words as a row on the monitor.
+* Keys on the screen: Space plays and pauses, the arrows change the speed, Page Down and Page Up go between markers, which is what most foot pedals and clickers send, M mirrors this screen and F is full screen. A tap brings up the same buttons. A screen opened with a read token follows and says it cannot drive.
+* Mirror for beam splitter glass is set from the desk for every screen, and a screen can override it for itself.
+* View > Prompter is a desk panel to write and pick scripts and to drive the prompter while live: play, speed, markers, a slider for the place, the text size, margins, the cue line and the mirror. **Open on a screen** shows a code for a phone, carrying a read token made for it.
+* New methods: `prompter.get`, `prompter.rows`, `prompter.script.list`, `get`, `save` and `remove`, `prompter.load`, `play`, `pause`, `speed`, `seek` and `set`, and the events `prompter.changed` and `prompter.script.changed`, sent only to a client that subscribes to them. `prompter.speed` carries on from where the prompter is, so a plugin that follows the voice can send it as often as it likes. The agent tools are behind `search_tools`, and the Companion module has five prompter actions. See [Use the teleprompter](docs/how-to/use-the-teleprompter.md) and [the reference](docs/reference/prompter.md).
+
 ## 0.3.19 (2026-10-28)
 
 * A converted channel whose encoder failed twice in a row, as one NVENC encoder did when fifty channels started at once, sent nothing until its show was stopped and started again. The second failure came inside the five seconds between two builds of a node, so the node was never built again; and the failure stopped the decode's stream, whose input then filled and held the stream's thread for good. A node that fails again too soon is now built again once the five seconds are over, and the thread never waits on a decoder: one that takes nothing more loses whole GOPs at its own input instead. A converted pair whose name was still held by the stream's last session is tried again a second later instead of never.

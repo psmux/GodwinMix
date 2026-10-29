@@ -98,6 +98,50 @@ export const ACTIONS = {
     run: (link: Link, options: Options) =>
       link.setAudio(text(options, "id"), undefined, options.muted !== false),
   },
+  prompter_toggle: {
+    name: "Prompter: play or pause",
+    options: [],
+    run: (link: Link) => link.prompterToggle(),
+  },
+  prompter_speed: {
+    name: "Prompter: faster or slower",
+    options: [
+      { type: "number", id: "by", label: "Rows a second to add (negative is slower)", default: 0.1, min: -5, max: 5, step: 0.05 },
+    ],
+    run: (link: Link, options: Options) => link.prompter("speed", { by: number(options, "by", 0.1) }),
+  },
+  prompter_marker: {
+    name: "Prompter: next or previous marker",
+    options: [
+      {
+        type: "dropdown",
+        id: "step",
+        label: "Which",
+        default: "1",
+        choices: [
+          { id: "1", label: "Next marker" },
+          { id: "-1", label: "Previous marker" },
+        ],
+      },
+    ],
+    run: (link: Link, options: Options) => link.prompter("seek", { step: number(options, "step", 1) }),
+  },
+  prompter_go: {
+    name: "Prompter: go to a marker",
+    options: [{ type: "textinput", id: "marker", label: "Marker name or number", default: "", useVariables: true }],
+    run: (link: Link, options: Options) => {
+      const marker = text(options, "marker");
+      return link.prompter("seek", marker ? { marker } : { row: 0 });
+    },
+  },
+  prompter_load: {
+    name: "Prompter: load a script",
+    options: [
+      { type: "textinput", id: "id", label: "Script id", default: "", useVariables: true },
+      { type: "checkbox", id: "play", label: "Start playing", default: false },
+    ],
+    run: (link: Link, options: Options) => link.prompter("load", { id: text(options, "id"), play: options.play === true }),
+  },
 } as const;
 
 export type ActionId = keyof typeof ACTIONS;

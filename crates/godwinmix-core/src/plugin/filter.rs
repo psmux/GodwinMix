@@ -228,10 +228,14 @@ impl FilterSlot {
         self.filter.board()
     }
 
+    /// Change the keys `params` names and keep the rest, as `filter.set`
+    /// promises: a compressor told `ratio = 6` keeps its threshold.
     pub fn configure(&mut self, params: &Params) -> Result<Configure> {
-        let outcome = self.filter.configure(params)?;
+        let mut merged = self.spec.params.clone();
+        merged.extend(params.iter().map(|(k, v)| (k.clone(), v.clone())));
+        let outcome = self.filter.configure(&merged)?;
         if outcome == Configure::Applied {
-            self.spec.params = params.clone();
+            self.spec.params = merged;
         }
         Ok(outcome)
     }
@@ -241,18 +245,28 @@ impl FilterSlot {
     ///
     /// Blocked on the same pad the insert blocked, so the programme sees at
     /// most the one frame the block holds.
+    ///
+    /// The two sides are read off the bin's own pads rather than taken from
+    /// where it first went in: in a chain, a filter added after this one sits
+    /// below it, and one taken out above it changed what is above.
     pub fn remove(self) -> Result<()> {
-        let src = self
-            .upstream
-            .static_pad("src")
-            .context("the element above a filter has no src pad")?;
-        let (bin, down, up) = (self.bin.clone(), self.downstream.clone(), self.upstream.clone());
+        let sink = self.bin.static_pad("sink").context("the filter bin has no sink pad")?;
+        let out = self.bin.static_pad("src").context("the filter bin has no src pad")?;
+        let src = match sink.peer() {
+            Some(peer) => peer,
+            None => self
+                .upstream
+                .static_pad("src")
+                .context("the element above a filter has no src pad")?,
+        };
+        let down = match out.peer() {
+            Some(peer) => Downstream::Pad(peer),
+            None => self.downstream.clone(),
+        };
         let src_for_relink = src.clone();
         crate::gstutil::with_pad_blocked(&src, BLOCK_TIMEOUT, move || {
-            up.unlink(&bin);
-            if let Some(out) = bin.static_pad("src") {
-                down.unlink_from(&out);
-            }
+            let _ = src_for_relink.unlink(&sink);
+            down.unlink_from(&out);
             if let Err(e) = down.link_from(&src_for_relink) {
                 tracing::warn!(?e, "could not relink around a removed filter");
             }
@@ -304,6 +318,10 @@ pub fn insert(
     canvas: &CanvasCaps,
     live: bool,
 ) -> Result<FilterSlot> {
+    // A point that already holds filters takes the new one after the last of
+    // them, so two filters on one microphone run one after the other.
+    let end = chain_end(at.upstream);
+    let at = Insertion { pipeline: at.pipeline, upstream: &end, downstream: at.downstream };
     let bin = filter.build(canvas, &spec.params)?;
     at.pipeline.add(&bin).context("adding a filter to the pipeline")?;
     if live {
@@ -407,6 +425,34 @@ pub fn insert(
     })
 }
 
+/// The last filter bin chained below `upstream`, or `upstream` itself.
+fn chain_end(upstream: &gst::Element) -> gst::Element {
+    let mut end = upstream.clone();
+    // Bounded, so a link that loops back cannot hang the control thread.
+    for _ in 0..64 {
+        let next = end
+            .static_pad("src")
+            .and_then(|p| p.peer())
+            .and_then(|p| p.parent_element())
+            .filter(is_filter_bin);
+        match next {
+            Some(bin) => end = bin,
+            None => break,
+        }
+    }
+    end
+}
+
+/// A bin a filter built: `filter-...` from the tier 0 filters, and the two
+/// names a sidecar filter gives its bin.
+fn is_filter_bin(e: &gst::Element) -> bool {
+    let name = e.name();
+    e.is::<gst::Bin>()
+        && (name.starts_with("filter-")
+            || name.ends_with("-sidecar-filter")
+            || name.ends_with("-sidecar-bypass"))
+}
+
 /// The src pad of the element above an insertion point, at build time.
 fn src_at_build(upstream: &gst::Element) -> Result<gst::Pad> {
     upstream.static_pad("src").context("the element above a filter has no src pad")
@@ -421,6 +467,9 @@ pub fn make(type_id: &str) -> Result<Box<dyn Filter>> {
         #[cfg(feature = "matte")]
         t if super::filters::matte::MANIFEST.is(t) => {
             Ok(Box::new(super::filters::matte::Cutout::default()))
+        }
+        t if super::filters::audio::make_filter(t).is_some() => {
+            Ok(super::filters::audio::make_filter(t).expect("checked above"))
         }
         other => anyhow::bail!(
             "no filter type `{other}` in this build. It has: {}",
@@ -441,13 +490,16 @@ pub fn described() -> Vec<super::KindInfo> {
 /// The filters compiled into this build. The cutout is behind the `matte`
 /// feature, which the desktop and server builds turn on.
 fn built_in() -> Vec<&'static Manifest> {
-    // Only pushed to with `matte` on; the crate checked alone has it off.
-    #[cfg_attr(not(feature = "matte"), allow(unused_mut))]
     let mut out = vec![&super::filters::chroma::MANIFEST];
     #[cfg(feature = "matte")]
     out.push(&super::filters::matte::MANIFEST);
+    out.extend(super::filters::audio::built_in());
     out
 }
+
+#[cfg(test)]
+#[path = "filter_chain_tests.rs"]
+mod chain_tests;
 
 #[cfg(test)]
 mod tests {

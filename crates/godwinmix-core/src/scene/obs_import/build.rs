@@ -35,7 +35,7 @@ const FILTER_TYPES: &[(&str, &str)] = &[
     ("compressor_filter", "compressor/filter"),
     ("limiter_filter", "limiter/filter"),
     ("expander_filter", "expander/filter"),
-    ("async_delay_filter", "delay/filter"),
+    ("basic_eq_filter", "eq/filter"),
 ];
 
 /// The state of one import.
@@ -56,6 +56,8 @@ pub(super) struct Importer<'a> {
     /// How many items use each source.
     placements: BTreeMap<usize, usize>,
     filters: Vec<FilterReport>,
+    /// Sound filters, which stay on their source as OBS has them.
+    sound_filters: Vec<ImportedFilter>,
     notes: Vec<String>,
     /// Groups being expanded, so a group that contains itself cannot loop.
     open_groups: Vec<usize>,
@@ -89,6 +91,7 @@ impl<'a> Importer<'a> {
             scene_ids: BTreeMap::new(),
             placements: BTreeMap::new(),
             filters: Vec::new(),
+            sound_filters: Vec::new(),
             notes: Vec::new(),
             open_groups: Vec::new(),
             raw,
@@ -120,7 +123,8 @@ impl<'a> Importer<'a> {
             notes: std::mem::take(&mut self.notes),
         };
         document.check_refs()?;
-        Ok(Import { document, sources: self.imported_sources(), report })
+        let sound_filters = std::mem::take(&mut self.sound_filters);
+        Ok(Import { document, sources: self.imported_sources(), sound_filters, report })
     }
 
     /// Run the mapping table over every source once.
@@ -224,7 +228,7 @@ impl<'a> Importer<'a> {
         item.visible = raw.visible;
         item.locked = raw.locked;
         item.blend = blend_of(raw.blend_type.as_deref());
-        item.filters = self.filters_of(&source, &here);
+        item.filters = self.filters_of(index, &source, &here);
         // A group's transform is multiplied into its children here rather than
         // at apply time, so the numbers in the file are the numbers on the
         // canvas. That is the whole of OBS's group transform bug class.
@@ -395,7 +399,7 @@ impl<'a> Importer<'a> {
     /// in all of them. Here a filter belongs to the placement, which is the
     /// better model and the one thing an import cannot do silently: the copies
     /// are independent from now on, and the report says which they were.
-    fn filters_of(&mut self, source: &ObsSource, path: &str) -> Vec<Filter> {
+    fn filters_of(&mut self, index: usize, source: &ObsSource, path: &str) -> Vec<Filter> {
         let mut out = Vec::new();
         for obs in &source.filters {
             let kind = FILTER_TYPES
@@ -403,6 +407,10 @@ impl<'a> Importer<'a> {
                 .find(|(id, _)| *id == obs.id)
                 .map(|(_, kind)| (*kind).to_string())
                 .unwrap_or_else(|| format!("obs:{}", obs.id));
+            if crate::plugin::filters::audio::is_audio(&kind) {
+                self.keep_on_source(index, source, obs, kind);
+                continue;
+            }
             if kind.starts_with("obs:") {
                 self.note_once(format!(
                     "the filter {:?} on {:?} is an OBS filter type ({}) with no GodwinMix equivalent; it is in the document under its OBS name so nothing is lost, and it will not run until a plugin claims it.",
@@ -427,6 +435,30 @@ impl<'a> Importer<'a> {
             }
         }
         out
+    }
+
+    /// A sound filter stays on its source, where OBS has it: a source's sound
+    /// is mixed once however many scenes draw it, so there is no placement to
+    /// copy it onto. Kept once per source, however many items draw it.
+    fn keep_on_source(&mut self, index: usize, source: &ObsSource, obs: &ObsFilter, kind: String) {
+        let Some(id) = self.ids.get(&index).cloned() else { return };
+        let filter_id = slug(&format!("{id}-{}", obs.name));
+        if self.sound_filters.iter().any(|f| f.id == filter_id) {
+            return;
+        }
+        let mut params = obs.settings.clone();
+        if !obs.enabled {
+            if let Value::Object(map) = &mut params {
+                map.insert("bypass".into(), Value::Bool(true));
+            } else {
+                params = json!({ "bypass": true });
+            }
+        }
+        self.sound_filters.push(ImportedFilter { id: filter_id, kind, source: id, params });
+        self.note_once(format!(
+            "the sound filters on {:?} stay on that source, as in OBS, and are added with it.",
+            source.name
+        ));
     }
 
     /// Add a note unless the same one is already there. The same thing wrong

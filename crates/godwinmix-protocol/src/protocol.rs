@@ -45,6 +45,7 @@ pub fn events() -> Vec<EventDef> {
     all.extend(crate::shows::events());
     all.extend(crate::feeds::events());
     all.extend(crate::presence::events());
+    all.extend(crate::prompter::events());
     all.push(health_event());
     all
 }
@@ -381,10 +382,10 @@ fn stream_events() -> Vec<EventDef> {
         EventDef {
             name: "meters",
             since: "1",
-            summary: "Peak dBFS for the programme bus and every source, in one message at \
-                      10 per second. Replaces the two separate meter events on /ws.",
+            summary: "Peak dBFS for the programme bus, every source and every audio bus, in \
+                      one message at 10 per second. Replaces the separate meter events on /ws.",
             ext: Some("meters"),
-            legacy: Some("audio_level, source_audio_level"),
+            legacy: Some("audio_level, source_audio_level, bus_audio_level"),
             payload: schema_of::<requests::Meters>,
         },
         EventDef {

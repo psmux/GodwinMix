@@ -39,6 +39,14 @@ Keys accepted on every method, handled before a method runs.
 | `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
 | `agent.tools` | `POST /api/v1/agent/tools` | admin |  | 1 | The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. |
+| `audio.bus.add` | `POST /api/v1/audio/bus/add` | operate |  | 1 | Add a bus beside the programme mix, live. Nothing is built for buses until the first one. |
+| `audio.bus.list` | `GET /api/v1/audio/bus/list` | read |  | 1 | The programme master, every bus with its sends, and the sources marked cue. |
+| `audio.bus.remove` | `POST /api/v1/audio/bus/remove` | operate | yes | 1 | Take a bus out, live. Refused while an output takes its sound from it. |
+| `audio.bus.set` | `POST /api/v1/audio/bus/set` | operate |  | 1 | Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card. |
+| `audio.cue.set` | `POST /api/v1/audio/cue/set` | operate |  | 1 | Mark or clear a source for the cue bus. `solo` clears every other mark first. |
+| `audio.device.list` | `GET /api/v1/audio/device/list` | read |  | 1 | The sound outputs on the mixer's machine that a bus can play on. |
+| `audio.master.set` | `POST /api/v1/audio/master/set` | operate |  | 1 | Move the programme's master fader or mute. Only what is named moves. |
+| `audio.send.set` | `POST /api/v1/audio/send/set` | operate |  | 1 | Set how much of one source goes to one bus. 0 takes it off the bus. |
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. |
 | `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
 | `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
@@ -181,6 +189,18 @@ Keys accepted on every method, handled before a method runs.
 | `program.transitions` | `POST /api/v1/program/transitions` | read |  | 1 | Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be. |
 | `project.export` | `POST /api/v1/project/export` | admin |  | 1 | This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. |
 | `project.import` | `POST /api/v1/project/import` | admin | yes | 1 | Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. |
+| `prompter.get` | `GET /api/v1/prompter` | read |  | 1 | The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look. |
+| `prompter.load` | `POST /api/v1/prompter/load` | operate |  | 1 | Put a script on the prompter, at the top and paused unless play is true. |
+| `prompter.pause` | `POST /api/v1/prompter/pause` | operate |  | 1 | Stop the prompter where it is. |
+| `prompter.play` | `POST /api/v1/prompter/play` | operate |  | 1 | Start the prompter scrolling, at speed when given. From the end it starts again at the top. |
+| `prompter.rows` | `POST /api/v1/prompter/rows` | read |  | 1 | The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. |
+| `prompter.script.get` | `GET /api/v1/prompter/script/get` | read |  | 1 | One prompter script with its text. |
+| `prompter.script.list` | `GET /api/v1/prompter/script/list` | read |  | 1 | Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. |
+| `prompter.script.remove` | `POST /api/v1/prompter/script/remove` | operate |  | 1 | Forget a prompter script. When it is on the prompter the screens go empty. |
+| `prompter.script.save` | `POST /api/v1/prompter/script/save` | operate |  | 1 | Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. |
+| `prompter.seek` | `POST /api/v1/prompter/seek` | operate |  | 1 | Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). |
+| `prompter.set` | `POST /api/v1/prompter/set` | operate |  | 1 | Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. |
+| `prompter.speed` | `POST /api/v1/prompter/speed` | operate |  | 1 | Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
 | `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
@@ -371,6 +391,142 @@ The AI agent tools this mixer can set up, the ones installed on its machine firs
       "$ref": "#/$defs/Detected"
     },
     "type": "array"
+  }
+}
+```
+
+#### `audio.bus.add`
+
+Add a bus beside the programme mix, live. Nothing is built for buses until the first one.
+
+MCP tool `add_audio_bus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusConfig"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
+  }
+}
+```
+
+#### `audio.bus.list`
+
+The programme master, every bus with its sends, and the sources marked cue.
+
+MCP tool `list_audio_buses` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioStatus"
+  }
+}
+```
+
+#### `audio.bus.remove`
+
+Take a bus out, live. Refused while an output takes its sound from it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusIdRequest"
+  }
+}
+```
+
+#### `audio.bus.set`
+
+Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.
+
+MCP tool `set_audio_bus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
+  }
+}
+```
+
+#### `audio.cue.set`
+
+Mark or clear a source for the cue bus. `solo` clears every other mark first.
+
+MCP tool `set_audio_cue` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CueSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioStatus"
+  }
+}
+```
+
+#### `audio.device.list`
+
+The sound outputs on the mixer's machine that a bus can play on.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioDeviceList"
+  }
+}
+```
+
+#### `audio.master.set`
+
+Move the programme's master fader or mute. Only what is named moves.
+
+MCP tool `set_master_audio` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MasterSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/MasterConfig"
+  }
+}
+```
+
+#### `audio.send.set`
+
+Set how much of one source goes to one bus. 0 takes it off the bus.
+
+MCP tool `set_audio_send` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SendSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
   }
 }
 ```
@@ -2754,6 +2910,210 @@ MCP tool `import_project` in the `search` profile: readOnlyHint false, destructi
 }
 ```
 
+#### `prompter.get`
+
+The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.
+
+MCP tool `prompter_state` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.load`
+
+Put a script on the prompter, at the top and paused unless play is true.
+
+MCP tool `load_prompter_script` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LoadRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.pause`
+
+Stop the prompter where it is.
+
+MCP tool `prompter_pause` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.play`
+
+Start the prompter scrolling, at speed when given. From the end it starts again at the top.
+
+MCP tool `prompter_play` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlayRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.rows`
+
+The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/RowsAnswer"
+  }
+}
+```
+
+#### `prompter.script.get`
+
+One prompter script with its text.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Script"
+  }
+}
+```
+
+#### `prompter.script.list`
+
+Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.
+
+MCP tool `list_prompter_scripts` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ScriptList"
+  }
+}
+```
+
+#### `prompter.script.remove`
+
+Forget a prompter script. When it is on the prompter the screens go empty.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ScriptChanged"
+  }
+}
+```
+
+#### `prompter.script.save`
+
+Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.
+
+MCP tool `save_prompter_script` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptSaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Script"
+  }
+}
+```
+
+#### `prompter.seek`
+
+Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).
+
+MCP tool `prompter_seek` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SeekRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.set`
+
+Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LookRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.speed`
+
+Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.
+
+MCP tool `prompter_speed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SpeedRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
 #### `rendition.plan`
 
 What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
@@ -4468,7 +4828,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/channel.changed` |  |  | A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only. |
 | `event/channel.removed` |  |  | A channel was removed. Its publishers were turned away and its keys forgotten. |
 | `event/channel.refused` |  |  | A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it. |
-| `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
+| `event/meters` | `meters` | `audio_level, source_audio_level, bus_audio_level` | Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |
 | `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |
@@ -4488,6 +4848,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/feed.failed` |  |  | A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air. |
 | `event/feed.recovered` |  |  | A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one. |
 | `event/presence.changed` |  |  | Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has. |
+| `event/prompter.changed` |  |  | The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed. |
+| `event/prompter.script.changed` |  |  | A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces

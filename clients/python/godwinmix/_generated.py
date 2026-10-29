@@ -234,6 +234,22 @@ class Asset(TypedDict, total=False):
     sha256: Optional[str]
     size: Optional[int]
 
+class AudioDevice(TypedDict, total=False):
+    """One sound card a bus can be played on."""
+
+    api: Optional[str]
+    # The platform's sound API, when it says: `osxaudio`, `wasapi2`, `pulse`, `alsa`.
+    id: str
+    # The id `device` takes, the most stable thing the platform says about it.
+    index: int
+    # Its number in this list, which `device` also takes.
+    name: str
+
+class AudioDeviceList(TypedDict, total=False):
+    """`audio.device.list`."""
+
+    devices: List[AudioDevice]
+
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -256,6 +272,14 @@ class AudioShape(TypedDict, total=False):
     channels: int
     codec: AudioCodec
     sample_rate: int
+
+class AudioStatus(TypedDict, total=False):
+    """The audio desk as `audio.bus.list` and the status snapshot report it."""
+
+    buses: List[BusStatus]
+    cue: List[str]
+    # The sources marked cue, in the order they were marked.
+    master: MasterConfig
 
 class AudioWant(TypedDict, total=False):
     """The audio an output wants. Every field left out is taken from the source."""
@@ -405,6 +429,67 @@ class BundleAsset(TypedDict, total=False):
     # Relative to the bundle root, forward slashes. Never absolute: see the head of this module.
     sha256: str
     size: int
+
+class BusConfig(TypedDict, total=False):
+    """One bus: a mix of its own beside the programme. Three kinds, decided by two keys. With neither, it carries each source at the level its `sends` give it (a source with no send is not on it). With `minus`, it is the programme as heard, without that one source: a guest's return. With `cue`, it carries the sources marked cue at unity, and the programme while nothing is marked."""
+
+    cue: bool
+    # Make this the cue bus.
+    device: Optional[str]
+    # Play the bus on a sound card here: `default`, a device name, its id, or its number in `audio.device.list`.
+    gain: float
+    # The bus master, 0.0 to 10.0.
+    id: str
+    # A slug: `monitor`, `guest-return`, `recording-b`.
+    minus: Optional[str]
+    # Make this bus the programme without this source.
+    muted: bool
+    name: Optional[str]
+    # What the desk shows. The id when left out.
+    sends: Dict[str, Any]
+    # Level per source id, 0.0 to 10.0, after the source's own fader and mute. Read only on a bus with neither `minus` nor `cue`.
+
+class BusIdRequest(TypedDict, total=False):
+    """`audio.bus.remove`, and anything else that names one bus."""
+
+    id: str
+
+class BusSetRequest(TypedDict, total=False):
+    """`audio.bus.set`. Only what is named moves. `device: ""` stops playing it on a sound card, and `minus: ""` makes a mix minus bus an ordinary one."""
+
+    device: Optional[str]
+    gain: Optional[float]
+    id: str
+    minus: Optional[str]
+    muted: Optional[bool]
+    name: Optional[str]
+
+class BusStatus(TypedDict, total=False):
+    """One bus and what is using it."""
+
+    cue: bool
+    # Make this the cue bus.
+    device: Optional[str]
+    # Play the bus on a sound card here: `default`, a device name, its id, or its number in `audio.device.list`.
+    device_state: Optional[str]
+    # The device it is playing on, once it opened, or why it is not.
+    gain: float
+    # The bus master, 0.0 to 10.0.
+    id: str
+    # A slug: `monitor`, `guest-return`, `recording-b`.
+    kind: str
+    # `sends`, `minus` or `cue`.
+    listen: str
+    # Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
+    minus: Optional[str]
+    # Make this bus the programme without this source.
+    muted: bool
+    name: Optional[str]
+    # What the desk shows. The id when left out.
+    outputs: List[str]
+    # The outputs that take their sound from this bus.
+    sends: Dict[str, Any]
+    # Level per source id, 0.0 to 10.0, after the source's own fader and mute. Read only on a bus with neither `minus` nor `cue`.
 
 class CalibrateRequest(TypedDict, total=False):
     """`governor.calibrate`."""
@@ -914,6 +999,14 @@ class Crop(TypedDict, total=False):
     right: float
     top: float
 
+class CueSetRequest(TypedDict, total=False):
+    """`audio.cue.set`: mark or clear one source for the cue bus."""
+
+    cue: bool
+    solo: bool
+    # Clear every other mark first, so only this source is heard: solo.
+    source: str
+
 class Destination(TypedDict, total=False):
     """One destination as a client sees it. The key never appears: `has_key` says whether there is one."""
 
@@ -1308,6 +1401,8 @@ class FilterRecord(TypedDict, total=False):
     """One filter as the core reports it."""
 
     id: str
+    params: Dict[str, Any]
+    # The settings in force, as `filter.set` last left them.
     side: str
     source: Optional[str]
     # Absent on a programme filter.
@@ -2199,6 +2294,8 @@ class ImportObsRequest(TypedDict, total=False):
 class ImportReport(TypedDict, total=False):
     config_toml: Optional[str]
     # The `[[sources]]` block for a config file. Only for an import that did not add the sources itself, which is what the command line wants.
+    filters_added: Optional[List[str]]
+    # With `add_sources`: the sound filters put on the added sources, by id. A sound filter stays on its source, as in OBS; one the mixer refused is in `skipped` with its reason.
     filters_duplicated: List[FilterReport]
     # OBS attaches a filter to a source, so a camera keyed in one scene is keyed in all of them. Here filters belong to the item, so a source filter is copied onto each placement and each copy is named here. This is the one thing an import changes the meaning of, so it is reported rather than left for somebody to find on air.
     items: int
@@ -2488,6 +2585,13 @@ class Listener(TypedDict, total=False):
     transport: str
     # `tcp` or `udp`.
 
+class LoadRequest(TypedDict, total=False):
+    """`prompter.load`: put a script on the prompter, paused at the top."""
+
+    id: str
+    play: bool
+    # Start playing at once.
+
 class LogGstRequest(TypedDict, total=False):
     """`log.gst`."""
 
@@ -2514,6 +2618,17 @@ class LogSetRequest(TypedDict, total=False):
     target: Optional[str]
     # A module path prefix such as `godwinmix::mixer`. The longest match wins, so a more specific override still beats a broader one.
 
+class LookRequest(TypedDict, total=False):
+    """`prompter.set`: change how the text looks. Only what is named changes."""
+
+    cue: Optional[float]
+    # Where the cue line sits, 0.1 to 0.9 of the height from the top.
+    line_chars: Optional[int]
+    # Characters a row holds, 12 to 80. Fewer is bigger.
+    margin: Optional[float]
+    # Percent of the width left on each side, 0 to 30.
+    mirror: Optional[bool]
+
 class MachineStatus(TypedDict, total=False):
     """`machine.status`'s answer: the box, not one process."""
 
@@ -2535,6 +2650,27 @@ class MarkRequest(TypedDict, total=False):
 
     label: Optional[str]
     # What to call the group of changes that follows. Omit it to end the group, so the next change is its own undo step.
+
+class Marker(TypedDict, total=False):
+    """A place in a script a person can jump to: a line that starts with `#`."""
+
+    name: str
+    # The words after the `#`, or `marker <n>` for a bare `#`.
+    row: int
+    # The row it starts on.
+
+class MasterConfig(TypedDict, total=False):
+    """A master fader and mute."""
+
+    gain: float
+    # 0.0 silent, 1.0 unity, up to 10.0.
+    muted: bool
+
+class MasterSetRequest(TypedDict, total=False):
+    """`audio.master.set`. Only what is named moves."""
+
+    gain: Optional[float]
+    muted: Optional[bool]
 
 class MatchSource(TypedDict, total=False):
     """A rendition that follows a larger source's size, up to a limit."""
@@ -2696,6 +2832,8 @@ class MediaTagged(TypedDict, total=False):
 class Meters(TypedDict, total=False):
     """`event/meters`: the programme bus and every source, in one message at 10 per second, rather than one message per meter as the legacy stream sends."""
 
+    buses: Dict[str, Any]
+    # Peak dBFS per channel, per audio bus id, after the bus master. Left out while there are no buses.
     program: List[float]
     # Peak dBFS per channel on the programme bus.
     sources: Dict[str, Any]
@@ -2724,6 +2862,8 @@ class MissingSource(TypedDict, total=False):
 class MixerStatus(TypedDict, total=False):
     ad: Union[AdStatus, None]
     # Present while an ad break is armed or running.
+    audio: Union[AudioStatus, None]
+    # The programme master, the buses and the cue marks. Left out by a core that has no audio desk.
     backend: BackendInfo
     multiview: MultiviewStatus
     outputs: List[OutputStatus]
@@ -3076,6 +3216,12 @@ class PlanView(TypedDict, total=False):
     nodes: List[PlanNode]
     totals: PlanTotals
 
+class PlayRequest(TypedDict, total=False):
+    """`prompter.play`."""
+
+    speed: Optional[float]
+    # Rows a second to play at. Left out keeps the speed it has.
+
 class Playback(TypedDict, total=False):
     """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
@@ -3294,6 +3440,38 @@ class ProgramState(TypedDict, total=False):
     scene: Optional[str]
     # The scene on air, when one was taken by name.
 
+class PrompterState(TypedDict, total=False):
+    """`prompter.get`, and the payload of `event/prompter.changed`."""
+
+    at_ms: int
+    # When `position` was true, on the mixer's clock.
+    cue: float
+    # Where the cue line sits, as a fraction of the screen's height from the top. The row at `position` is drawn on it. 0.1 to 0.9.
+    line_chars: int
+    # The text size, as how many characters a row holds. Fewer is bigger. Every screen fits this many across its own width, so all of them break the rows in the same places. 12 to 80; 32 to start.
+    margin: float
+    # Space left on each side, as a percentage of the screen's width. 0 to 30.
+    markers: List[Marker]
+    mirror: bool
+    # Flip the text left to right, for a screen read through beam splitter glass. A screen may override it for itself.
+    now_ms: int
+    # The mixer's clock as this was written, so a screen can tell how far its own clock is from it.
+    playing: bool
+    position: float
+    # Where the prompter was at `at_ms`, in rows from the top. 2.5 is half way through the third row.
+    revision: int
+    # Moves on every change, so a screen can drop an answer older than the last event it applied.
+    rows: int
+    # How many rows it makes at `line_chars`.
+    script: Optional[str]
+    # The script on the prompter, or null when none is loaded.
+    speed: float
+    # Rows a second. Negative scrolls back. It applies only while `playing`.
+    title: Optional[str]
+    # Its title.
+    updated_ms: int
+    # When its text last changed, in milliseconds since the Unix epoch. A screen asks `prompter.rows` again when this or `line_chars` moves.
+
 class PublishAddress(TypedDict, total=False):
     """Where an encoder is pointed for one protocol."""
 
@@ -3471,6 +3649,25 @@ class Resync(TypedDict, total=False):
     from_seq: int
     # The last sequence number the client is known to have. Everything after it was dropped; re-subscribe for a fresh snapshot.
 
+class Row(TypedDict, total=False):
+    """One row of a script."""
+
+    line: int
+    # The line it came from, counting from 0.
+    marker: bool
+    # True for the rows of a marker line, drawn as a heading.
+    text: str
+    # The words, with any asterisks still in them.
+
+class RowsAnswer(TypedDict, total=False):
+    """`prompter.rows`: the script on the prompter, broken into rows."""
+
+    line_chars: int
+    # The width the rows were made at.
+    rows: List[Row]
+    script: Optional[str]
+    updated_ms: int
+
 class RtmpInfo(TypedDict, total=False):
     """The RTMP port every channel shares."""
 
@@ -3590,6 +3787,59 @@ class SceneView(TypedDict, total=False):
     records: List[Record]
     # The scene's own record and one per item, parents before children.
 
+class Script(TypedDict, total=False):
+    """One script, as `prompter.script.get` and `prompter.script.save` answer."""
+
+    id: str
+    # A slug: `evening-news`.
+    text: str
+    # Plain text. A line starting with `#` is a marker, `*word*` is drawn in italics and `**word**` in bold.
+    title: str
+    updated_ms: int
+    # When it was last saved, in milliseconds since the Unix epoch.
+
+class ScriptChanged(TypedDict, total=False):
+    """`event/prompter.script.changed`."""
+
+    id: str
+    removed: bool
+    # True when the script was removed.
+    updated_ms: int
+
+class ScriptIdRequest(TypedDict, total=False):
+    """`prompter.script.get` and `prompter.script.remove`."""
+
+    id: str
+
+class ScriptList(TypedDict, total=False):
+    """`prompter.script.list`."""
+
+    on: Optional[str]
+    # The one on the prompter now.
+    scripts: List[ScriptSummary]
+    # Every script, by id.
+
+class ScriptSaveRequest(TypedDict, total=False):
+    """`prompter.script.save`: make a script, or replace one with the same id."""
+
+    id: Optional[str]
+    # A slug. Made from the title when left out: "Evening news" is `evening-news`.
+    text: str
+    # The words. A line starting with `#` is a marker.
+    title: str
+
+class ScriptSummary(TypedDict, total=False):
+    """One script in `prompter.script.list`, without its text."""
+
+    bytes: int
+    id: str
+    lines: int
+    # Lines as written, blank ones included.
+    markers: List[str]
+    # The names of its markers, in order.
+    title: str
+    updated_ms: int
+
 class SearchRequest(TypedDict, total=False):
     """`plugin.search`."""
 
@@ -3626,6 +3876,28 @@ class SeekParams(TypedDict, total=False):
     # Source id.
     position_ms: float
     # Milliseconds from the start of the clip. Off either end is clamped rather than refused, so a scrubber flicked past the end lands there.
+
+class SeekRequest(TypedDict, total=False):
+    """`prompter.seek`: exactly one of these."""
+
+    by: Optional[float]
+    # Move this many rows on, or back when negative.
+    fraction: Optional[float]
+    # A fraction of the way through: 0 is the top, 1 the end.
+    marker: Optional[str]
+    # A marker by name, or by its number counting from 1 as a string ("2").
+    row: Optional[float]
+    # A row, from 0. 2.5 is half way through the third row.
+    step: Optional[int]
+    # Move this many markers on (1 is the next, -1 the one before). From inside a section, -1 goes to the start of that section.
+
+class SendSetRequest(TypedDict, total=False):
+    """`audio.send.set`: how much of one source goes to one bus."""
+
+    bus: str
+    level: float
+    # 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
+    source: str
 
 class SessionLogRequest(TypedDict, total=False):
     """`core.session_log`."""
@@ -4132,6 +4404,14 @@ class SourceStatus(TypedDict, total=False):
     uri: str
     video_idle_ms: Optional[int]
     # Milliseconds since the last video buffer, or None if none has arrived.
+
+class SpeedRequest(TypedDict, total=False):
+    """`prompter.speed`: one of `speed` or `by`. Shaped for something that follows the speaker as well as for a person: a plugin listening to the voice sends `speed` as often as it likes, and the screens follow without a jump, since the position carries on from where it was at the moment of the change."""
+
+    by: Optional[float]
+    # Add this to the speed it has: what a key or a Stream Deck button sends.
+    speed: Optional[float]
+    # Rows a second, -20 to 20. Negative scrolls back.
 
 class StatsListing(TypedDict, total=False):
     instances: List[InstanceRecord]
@@ -5001,6 +5281,14 @@ METHODS = (
     {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "agent.tools", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/agent/tools"), "summary": 'The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.'},
+    {"name": "audio.bus.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/bus/add"), "summary": 'Add a bus beside the programme mix, live. Nothing is built for buses until the first one.'},
+    {"name": "audio.bus.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/audio/bus/list"), "summary": 'The programme master, every bus with its sends, and the sources marked cue.'},
+    {"name": "audio.bus.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/audio/bus/remove"), "summary": 'Take a bus out, live. Refused while an output takes its sound from it.'},
+    {"name": "audio.bus.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/bus/set"), "summary": 'Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.'},
+    {"name": "audio.cue.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/cue/set"), "summary": 'Mark or clear a source for the cue bus. `solo` clears every other mark first.'},
+    {"name": "audio.device.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/audio/device/list"), "summary": "The sound outputs on the mixer's machine that a bus can play on."},
+    {"name": "audio.master.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/master/set"), "summary": "Move the programme's master fader or mute. Only what is named moves."},
+    {"name": "audio.send.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/send/set"), "summary": 'Set how much of one source goes to one bus. 0 takes it off the bus.'},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer\'s programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.'},
     {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
     {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
@@ -5143,6 +5431,18 @@ METHODS = (
     {"name": "program.transitions", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/program/transitions"), "summary": "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be."},
     {"name": "project.export", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/project/export"), "summary": "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."},
     {"name": "project.import", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/project/import"), "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."},
+    {"name": "prompter.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/prompter"), "summary": "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look."},
+    {"name": "prompter.load", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/load"), "summary": 'Put a script on the prompter, at the top and paused unless play is true.'},
+    {"name": "prompter.pause", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/pause"), "summary": 'Stop the prompter where it is.'},
+    {"name": "prompter.play", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/play"), "summary": 'Start the prompter scrolling, at speed when given. From the end it starts again at the top.'},
+    {"name": "prompter.rows", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/prompter/rows"), "summary": 'The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.'},
+    {"name": "prompter.script.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/prompter/script/get"), "summary": 'One prompter script with its text.'},
+    {"name": "prompter.script.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/prompter/script/list"), "summary": 'Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.'},
+    {"name": "prompter.script.remove", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/script/remove"), "summary": 'Forget a prompter script. When it is on the prompter the screens go empty.'},
+    {"name": "prompter.script.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/script/save"), "summary": 'Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.'},
+    {"name": "prompter.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/seek"), "summary": 'Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).'},
+    {"name": "prompter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/set"), "summary": 'Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.'},
+    {"name": "prompter.speed", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/speed"), "summary": 'Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.'},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
     {"name": "rendition.presets", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/presets"), "summary": 'Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
@@ -5286,6 +5586,8 @@ EVENT_NAMES = (
     "feed.failed",
     "feed.recovered",
     "presence.changed",
+    "prompter.changed",
+    "prompter.script.changed",
     "health",
 )
 
@@ -5376,6 +5678,127 @@ class GeneratedMethods:
         """The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder."""
         params: Dict[str, Any] = {}
         return await self._call("agent.tools", params)
+
+    async def audio_bus_add(
+        self,
+        id: str,
+        *,
+        cue: Optional[bool] = None,
+        device: Optional[str] = None,
+        gain: Optional[float] = None,
+        minus: Optional[str] = None,
+        muted: Optional[bool] = None,
+        name: Optional[str] = None,
+        sends: Optional[Dict[str, Any]] = None,
+    ) -> BusStatus:
+        """Add a bus beside the programme mix, live. Nothing is built for buses until the first one."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if cue is not None:
+            params["cue"] = cue
+        if device is not None:
+            params["device"] = device
+        if gain is not None:
+            params["gain"] = gain
+        if minus is not None:
+            params["minus"] = minus
+        if muted is not None:
+            params["muted"] = muted
+        if name is not None:
+            params["name"] = name
+        if sends is not None:
+            params["sends"] = sends
+        return await self._call("audio.bus.add", params)
+
+    async def audio_bus_list(
+        self,
+    ) -> AudioStatus:
+        """The programme master, every bus with its sends, and the sources marked cue."""
+        params: Dict[str, Any] = {}
+        return await self._call("audio.bus.list", params)
+
+    async def audio_bus_remove(
+        self,
+        id: str,
+    ) -> BusIdRequest:
+        """Take a bus out, live. Refused while an output takes its sound from it."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("audio.bus.remove", params)
+
+    async def audio_bus_set(
+        self,
+        id: str,
+        *,
+        device: Optional[str] = None,
+        gain: Optional[float] = None,
+        minus: Optional[str] = None,
+        muted: Optional[bool] = None,
+        name: Optional[str] = None,
+    ) -> BusStatus:
+        """Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if device is not None:
+            params["device"] = device
+        if gain is not None:
+            params["gain"] = gain
+        if minus is not None:
+            params["minus"] = minus
+        if muted is not None:
+            params["muted"] = muted
+        if name is not None:
+            params["name"] = name
+        return await self._call("audio.bus.set", params)
+
+    async def audio_cue_set(
+        self,
+        cue: bool,
+        source: str,
+        *,
+        solo: Optional[bool] = None,
+    ) -> AudioStatus:
+        """Mark or clear a source for the cue bus. `solo` clears every other mark first."""
+        params: Dict[str, Any] = {}
+        params["cue"] = cue
+        params["source"] = source
+        if solo is not None:
+            params["solo"] = solo
+        return await self._call("audio.cue.set", params)
+
+    async def audio_device_list(
+        self,
+    ) -> AudioDeviceList:
+        """The sound outputs on the mixer's machine that a bus can play on."""
+        params: Dict[str, Any] = {}
+        return await self._call("audio.device.list", params)
+
+    async def audio_master_set(
+        self,
+        *,
+        gain: Optional[float] = None,
+        muted: Optional[bool] = None,
+    ) -> MasterConfig:
+        """Move the programme's master fader or mute. Only what is named moves."""
+        params: Dict[str, Any] = {}
+        if gain is not None:
+            params["gain"] = gain
+        if muted is not None:
+            params["muted"] = muted
+        return await self._call("audio.master.set", params)
+
+    async def audio_send_set(
+        self,
+        bus: str,
+        level: float,
+        source: str,
+    ) -> BusStatus:
+        """Set how much of one source goes to one bus. 0 takes it off the bus."""
+        params: Dict[str, Any] = {}
+        params["bus"] = bus
+        params["level"] = level
+        params["source"] = source
+        return await self._call("audio.send.set", params)
 
     async def channel_add(
         self,
@@ -7311,6 +7734,148 @@ class GeneratedMethods:
         if mode is not None:
             params["mode"] = mode
         return await self._call("project.import", params)
+
+    async def prompter_get(
+        self,
+    ) -> PrompterState:
+        """The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.get", params)
+
+    async def prompter_load(
+        self,
+        id: str,
+        *,
+        play: Optional[bool] = None,
+    ) -> PrompterState:
+        """Put a script on the prompter, at the top and paused unless play is true."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if play is not None:
+            params["play"] = play
+        return await self._call("prompter.load", params)
+
+    async def prompter_pause(
+        self,
+    ) -> PrompterState:
+        """Stop the prompter where it is."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.pause", params)
+
+    async def prompter_play(
+        self,
+        *,
+        speed: Optional[float] = None,
+    ) -> PrompterState:
+        """Start the prompter scrolling, at speed when given. From the end it starts again at the top."""
+        params: Dict[str, Any] = {}
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("prompter.play", params)
+
+    async def prompter_rows(
+        self,
+    ) -> RowsAnswer:
+        """The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.rows", params)
+
+    async def prompter_script_get(
+        self,
+        id: str,
+    ) -> Script:
+        """One prompter script with its text."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("prompter.script.get", params)
+
+    async def prompter_script_list(
+        self,
+    ) -> ScriptList:
+        """Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.script.list", params)
+
+    async def prompter_script_remove(
+        self,
+        id: str,
+    ) -> ScriptChanged:
+        """Forget a prompter script. When it is on the prompter the screens go empty."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("prompter.script.remove", params)
+
+    async def prompter_script_save(
+        self,
+        text: str,
+        title: str,
+        *,
+        id: Optional[str] = None,
+    ) -> Script:
+        """Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place."""
+        params: Dict[str, Any] = {}
+        params["text"] = text
+        params["title"] = title
+        if id is not None:
+            params["id"] = id
+        return await self._call("prompter.script.save", params)
+
+    async def prompter_seek(
+        self,
+        *,
+        by: Optional[float] = None,
+        fraction: Optional[float] = None,
+        marker: Optional[str] = None,
+        row: Optional[float] = None,
+        step: Optional[int] = None,
+    ) -> PrompterState:
+        """Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by)."""
+        params: Dict[str, Any] = {}
+        if by is not None:
+            params["by"] = by
+        if fraction is not None:
+            params["fraction"] = fraction
+        if marker is not None:
+            params["marker"] = marker
+        if row is not None:
+            params["row"] = row
+        if step is not None:
+            params["step"] = step
+        return await self._call("prompter.seek", params)
+
+    async def prompter_set(
+        self,
+        *,
+        cue: Optional[float] = None,
+        line_chars: Optional[int] = None,
+        margin: Optional[float] = None,
+        mirror: Optional[bool] = None,
+    ) -> PrompterState:
+        """Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes."""
+        params: Dict[str, Any] = {}
+        if cue is not None:
+            params["cue"] = cue
+        if line_chars is not None:
+            params["line_chars"] = line_chars
+        if margin is not None:
+            params["margin"] = margin
+        if mirror is not None:
+            params["mirror"] = mirror
+        return await self._call("prompter.set", params)
+
+    async def prompter_speed(
+        self,
+        *,
+        by: Optional[float] = None,
+        speed: Optional[float] = None,
+    ) -> PrompterState:
+        """Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted."""
+        params: Dict[str, Any] = {}
+        if by is not None:
+            params["by"] = by
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("prompter.speed", params)
 
     async def rendition_plan(
         self,
