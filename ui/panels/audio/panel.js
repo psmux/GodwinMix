@@ -3,6 +3,7 @@ import { el } from '../../shell/dom.js';
 import { audioFor, gainLabel, gainToPos } from '../../shell/fader.js';
 import { addView, dropViews, meterElement, takeMeters } from '../../shell/meter.js';
 import { errorToast } from '../../shell/toast.js';
+import { mountDesk } from './desk.js';
 
 class AudioPanel extends HTMLElement {
   static get panel() { return { id: 'core/audio', title: 'Audio', slots: ['main'], tag: 'gmx-audio' }; }
@@ -15,7 +16,8 @@ class AudioPanel extends HTMLElement {
     this.peak = el('span.num.sm.dim');
     this.list = el('div.audio-channels');
     this.empty = el('p.pad.dim', { text: 'Add a microphone or a source with audio to mix its level here.' });
-    this.replaceChildren(el('div.audio-master', {}, [el('strong', { text: 'Programme' }), this.master, this.peak]), this.list, this.empty);
+    this.desk = mountDesk(this.client);
+    this.replaceChildren(el('div.audio-master', {}, [el('strong', { text: 'Programme' }), this.master, this.peak]), this.desk.node, this.list, this.empty);
     this.offRender = this.client.onRender(s => this.render(s));
     this.offMeters = this.client.on('meters', data => { if (this.active) takeMeters(data); });
     this.render(this.client.state);
@@ -23,6 +25,7 @@ class AudioPanel extends HTMLElement {
   disconnectedCallback() {
     this.offRender?.();
     this.offMeters?.();
+    this.desk?.drop();
     dropViews('audio:');
   }
   setWorkspaceActive(active) {
@@ -39,6 +42,7 @@ class AudioPanel extends HTMLElement {
     }
     if (!this.metered) { addView('audio:master', 'program', this.master, 'h', this.peak); this.metered = true; }
     this.empty.hidden = sources.length > 0;
+    this.desk.render(state);
     for (const source of sources) {
       let row = this.rows.get(source.id);
       if (!row) { row = this.channel(source); this.rows.set(source.id, row); this.list.append(row.node); }
@@ -55,6 +59,7 @@ class AudioPanel extends HTMLElement {
       row.level.textContent = label === 'off' ? 'Off' : label + ' dB';
       row.fader.setAttribute('aria-label', `${source.name || source.id} level`);
       row.fader.setAttribute('aria-valuetext', row.level.textContent);
+      this.desk.update(row, source, state);
       if (!row.metered) { addView('audio:' + source.id + ':meter', 'src:' + source.id, row.meter, 'h'); row.metered = true; }
     }
   }
@@ -69,6 +74,7 @@ class AudioPanel extends HTMLElement {
       this.audio.setMuted(source.id, !row.muted).catch(e => errorToast(e, 'Mute'));
     } });
     row.node = el('div.audio-channel', {}, [el('div.row', {}, [name, el('span.grow'), level, row.mute]), meter, fader]);
+    this.desk.decorate(row, source);
     return row;
   }
 }

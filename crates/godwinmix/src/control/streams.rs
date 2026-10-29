@@ -12,6 +12,7 @@
 //! | `GET /mjpeg/item/{id}` | one scene item as a projector; 501 until the scene server lands |
 //! | `GET /pcm/{target}` | WebSocket, F32LE 48 kHz stereo, 10 ms a frame |
 //! | `GET /opus/{target}` | WebSocket, Opus 48 kHz, 20 ms a frame, 64 kbit/s |
+//! | `GET /pcm/bus:{id}`, `/opus/bus:{id}` | the same, one audio bus |
 //! | `POST /whep/{target}` | an SDP answer from a `whep/output`; see `whep.rs` |
 //!
 //! # Tokens

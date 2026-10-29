@@ -1,0 +1,17 @@
+/* The audio desk: master, bus picker, one bus strip, and the cue, solo and
+   send on each source. Rows wrap rather than scroll, so a phone in portrait
+   keeps every control a thumb can reach. */
+.audio-desk { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.audio-desk .row, .audio-channel .audio-cue, .audio-channel .audio-send { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.audio-desk .row.wrap, .audio-bus-add { flex-wrap: wrap; }
+.audio-desk input[type="range"], .audio-channel .audio-send input { flex: 1 1 120px; min-width: 0; accent-color: var(--accent); }
+.audio-desk select { min-width: 0; max-width: 100%; }
+.audio-bus-pick select { flex: 1 1 auto; }
+.audio-bus { display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--panel2); border-radius: 6px; }
+.audio-bus .meter { width: 100%; height: 12px; }
+.audio-bus p { margin: 0; }
+.audio-bus-add input { flex: 1 1 120px; min-width: 0; }
+.audio-desk [aria-pressed="true"], .audio-channel .audio-cue [aria-pressed="true"] { color: var(--warn); }
+@media (pointer: coarse) {
+  .audio-desk .btn, .audio-channel .audio-cue .btn { min-height: 36px; min-width: 44px; }
+}
