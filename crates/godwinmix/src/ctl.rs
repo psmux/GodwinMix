@@ -424,12 +424,20 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
                     },
                 )
             });
-            let req = if scene {
-                TakeRequest { source: None, scene: name, transition, at_running_time_ms: at }
+            let as_scene =
+                TakeRequest { source: None, scene: name.clone(), transition: transition.clone(), at_running_time_ms: at };
+            let state: ProgramState = if scene || name.is_none() {
+                api.call("program.take", None, &as_scene).await?
             } else {
-                TakeRequest { source: name, scene: None, transition, at_running_time_ms: at }
+                // Sources first, then a scene of that name, as the help says.
+                // The mixer reads `source` as a source only, so `take comp`
+                // with a scene called comp was refused as "no source 'comp'".
+                let as_source = TakeRequest { source: name, scene: None, transition, at_running_time_ms: at };
+                match api.call("program.take", None, &as_source).await {
+                    Ok(state) => state,
+                    Err(e) => api.call("program.take", None, &as_scene).await.map_err(|_| e)?,
+                }
             };
-            let state: ProgramState = api.call("program.take", None, &req).await?;
             println!("on program: {}", on_air(&state));
         }
         Ctl::Revert => {
