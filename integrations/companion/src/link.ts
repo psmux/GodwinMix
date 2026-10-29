@@ -236,6 +236,17 @@ export class Link {
     if (muted !== undefined) params.muted = muted;
     return this.call("source.audio.set", params);
   }
+
+  /** One of the teleprompter's moves, as the desk's Prompter panel sends it. */
+  prompter(move: "load" | "play" | "pause" | "speed" | "seek", params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.call(`prompter.${move}`, params);
+  }
+
+  /** Play when paused, pause when playing: one button for a pedal or a key. */
+  async prompterToggle(): Promise<unknown> {
+    const state = (await this.call("prompter.get", {})) as { playing?: boolean };
+    return this.prompter(state && state.playing ? "pause" : "play");
+  }
 }
 
 /** Seconds as `1:02:03`, which is what an uptime variable should read like. */

@@ -192,6 +192,24 @@ describe("actions", () => {
     await assert.rejects(() => ACTIONS.take.run(link, { source: "cam9" }), /cam9/);
   });
 
+  it("the prompter buttons send the prompter's own methods", async () => {
+    const fake = await core({ onSubscribe: serveSession });
+    fake.answer("prompter.get", { playing: true });
+    fake.answer("prompter.pause", { playing: false });
+    fake.answer("prompter.speed", { speed: 0.5 });
+    fake.answer("prompter.seek", { position: 4 });
+    const link = await linked(fake);
+
+    await ACTIONS.prompter_toggle.run(link);
+    await ACTIONS.prompter_speed.run(link, { by: -0.1 });
+    await ACTIONS.prompter_marker.run(link, { step: "-1" });
+    await ACTIONS.prompter_go.run(link, { marker: "Weather" });
+    assert.ok(fake.calls.some((c) => c.method === "prompter.pause"), "a playing prompter is paused");
+    assert.deepEqual(fake.calls.find((c) => c.method === "prompter.speed")?.params, { by: -0.1 });
+    const seeks = fake.calls.filter((c) => c.method === "prompter.seek").map((c) => c.params);
+    assert.deepEqual(seeks, [{ step: -1 }, { marker: "Weather" }]);
+  });
+
   it("every action has a name and a run", () => {
     for (const [id, action] of Object.entries(ACTIONS)) {
       assert.ok(action.name.length > 0, `${id} has a name`);
