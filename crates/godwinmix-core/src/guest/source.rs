@@ -36,7 +36,10 @@ pub const MANIFEST: Manifest = Manifest {
     uri_schemes: &[SCHEME],
     rank: 256,
     media: MediaDecl { video: StreamMode::Raw, audio: StreamMode::Raw, alpha: false, thumb: true },
-    capabilities: CapabilitySet::new().with(Capability::RestartInPlace).with(Capability::Health),
+    capabilities: CapabilitySet::new()
+        .with(Capability::RestartInPlace)
+        .with(Capability::ProgrammeTimeline)
+        .with(Capability::Health),
     latency_ms: 0,
     tier: Tier::Core,
 };
@@ -90,6 +93,13 @@ impl Source for GuestSource {
         crate::probe::set_int(&vsrc, "timeout", HOLD_NS as i64);
         let asrc = make("interaudiosrc", &format!("{id}-guest-a"))?;
         asrc.set_property("channel", &channel);
+        // Stamped from the clock as each buffer leaves. Left to themselves
+        // the inter sources count frames from zero, which is a timeline the
+        // programme's aligner cannot follow for a source added late in a
+        // show: it stalls within seconds.
+        for src in [&vsrc, &asrc] {
+            crate::probe::set_bool(src, "do-timestamp", true);
+        }
         let ends = assemble(&self.ctx, thumb, Ingest::default().with([vsrc.clone(), asrc.clone()]), |w: &Wiring| {
             vsrc.link(&w.norm.video_entry()).context("linking a guest's picture")?;
             asrc.link(&w.norm.audio_entry()).context("linking a guest's sound")?;
