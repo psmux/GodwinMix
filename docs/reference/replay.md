@@ -135,7 +135,34 @@ The panel reads `replay.get` once a second while it is on screen.
 
 ## What it costs
 
-COST_TABLE
+Measured on 29 October 2026 on an Apple M4 Pro MacBook (14 cores, 24 GB,
+macOS 26.6) with VideoToolbox (`vtenc_h264_hw`) as the encoder, by
+`crates/godwinmix-core/tests/replay_cost.rs`. Four `test://smpte` sources at
+30 fps, the source angles at the programme's default 6 Mbit/s, and CPU as a
+percentage of one core for the whole process. The machine was running other
+work at the same time, so read the CPU figures to about a point either way.
+
+| Canvas | No replay | One angle | Four angles | Per angle | Programme angle |
+|---|---|---|---|---|---|
+| 1280x720 | 14.4% | 17.1% | 26.1% | 2.8 to 2.9% | none measurable |
+| 1920x1080 | 21.9% | 27.5% | 33.2% | 2.8 to 5.5% | none measurable |
+
+The programme angle was measured with a recording already running the
+programme encoder: the difference was 1.5 points either way, which is the
+noise. It costs memory only.
+
+A ring holds 46 MB a minute at 6 Mbit/s with 160 kbit/s of sound, at both
+sizes, since it is the bitrate that decides it. On top of the rings each
+source angle's encoder holds its own buffers: resident memory went from 241
+to 286 MB with one 20 second angle at 720p and to 387 MB with four, and from
+508 to 572 and 678 MB at 1080p. So budget the ring, plus about 25 to 40 MB
+per source angle for its encoder.
+
+On a machine with no hardware encoder each source angle is a software
+encode, which costs about what the programme encoder does. That has not been
+measured on a Raspberry Pi 4 yet. There, the programme angle is the cheap
+one, since it encodes nothing, and `bitrate_kbps` lowers what the others
+cost in memory.
 
 ## Not yet
 

@@ -71,8 +71,10 @@ async fn an_angle_costs_this_much() {
         handle.request(|ack| Command::AddSource(Box::new(cfg), Some(ack))).await.expect("add");
     }
     handle.request(|ack| Command::Take { source: Some("cam1".into()), at_running_time_ms: None, ack: Some(ack) }).await.unwrap();
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    let (none, rss0) = (measure(10).await, rss_mb());
+    // Past the governor's calibration and the first mosaic, which a mixer
+    // does once at start and would otherwise count against no replay.
+    tokio::time::sleep(Duration::from_secs(20)).await;
+    let (before, rss0) = (measure(10).await, rss_mb());
 
     replay(&handle, 20, &ids[..1]).await;
     tokio::time::sleep(Duration::from_secs(21)).await;
@@ -81,6 +83,9 @@ async fn an_angle_costs_this_much() {
     tokio::time::sleep(Duration::from_secs(21)).await;
     let (four, rss4) = (measure(10).await, rss_mb());
     handle.replay(ReplayCall::Stop).await.unwrap().unwrap();
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    // No replay, measured on both sides of it and averaged.
+    let none = (before + measure(10).await) / 2.0;
 
     let dir = std::env::temp_dir().join(format!("gmx-replay-cost-{}", std::process::id()));
     let mut out = OutputConfig::bare("archive", "record://programme");
@@ -96,7 +101,7 @@ async fn an_angle_costs_this_much() {
     handle.send(Command::Shutdown).ok();
     let _ = thread.join();
     let _ = std::fs::remove_dir_all(dir);
-    println!("{w}x{h}30, source angles at 6 Mbit/s:");
+    println!("{w}x{h} at 30 fps, source angles at 6 Mbit/s:");
     println!("  no replay {none:.1} percent of a core, one angle {one:.1}, four angles {four:.1}");
     println!("  one angle {:.1} percent of a core, each of four {:.1}", one - none, (four - none) / 4.0);
     println!("  ring {per_minute:.1} MB a minute; resident memory {rss0:.0} MB, {rss1:.0} MB with one 20 s angle, {rss4:.0} MB with four");
