@@ -73,6 +73,7 @@ pub mod preview;
 pub mod preset;
 pub mod probe;
 pub mod render;
+pub mod replay;
 pub mod safety;
 pub mod scene;
 pub mod secrets;

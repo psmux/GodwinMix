@@ -411,6 +411,8 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 pub mod group;
 mod allocation;
 mod audio_desk;
+mod replay_desk;
+pub use replay_desk::{ReplayAnswer, ReplayReply};
 mod catch_up;
 mod clip_act;
 mod clip_end;
@@ -574,6 +576,8 @@ pub enum Command {
     /// One `audio.*` call: the master, the buses, the sends and cue. See
     /// `crate::buses`. No reply for one the mixer sends itself.
     Audio(crate::buses::AudioCall, Option<audio_desk::AudioReply>),
+    /// One `replay.*` call. See `crate::replay`.
+    Replay(crate::replay::ReplayCall, Option<replay_desk::ReplayReply>),
     /// Move a seekable source to a position, in milliseconds from its start.
     Seek {
         source: SourceId,
@@ -690,6 +694,8 @@ pub struct MixerHandle {
     heard: Arc<AtomicBool>,
     /// The memory guard's alarm while it holds. See `mixer::memguard`.
     memory: Arc<parking_lot::Mutex<Option<memguard::Pressure>>>,
+    /// The replay rings and events, read off the mixer thread.
+    replay: Arc<crate::replay::Shared>,
 }
 
 impl MixerHandle {
@@ -706,6 +712,7 @@ impl MixerHandle {
             running: Arc::new(Running::default()),
             heard: Arc::default(),
             memory: Arc::default(),
+            replay: Arc::default(),
         };
         (handle, rx)
     }
@@ -1200,6 +1207,10 @@ pub struct Mixer {
     /// The master, the buses and cue. Nothing in it is built until a bus is
     /// asked for. See `crate::buses`.
     desk: crate::buses::Desk,
+    /// Instant replay. Empty until replay is turned on. See `crate::replay`.
+    replay: crate::replay::Desk,
+    /// The programme encoder, held while the programme is a replay angle.
+    replay_lease: Option<crate::encoder::Lease>,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
     /// The raw programme tees, where a preview or monitoring branch hangs off.
@@ -1690,6 +1701,13 @@ impl Mixer {
         let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
         let (bus_tx, bus_rx) = mpsc::channel(BUS_QUEUE);
         let events = EventBus::new(256);
+        // Nothing of replay is built here: the desk is empty until replay is
+        // turned on, and a source kind finds it by this instant.
+        let origin = Instant::now();
+        let replay = crate::replay::Desk::new(
+            origin,
+            crate::replay::angle::EncodeWith { video: sel.video_encode.clone(), audio: sel.audio_encode.clone(), vars },
+        );
         let handle = MixerHandle {
             tx,
             events: events.clone(),
@@ -1697,6 +1715,7 @@ impl Mixer {
             running: Arc::new(Running::default()),
             heard: Arc::default(),
             memory: Arc::default(),
+            replay: replay.shared().clone(),
         };
 
         let program = gst::Pipeline::with_name("program");
@@ -2022,10 +2041,12 @@ impl Mixer {
             cfg,
             canvas,
             backends,
-            origin: Instant::now(),
+            origin,
             program,
             amix,
             desk,
+            replay,
+            replay_lease: None,
             venc_tee,
             aenc_tee,
             vraw_tee: vraw_tee.clone(),
@@ -2149,6 +2170,9 @@ impl Mixer {
         // The configured buses, before the sources: each source joins them as
         // it is added.
         self.desk.start();
+        // Replay as the config sets it. Each source angle joins as its
+        // source is added below.
+        self.start_configured_replay();
 
         for src in self.cfg.sources.clone() {
             let id = src.id.clone();
@@ -2476,6 +2500,7 @@ impl Mixer {
         }
         info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
         self.join_buses(&cfg.id);
+        self.replay_join(&cfg.id);
         // An id that is live again has nothing left to restore under it.
         self.removed.retain(|c| c.id != cfg.id);
         self.unstarted.forget(&cfg.id);
@@ -2909,6 +2934,7 @@ impl Mixer {
         self.detach_source_feed(id);
         // Off the buses first, so the held branch is the one it always was.
         self.desk.leave_source(id);
+        self.replay_leave(id);
         let slot = self.sources.remove(pos);
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
@@ -3134,6 +3160,7 @@ impl Mixer {
         self.detach_source_feed(id);
         // Off every bus before the branch comes down. See `buses::send`.
         crate::slow_step!("desk.leave_source", id, self.desk.leave_source(id));
+        self.replay_leave(id);
         let slot = self.sources.remove(pos);
         self.overlay.detach(id);
         if let Some(mv) = &mut self.multiview {
@@ -3474,6 +3501,8 @@ impl Mixer {
             filters: &'a [crate::config::FilterConfig],
             #[serde(skip_serializing_if = "godwinmix_protocol::buses::AudioConfig::is_default")]
             audio: &'a godwinmix_protocol::buses::AudioConfig,
+            #[serde(skip_serializing_if = "godwinmix_protocol::replay::ReplayConfig::is_default")]
+            replay: &'a godwinmix_protocol::replay::ReplayConfig,
             /// The `[ui]` section `gmx preset apply` wrote, carried through
             /// untouched. Without this, adding one source from the UI would
             /// throw away the layout and theme the preset chose.
@@ -3484,7 +3513,7 @@ impl Mixer {
             .ok()
             .and_then(|text| text.parse::<toml::Table>().ok())
             .and_then(|table| table.get("ui").cloned());
-        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, filters: &self.cfg.filters, audio: &self.cfg.audio, ui }) {
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, filters: &self.cfg.filters, audio: &self.cfg.audio, replay: &self.cfg.replay, ui }) {
             Ok(b) => format!(
                 "# Sources, outputs and filters managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
@@ -4314,6 +4343,7 @@ impl Mixer {
             Command::Encoder(_) => "encoder demand",
             Command::Preview(_) => "preview demand",
             Command::Audio(..) => "audio",
+            Command::Replay(..) => "replay",
             Command::Shutdown => "core.shutdown",
         }
     }
@@ -4455,6 +4485,7 @@ impl Mixer {
                 let _ = reply.send(self.seek(&source, position_ms));
             }
             Command::Audio(call, reply) => self.audio_call(call, reply),
+            Command::Replay(call, reply) => self.replay_call(call, reply),
             Command::SourceInput { source, reply } => {
                 let _ = reply.send(self.sources.iter().find(|s| s.input.id == source).map(|s| s.input.clone()));
             }
@@ -5827,6 +5858,8 @@ impl Mixer {
         self.pool.teardown();
         self.audio_taps.clear();
         self.desk.shutdown();
+        self.replay.shutdown();
+        self.replay_lease = None;
         #[cfg(unix)]
         self.local_previews.clear();
         self.output_leases.clear();
@@ -6330,6 +6363,7 @@ mod tests {
             outputs: vec![],
             filters: vec![],
             audio: Default::default(),
+            replay: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
@@ -6372,6 +6406,7 @@ mod tests {
             outputs: vec![],
             filters: vec![],
             audio: Default::default(),
+            replay: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
@@ -7764,6 +7799,7 @@ mod tests {
             running: Arc::new(Running::default()),
             heard: Arc::default(),
             memory: Arc::default(),
+            replay: Arc::default(),
         };
         (handle, rx)
     }

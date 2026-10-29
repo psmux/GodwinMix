@@ -154,6 +154,12 @@
           "check": "panel"
         },
         {
+          "command": "view.panel",
+          "arg": "core/replay",
+          "title": "Replay",
+          "check": "panel"
+        },
+        {
           "plugins": true
         },
         {

@@ -298,6 +298,30 @@ pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
 pub const ALIGN_VALUES: &[&str] = &["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
 
+/// One angle's ring, as it stands.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AngleStatus {
+    /// Bytes of encoded picture and sound held.
+    pub bytes: u64,
+    /// Frames the angle's encoder could not keep up with and dropped. The
+    /// source and the programme lose none.
+    pub dropped: u64,
+    /// The encoder this angle is written with, or `shared` when it reads the
+    /// programme encoder's own output.
+    pub encoder: String,
+    /// Whole groups of pictures held. The ring drops the oldest one at a time.
+    pub gops: u32,
+    /// Seconds of picture held, from the oldest keyframe to the newest frame.
+    pub held_secs: f64,
+    /// The source id, or `programme`.
+    pub id: String,
+    /// Why this angle holds nothing, when it does not: the source is not
+    /// there, or has not sent a picture yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiting: Option<String>,
+}
+
 /// When a change to a key takes effect.
 pub type Applies = String;
 /// The values api_level 1 knows for [`Applies`].
@@ -1980,6 +2004,28 @@ pub struct ErrorAction {
     pub value: Value,
 }
 
+/// `replay.event.delete`, and anything else that names one event.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventIdRequest {
+    pub id: String,
+}
+
+/// `replay.event.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventList {
+    pub events: Vec<ReplayEvent>,
+}
+
+/// `replay.event.rename`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventRenameRequest {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportRequest {
@@ -3361,21 +3407,6 @@ pub struct GroupSourcesRequest {
     pub sources: Vec<String>,
 }
 
-/// What `guest.invite.list` answers, and the payload of `event/guest.changed`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct GuestList {
-    pub guests: Vec<Invite>,
-    /// The most guests this show takes at once.
-    pub max_guests: i64,
-    pub talkback: TalkbackState,
-}
-
-/// Where a guest is.
-pub type GuestState = String;
-/// The values api_level 1 knows for [`GuestState`].
-pub const GUEST_STATE_VALUES: &[&str] = &["invited", "joining", "live", "gone"];
-
 /// One channel.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3871,96 +3902,6 @@ pub struct InstanceRecord {
     pub state: String,
 }
 
-/// One invite, without its key.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Invite {
-    /// The mix minus bus the guest hears, `guest-<id>`: the programme
-    /// without the guest, with talkback added while it is held.
-    pub bus: String,
-    /// When it was made, RFC 3339.
-    pub created: String,
-    /// When it stops letting the guest in, RFC 3339. The guest is let go then.
-    pub expires: String,
-    /// A slug, made from the name unless one was given.
-    pub id: String,
-    /// What the guest is called on screen and in the desk.
-    pub name: String,
-    /// The mixer source the guest's camera is, `guest-<id>`. It exists from
-    /// the guest's first offer until the invite goes.
-    pub source: String,
-    pub state: GuestState,
-    /// Whether talkback is held into this guest's return now.
-    pub talkback: bool,
-}
-
-/// `guest.invite.create`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct InviteCreateRequest {
-    /// The address the link starts with, such as `https://studio.example.com`,
-    /// for a mixer reached through a name or a tunnel. Left out, the first
-    /// https address of this machine that is not loopback.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub base: Option<String>,
-    /// How long the invite lasts, in seconds. One day when left out; at most
-    /// thirty days.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_in_secs: Option<u64>,
-    /// A slug for the invite. Made from the name when left out.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    /// The guest's name, as it should appear on screen. 1 to 64 characters.
-    pub name: String,
-}
-
-/// What `guest.invite.create` answers.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct InviteCreated {
-    pub id: String,
-    pub invite: Invite,
-    /// The `/join/` page with the guest's id and key in the fragment, which a
-    /// browser never sends to a server.
-    pub link: String,
-    /// Set when no guest on another device could open the link as it stands,
-    /// with what to change.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    /// The link as a QR code, an SVG document a page can show as it is.
-    pub qr_svg: String,
-}
-
-/// `guest.invite.revoke` and `guest.invite.link`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct InviteIdRequest {
-    pub id: String,
-}
-
-/// The link to send a guest, and the same as a QR code.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct InviteLink {
-    pub id: String,
-    /// The `/join/` page with the guest's id and key in the fragment, which a
-    /// browser never sends to a server.
-    pub link: String,
-    /// Set when no guest on another device could open the link as it stands,
-    /// with what to change.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-    /// The link as a QR code, an SVG document a page can show as it is.
-    pub qr_svg: String,
-}
-
-/// What `guest.invite.revoke` answers.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct InviteRevoked {
-    pub revoked: Invite,
-}
-
 pub type ItemEdge = String;
 /// The values api_level 1 knows for [`ItemEdge`].
 pub const ITEM_EDGE_VALUES: &[&str] = &["left", "right", "top", "bottom"];
@@ -4340,10 +4281,34 @@ pub struct MachineStatus {
     pub uptime_secs: Option<u64>,
 }
 
-/// `scene.history.mark`.
+/// Which point `replay.mark` sets.
+pub type MarkPoint = String;
+/// The values api_level 1 knows for [`MarkPoint`].
+pub const MARK_POINT_VALUES: &[&str] = &["in", "out"];
+
+/// `replay.mark`. With `point` it sets an in or an out point; with
+/// `seconds` alone it makes a whole event of the last that many seconds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MarkRequest {
+    /// The angle it was seen on, which playback starts from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// A name for the event. Its id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point: Option<MarkPoint>,
+    /// For an in point, how many seconds before now it goes. For a whole
+    /// event, how long it is. 0 is now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<f64>,
+}
+
+/// `scene.history.mark`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarkRequest2 {
     /// What to call the group of changes that follows. Omit it to end the
     /// group, so the next change is its own undo step.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -5295,6 +5260,52 @@ pub struct PlayRequest {
     pub speed: Option<f64>,
 }
 
+/// `replay.play`: load an event, or the last seconds of an angle, into a
+/// replay source and play it from the start.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayRequest2 {
+    /// The angle to show. The event's own angle, then the first angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// The event to play. Without one, the last `seconds` of the angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// How far back to start when no event is named. 10 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<f64>,
+    /// The source to play it on, added if it is not there. `replay` when
+    /// left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// 1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    /// Put it on air once it is loaded, as `program.take` would.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub take: Option<bool>,
+    /// The transition for that take: a name such as `"fade"` or a stinger's
+    /// object. A cut when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<Transition>,
+}
+
+/// What `replay.play` and `replay.set` answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayStatus {
+    pub angle: String,
+    /// How long it plays at this speed.
+    pub duration_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// Where it is, in milliseconds of playback.
+    pub position_ms: u64,
+    /// The source it plays on.
+    pub source: String,
+    pub speed: f64,
+}
+
 /// The links of an output served as HLS from the control port, each with
 /// the output's viewer key on it. A channel's watch link is one too:
 /// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
@@ -5847,6 +5858,70 @@ pub struct ReorderRequest {
     pub seq: Option<u64>,
 }
 
+/// The `[replay]` table. With no angles nothing is built.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayConfig {
+    /// The angles to record: source ids, and `programme` for the programme
+    /// itself. Empty turns replay off.
+    pub angles: Vec<String>,
+    /// The bitrate a source angle is encoded at, in kbit/s. 0 or left out
+    /// is the programme's own bitrate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// Seconds each angle keeps, 1 to 1800. 60 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<u32>,
+}
+
+/// One event: a stretch of time between an in point and an out point, the
+/// same stretch on every angle.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayEvent {
+    /// The angle it was marked on, which playback starts from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// A slug the mixer gives it: `replay-1`, `replay-2`.
+    pub id: String,
+    /// The in point, in milliseconds of the mixer's clock.
+    pub in_ms: u64,
+    /// What the desk shows. The id until it is renamed.
+    pub name: String,
+    /// The out point. Absent while the event is still open (marked in and not
+    /// out yet).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_ms: Option<u64>,
+}
+
+/// `replay.set`: change the angle or the speed of a replay that is playing,
+/// from the frame it is on.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplaySetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+}
+
+/// `replay.get`: everything about replay on this mixer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayStatus {
+    pub angles: Vec<AngleStatus>,
+    pub config: ReplayConfig,
+    /// Every event, oldest first. An event whose stretch has left every ring
+    /// is still listed until it is deleted, and plays nothing.
+    pub events: Vec<ReplayEvent>,
+    /// The mixer's clock now, in the same milliseconds as an event's points.
+    pub now_ms: u64,
+    /// Whether anything is being recorded.
+    pub on: bool,
+}
+
 /// What `project.import` answers with.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5982,6 +6057,36 @@ pub struct SaveRequest {
     /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<String>,
+}
+
+/// `replay.save`: write an event, or the whole buffer of one angle, to an
+/// MP4 in the media folder without encoding it again.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveRequest2 {
+    /// The angle to save. The event's own, then `programme` if it is
+    /// recorded, then the first angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// The event to save. The whole buffer when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// The file's name, without a folder. Made from the time when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// What `replay.save` answers with once the file is written.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveStatus {
+    pub angle: String,
+    pub bytes: u64,
+    pub duration_ms: u64,
+    /// The file, as the media library names it: `Replays/<name>.mp4`.
+    pub name: String,
+    /// Its absolute path on the mixer's machine.
+    pub path: String,
 }
 
 /// `headend.scan`.
@@ -7289,36 +7394,6 @@ pub struct TakeRequest {
     pub transition: Option<Transition>,
 }
 
-/// `guest.talkback.set`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct TalkbackRequest {
-    /// The guest to talk to. Left out, every guest that is live or joining.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub guest: Option<String>,
-    /// Hold talkback (true) or let it go (false).
-    pub on: bool,
-    /// Another input to talk with, such as a microphone on the mixer. It is
-    /// muted on the programme from then on, for as long as it is the
-    /// talkback source. Left out, the source stays what it was.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-}
-
-/// Talkback as it stands.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct TalkbackState {
-    /// The guests it is held into now.
-    pub held: Vec<String>,
-    /// Whether that source is in the mixer now.
-    pub present: bool,
-    /// The source that talks: `guest-talkback` (the operator's browser
-    /// microphone, published to `/guest/talkback/whip`) unless another input
-    /// was chosen. It is kept muted on the programme.
-    pub source: String,
-}
-
 /// `event/tally`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8288,7 +8363,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 275] = [
+pub const METHODS: [MethodInfo; 280] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8368,11 +8443,6 @@ pub const METHODS: [MethodInfo; 275] = [
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
     MethodInfo { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gpu/rebalance")) },
     MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
-    MethodInfo { name: "guest.invite.create", summary: "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/invite/create")) },
-    MethodInfo { name: "guest.invite.link", summary: "An invite's link and QR code again, to copy or show.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/invite/link")) },
-    MethodInfo { name: "guest.invite.list", summary: "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/guest/invite/list")) },
-    MethodInfo { name: "guest.invite.revoke", summary: "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/guest/invite/revoke")) },
-    MethodInfo { name: "guest.talkback.set", summary: "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/talkback/set")) },
     MethodInfo { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/add")) },
     MethodInfo { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/bulk")) },
     MethodInfo { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/follow")) },
@@ -8463,6 +8533,16 @@ pub const METHODS: [MethodInfo; 275] = [
     MethodInfo { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/speed")) },
     MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
     MethodInfo { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/presets")) },
+    MethodInfo { name: "replay.event.delete", summary: "Forget a replay event. The recording it pointed at is not touched.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/event/delete")) },
+    MethodInfo { name: "replay.event.list", summary: "Every replay event, oldest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/replay/event/list")) },
+    MethodInfo { name: "replay.event.rename", summary: "Give a replay event a name.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/event/rename")) },
+    MethodInfo { name: "replay.get", summary: "Whether replay is on, each angle's buffer depth and size, and every event.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/replay")) },
+    MethodInfo { name: "replay.mark", summary: "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/mark")) },
+    MethodInfo { name: "replay.play", summary: "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/play")) },
+    MethodInfo { name: "replay.save", summary: "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/save")) },
+    MethodInfo { name: "replay.set", summary: "Change a playing replay's angle or speed, from the frame it is on.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/set")) },
+    MethodInfo { name: "replay.start", summary: "Record these angles, each the last `seconds`. Called again, it changes them in place.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/start")) },
+    MethodInfo { name: "replay.stop", summary: "Stop recording, free every buffer and forget every event.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/replay/stop")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
     MethodInfo { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_graphic")) },
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
@@ -8566,7 +8646,7 @@ pub const METHODS: [MethodInfo; 275] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 41] = [
+pub const EVENT_NAMES: [&str; 40] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -8606,7 +8686,6 @@ pub const EVENT_NAMES: [&str; 41] = [
     "presence.changed",
     "prompter.changed",
     "prompter.script.changed",
-    "guest.changed",
     "health",
 ];
 
@@ -8706,8 +8785,6 @@ pub enum Event {
     PrompterChanged(PrompterState),
     /// A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter.
     PrompterScriptChanged(ScriptChanged),
-    /// An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key.
-    GuestChanged(GuestList),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -8864,10 +8941,6 @@ impl Event {
                 Ok(payload) => Event::PrompterScriptChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
-            "guest.changed" => match serde_json::from_value(params.clone()) {
-                Ok(payload) => Event::GuestChanged(payload),
-                Err(_) => Event::Other { name: pattern.to_string(), params },
-            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -8918,7 +8991,6 @@ impl Event {
             Event::PresenceChanged(_) => "presence.changed",
             Event::PrompterChanged(_) => "prompter.changed",
             Event::PrompterScriptChanged(_) => "prompter.script.changed",
-            Event::GuestChanged(_) => "guest.changed",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
@@ -9321,31 +9393,6 @@ impl Client {
     /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
     pub async fn gpu_status(&self, params: &GpuStatusRequest) -> Result<GpuStatus> {
         self.call("gpu.status", params).await
-    }
-
-    /// Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.
-    pub async fn guest_invite_create(&self, params: &InviteCreateRequest) -> Result<InviteCreated> {
-        self.call("guest.invite.create", params).await
-    }
-
-    /// An invite's link and QR code again, to copy or show.
-    pub async fn guest_invite_link(&self, params: &InviteIdRequest) -> Result<InviteLink> {
-        self.call("guest.invite.link", params).await
-    }
-
-    /// Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.
-    pub async fn guest_invite_list(&self) -> Result<GuestList> {
-        self.call("guest.invite.list", &serde_json::json!({})).await
-    }
-
-    /// Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.
-    pub async fn guest_invite_revoke(&self, params: &InviteIdRequest) -> Result<InviteRevoked> {
-        self.call("guest.invite.revoke", params).await
-    }
-
-    /// Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.
-    pub async fn guest_talkback_set(&self, params: &TalkbackRequest) -> Result<GuestList> {
-        self.call("guest.talkback.set", params).await
     }
 
     /// Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
@@ -9798,6 +9845,56 @@ impl Client {
         self.call("rendition.presets", &serde_json::json!({})).await
     }
 
+    /// Forget a replay event. The recording it pointed at is not touched.
+    pub async fn replay_event_delete(&self, params: &EventIdRequest) -> Result<EventIdRequest> {
+        self.call("replay.event.delete", params).await
+    }
+
+    /// Every replay event, oldest first.
+    pub async fn replay_event_list(&self) -> Result<EventList> {
+        self.call("replay.event.list", &serde_json::json!({})).await
+    }
+
+    /// Give a replay event a name.
+    pub async fn replay_event_rename(&self, params: &EventRenameRequest) -> Result<ReplayEvent> {
+        self.call("replay.event.rename", params).await
+    }
+
+    /// Whether replay is on, each angle's buffer depth and size, and every event.
+    pub async fn replay_get(&self) -> Result<ReplayStatus> {
+        self.call("replay.get", &serde_json::json!({})).await
+    }
+
+    /// Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.
+    pub async fn replay_mark(&self, params: &MarkRequest) -> Result<ReplayEvent> {
+        self.call("replay.mark", params).await
+    }
+
+    /// Play an event, or the last seconds of an angle, on a replay source, added if it is not there.
+    pub async fn replay_play(&self, params: &PlayRequest2) -> Result<PlayStatus> {
+        self.call("replay.play", params).await
+    }
+
+    /// Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.
+    pub async fn replay_save(&self, params: &SaveRequest2) -> Result<SaveStatus> {
+        self.call("replay.save", params).await
+    }
+
+    /// Change a playing replay's angle or speed, from the frame it is on.
+    pub async fn replay_set(&self, params: &ReplaySetRequest) -> Result<PlayStatus> {
+        self.call("replay.set", params).await
+    }
+
+    /// Record these angles, each the last `seconds`. Called again, it changes them in place.
+    pub async fn replay_start(&self, params: &ReplayConfig) -> Result<ReplayStatus> {
+        self.call("replay.start", params).await
+    }
+
+    /// Stop recording, free every buffer and forget every event.
+    pub async fn replay_stop(&self) -> Result<ReplayStatus> {
+        self.call("replay.stop", &serde_json::json!({})).await
+    }
+
     /// Make an empty scene, or one built from a set of sources.
     pub async fn scene_add(&self, params: &AddSceneRequest) -> Result<SceneView> {
         self.call("scene.add", params).await
@@ -9854,7 +9951,7 @@ impl Client {
     }
 
     /// Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
-    pub async fn scene_history_mark(&self, params: &MarkRequest) -> Result<BTreeMap<String, Value>> {
+    pub async fn scene_history_mark(&self, params: &MarkRequest2) -> Result<BTreeMap<String, Value>> {
         self.call("scene.history.mark", params).await
     }
 

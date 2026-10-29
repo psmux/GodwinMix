@@ -111,6 +111,15 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/guests/share.js", include_str!("../../../ui/panels/guests/share.js")),
     ("panels/guests/talk.js", include_str!("../../../ui/panels/guests/talk.js")),
     ("panels/guests/guests.css", include_str!("../../../ui/panels/guests/guests.css")),
+    // Instant replay: the entry loads with the page, the panel when first
+    // shown or when I, O or P is first pressed.
+    ("panels/replay/entry.js", include_str!("../../../ui/panels/replay/entry.js")),
+    ("panels/replay/panel.js", include_str!("../../../ui/panels/replay/panel.js")),
+    ("panels/replay/setup.js", include_str!("../../../ui/panels/replay/setup.js")),
+    ("panels/replay/angles.js", include_str!("../../../ui/panels/replay/angles.js")),
+    ("panels/replay/events.js", include_str!("../../../ui/panels/replay/events.js")),
+    ("panels/replay/controls.js", include_str!("../../../ui/panels/replay/controls.js")),
+    ("panels/replay/replay.css", include_str!("../../../ui/panels/replay/replay.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
@@ -1231,6 +1240,12 @@ mod tests {
         // its line in View, and its card and icon on the phone's More screen.
         // Measured at 407860 bytes.
         //
+        // Raised to 400 kB for the Replay panel: its entry, which defines the
+        // element and the three commands the I, O and P keys run and fetches
+        // everything else when first shown or pressed, the three keys in the
+        // map and its line in View. It has no card on the phone. Measured at
+        // 409302 bytes, 1270 of them for this.
+        //
         // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
         // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
         // and Cmd+Shift+] step through the shows, which needs a key listener
@@ -1300,7 +1315,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_508_kb() {
+    fn the_page_with_the_composer_open_stays_under_509_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1323,7 +1338,10 @@ mod tests {
         // panel's lazy desk hooks and its FX button, which landed together;
         // each alone fitted, and the composer's files did not grow. The FX
         // dialog and the desk load when first used. Measured at 519182 bytes.
-        assert!(bytes < 508 * 1024, "the page with the composer open is {bytes} bytes, over the 508 kB budget");
+        // Raised to 509 kB with the page's own budget, for the Replay panel's
+        // entry and keys; the composer's files did not grow. Measured at
+        // 520194 bytes.
+        assert!(bytes < 509 * 1024, "the page with the composer open is {bytes} bytes, over the 509 kB budget");
     }
 
     #[test]
@@ -1343,6 +1361,8 @@ mod tests {
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("panels/media/panel.js"));
+        // The Replay panel, which its entry fetches when first shown.
+        reachable.extend(closure_of("panels/replay/panel.js"));
         // The Media panel's dialogs: tags, Move to, a name, removing a folder.
         reachable.extend(closure_of("panels/media/edit.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));

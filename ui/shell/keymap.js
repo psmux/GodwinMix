@@ -47,6 +47,10 @@ export const DEFAULT_MAP = {
   "9": "tray.take-slot",
   Space: "program.take-armed",
   F: "program.fullscreen",
+  // Replay: in, out, play the last event.
+  I: "replay.mark-in",
+  O: "replay.mark-out",
+  P: "replay.play-last",
   // The effect buttons under Take, left to right.
   "Alt+1": "fx.fire-1",
   "Alt+2": "fx.fire-2",

@@ -165,6 +165,24 @@ class AlarmSettings(TypedDict, total=False):
     # The peak level under which sound counts as quiet.
     silence_ms: Optional[int]
 
+class AngleStatus(TypedDict, total=False):
+    """One angle's ring, as it stands."""
+
+    bytes: int
+    # Bytes of encoded picture and sound held.
+    dropped: int
+    # Frames the angle's encoder could not keep up with and dropped. The source and the programme lose none.
+    encoder: str
+    # The encoder this angle is written with, or `shared` when it reads the programme encoder's own output.
+    gops: int
+    # Whole groups of pictures held. The ring drops the oldest one at a time.
+    held_secs: float
+    # Seconds of picture held, from the oldest keyframe to the newest frame.
+    id: str
+    # The source id, or `programme`.
+    waiting: Optional[str]
+    # Why this angle holds nothing, when it does not: the source is not there, or has not sent a picture yet.
+
 class ApplyDraftRequest(TypedDict, total=False):
     """`scene.edit.apply`."""
 
@@ -1208,6 +1226,22 @@ class ErrorAction(TypedDict, total=False):
     # `setup`: the piece to set up, `web` or a plugin's name.
     value: Any
     # `set-config`: the value to send.
+
+class EventIdRequest(TypedDict, total=False):
+    """`replay.event.delete`, and anything else that names one event."""
+
+    id: str
+
+class EventList(TypedDict, total=False):
+    """`replay.event.list`."""
+
+    events: List[ReplayEvent]
+
+class EventRenameRequest(TypedDict, total=False):
+    """`replay.event.rename`."""
+
+    id: str
+    name: str
 
 class ExportRequest(TypedDict, total=False):
     include_media: bool
@@ -2718,6 +2752,17 @@ class MachineStatus(TypedDict, total=False):
     # Since the machine booted.
 
 class MarkRequest(TypedDict, total=False):
+    """`replay.mark`. With `point` it sets an in or an out point; with `seconds` alone it makes a whole event of the last that many seconds."""
+
+    angle: Optional[str]
+    # The angle it was seen on, which playback starts from.
+    name: Optional[str]
+    # A name for the event. Its id when left out.
+    point: Union[MarkPoint, None]
+    seconds: Optional[float]
+    # For an in point, how many seconds before now it goes. For a whole event, how long it is. 0 is now.
+
+class MarkRequest2(TypedDict, total=False):
     """`scene.history.mark`."""
 
     label: Optional[str]
@@ -3294,6 +3339,37 @@ class PlayRequest(TypedDict, total=False):
     speed: Optional[float]
     # Rows a second to play at. Left out keeps the speed it has.
 
+class PlayRequest2(TypedDict, total=False):
+    """`replay.play`: load an event, or the last seconds of an angle, into a replay source and play it from the start."""
+
+    angle: Optional[str]
+    # The angle to show. The event's own angle, then the first angle.
+    event: Optional[str]
+    # The event to play. Without one, the last `seconds` of the angle.
+    seconds: Optional[float]
+    # How far back to start when no event is named. 10 when left out.
+    source: Optional[str]
+    # The source to play it on, added if it is not there. `replay` when left out.
+    speed: Optional[float]
+    # 1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.
+    take: bool
+    # Put it on air once it is loaded, as `program.take` would.
+    transition: Union[Transition, None]
+    # The transition for that take: a name such as `"fade"` or a stinger's object. A cut when left out.
+
+class PlayStatus(TypedDict, total=False):
+    """What `replay.play` and `replay.set` answer with."""
+
+    angle: str
+    duration_ms: int
+    # How long it plays at this speed.
+    event: Optional[str]
+    position_ms: int
+    # Where it is, in milliseconds of playback.
+    source: str
+    # The source it plays on.
+    speed: float
+
 class Playback(TypedDict, total=False):
     """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
@@ -3671,6 +3747,49 @@ class ReorderRequest(TypedDict, total=False):
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch.
 
+class ReplayConfig(TypedDict, total=False):
+    """The `[replay]` table. With no angles nothing is built."""
+
+    angles: List[str]
+    # The angles to record: source ids, and `programme` for the programme itself. Empty turns replay off.
+    bitrate_kbps: int
+    # The bitrate a source angle is encoded at, in kbit/s. 0 or left out is the programme's own bitrate.
+    seconds: int
+    # Seconds each angle keeps, 1 to 1800. 60 when left out.
+
+class ReplayEvent(TypedDict, total=False):
+    """One event: a stretch of time between an in point and an out point, the same stretch on every angle."""
+
+    angle: Optional[str]
+    # The angle it was marked on, which playback starts from.
+    id: str
+    # A slug the mixer gives it: `replay-1`, `replay-2`.
+    in_ms: int
+    # The in point, in milliseconds of the mixer's clock.
+    name: str
+    # What the desk shows. The id until it is renamed.
+    out_ms: Optional[int]
+    # The out point. Absent while the event is still open (marked in and not out yet).
+
+class ReplaySetRequest(TypedDict, total=False):
+    """`replay.set`: change the angle or the speed of a replay that is playing, from the frame it is on."""
+
+    angle: Optional[str]
+    source: Optional[str]
+    speed: Optional[float]
+
+class ReplayStatus(TypedDict, total=False):
+    """`replay.get`: everything about replay on this mixer."""
+
+    angles: List[AngleStatus]
+    config: ReplayConfig
+    events: List[ReplayEvent]
+    # Every event, oldest first. An event whose stretch has left every ring is still listed until it is deleted, and plays nothing.
+    now_ms: int
+    # The mixer's clock now, in the same milliseconds as an event's points.
+    on: bool
+    # Whether anything is being recorded.
+
 class Report(TypedDict, total=False):
     """What `project.import` answers with."""
 
@@ -3763,6 +3882,27 @@ class SaveRequest(TypedDict, total=False):
     # The new preset's name. A slug: lower case letters, digits and hyphens.
     out: Optional[str]
     # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
+class SaveRequest2(TypedDict, total=False):
+    """`replay.save`: write an event, or the whole buffer of one angle, to an MP4 in the media folder without encoding it again."""
+
+    angle: Optional[str]
+    # The angle to save. The event's own, then `programme` if it is recorded, then the first angle.
+    event: Optional[str]
+    # The event to save. The whole buffer when left out.
+    name: Optional[str]
+    # The file's name, without a folder. Made from the time when left out.
+
+class SaveStatus(TypedDict, total=False):
+    """What `replay.save` answers with once the file is written."""
+
+    angle: str
+    bytes: int
+    duration_ms: int
+    name: str
+    # The file, as the media library names it: `Replays/<name>.mp4`.
+    path: str
+    # Its absolute path on the mixer's machine.
 
 class ScanRequest(TypedDict, total=False):
     """`headend.scan`."""
@@ -5291,6 +5431,9 @@ Id = str
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
 
+# Which point `replay.mark` sets.
+MarkPoint = Literal['in', 'out']
+
 # Why a source is not running.
 MissingWhy = Literal['failed', 'not_started', 'removed', 'unknown']
 
@@ -5545,6 +5688,16 @@ METHODS = (
     {"name": "prompter.speed", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/speed"), "summary": 'Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.'},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
     {"name": "rendition.presets", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/presets"), "summary": 'Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.'},
+    {"name": "replay.event.delete", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/event/delete"), "summary": 'Forget a replay event. The recording it pointed at is not touched.'},
+    {"name": "replay.event.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/replay/event/list"), "summary": 'Every replay event, oldest first.'},
+    {"name": "replay.event.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/event/rename"), "summary": 'Give a replay event a name.'},
+    {"name": "replay.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/replay"), "summary": "Whether replay is on, each angle's buffer depth and size, and every event."},
+    {"name": "replay.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/mark"), "summary": 'Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.'},
+    {"name": "replay.play", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/play"), "summary": 'Play an event, or the last seconds of an angle, on a replay source, added if it is not there.'},
+    {"name": "replay.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/save"), "summary": 'Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.'},
+    {"name": "replay.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/set"), "summary": "Change a playing replay's angle or speed, from the frame it is on."},
+    {"name": "replay.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/start"), "summary": 'Record these angles, each the last `seconds`. Called again, it changes them in place.'},
+    {"name": "replay.stop", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/replay/stop"), "summary": 'Stop recording, free every buffer and forget every event.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
     {"name": "scene.apply_graphic", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_graphic"), "summary": 'Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.'},
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
@@ -8055,6 +8208,147 @@ class GeneratedMethods:
         """Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why."""
         params: Dict[str, Any] = {}
         return await self._call("rendition.presets", params)
+
+    async def replay_event_delete(
+        self,
+        id: str,
+    ) -> EventIdRequest:
+        """Forget a replay event. The recording it pointed at is not touched."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("replay.event.delete", params)
+
+    async def replay_event_list(
+        self,
+    ) -> EventList:
+        """Every replay event, oldest first."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.event.list", params)
+
+    async def replay_event_rename(
+        self,
+        id: str,
+        name: str,
+    ) -> ReplayEvent:
+        """Give a replay event a name."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["name"] = name
+        return await self._call("replay.event.rename", params)
+
+    async def replay_get(
+        self,
+    ) -> ReplayStatus:
+        """Whether replay is on, each angle's buffer depth and size, and every event."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.get", params)
+
+    async def replay_mark(
+        self,
+        *,
+        angle: Optional[str] = None,
+        name: Optional[str] = None,
+        point: Optional[Union[MarkPoint, None]] = None,
+        seconds: Optional[float] = None,
+    ) -> ReplayEvent:
+        """Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if name is not None:
+            params["name"] = name
+        if point is not None:
+            params["point"] = point
+        if seconds is not None:
+            params["seconds"] = seconds
+        return await self._call("replay.mark", params)
+
+    async def replay_play(
+        self,
+        *,
+        angle: Optional[str] = None,
+        event: Optional[str] = None,
+        seconds: Optional[float] = None,
+        source: Optional[str] = None,
+        speed: Optional[float] = None,
+        take: Optional[bool] = None,
+        transition: Optional[Union[Transition, None]] = None,
+    ) -> PlayStatus:
+        """Play an event, or the last seconds of an angle, on a replay source, added if it is not there."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if event is not None:
+            params["event"] = event
+        if seconds is not None:
+            params["seconds"] = seconds
+        if source is not None:
+            params["source"] = source
+        if speed is not None:
+            params["speed"] = speed
+        if take is not None:
+            params["take"] = take
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("replay.play", params)
+
+    async def replay_save(
+        self,
+        *,
+        angle: Optional[str] = None,
+        event: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> SaveStatus:
+        """Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if event is not None:
+            params["event"] = event
+        if name is not None:
+            params["name"] = name
+        return await self._call("replay.save", params)
+
+    async def replay_set(
+        self,
+        *,
+        angle: Optional[str] = None,
+        source: Optional[str] = None,
+        speed: Optional[float] = None,
+    ) -> PlayStatus:
+        """Change a playing replay's angle or speed, from the frame it is on."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if source is not None:
+            params["source"] = source
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("replay.set", params)
+
+    async def replay_start(
+        self,
+        *,
+        angles: Optional[List[str]] = None,
+        bitrate_kbps: Optional[int] = None,
+        seconds: Optional[int] = None,
+    ) -> ReplayStatus:
+        """Record these angles, each the last `seconds`. Called again, it changes them in place."""
+        params: Dict[str, Any] = {}
+        if angles is not None:
+            params["angles"] = angles
+        if bitrate_kbps is not None:
+            params["bitrate_kbps"] = bitrate_kbps
+        if seconds is not None:
+            params["seconds"] = seconds
+        return await self._call("replay.start", params)
+
+    async def replay_stop(
+        self,
+    ) -> ReplayStatus:
+        """Stop recording, free every buffer and forget every event."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.stop", params)
 
     async def scene_add(
         self,
