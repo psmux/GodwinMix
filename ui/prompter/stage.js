@@ -78,9 +78,12 @@ export class Stage {
     this.frame.classList.toggle("mirrored", this.mirrored);
   }
 
-  /** Put the point `position` rows down the script on the cue line. */
+  /**
+   * Put the point `position` rows down the script on the cue line: a whole
+   * number fills the band with that row, and a half is half way through it.
+   */
   draw(position) {
-    const y = this.cueY - position * this.lh;
+    const y = this.cueY - this.lh / 2 - position * this.lh;
     this.track.style.transform = `translate3d(0, ${y.toFixed(2)}px, 0)`;
   }
 }
