@@ -23,7 +23,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | A sound filter chain per source in the audio panel | API only | built in, UI | done in 0.3.20 |
 | Audio delay per source | whole programme only, at restart | built in, `delay/filter` | done in 0.3.20 |
 | Buses: a master fader, solo, cue and a headphone bus | fader, mute and meter per source | built in, `buses/` | done in 0.3.20 |
-| Mix minus for each guest | none | built in, with the guest return | done in 0.3.20, as a bus with `minus`; one per guest comes with the guest invites |
+| Mix minus for each guest | none | built in, with the guest return | done in 0.3.20, as a bus with `minus`; one per guest made with each guest's return on `feat/guest-invites` |
 | More than two channels | stereo only | built in | |
 | VST3 and LV2 effects | none | plugin, out of process | |
 | Loudness to a target (EBU R128, LUFS meter) | peak meters | built in | |
@@ -37,7 +37,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | |
 | Replay buffer: save the last minutes to a file | none | built in, the same ring | |
 | ISO recording of every input, separate audio tracks | only channel feeds | built in, the recording output with a source as its target | |
-| Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in | |
+| Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in, `guest.*`, `/guest/<id>/whip` and `/whep` | on `feat/guest-invites` |
 | Downstream keys or overlay channels that survive every take | a graphic has to be in each scene | built in | |
 | Aux outputs: one source out on its own | outputs carry the programme | built in | |
 | Multiview layouts, and multiview out over NDI or to a screen | one fixed mosaic in the browser | built in | |
