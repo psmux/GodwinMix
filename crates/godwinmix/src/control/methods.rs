@@ -19,6 +19,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 pub mod agent;
+mod audio;
 mod agent_setup;
 pub mod channel_destinations;
 mod channels;
@@ -99,6 +100,7 @@ pub fn registry() -> Registry<Call> {
     agent::register(&mut reg);
     agent_setup::register(&mut reg);
     filters::register(&mut reg);
+    audio::register(&mut reg);
     scenes::register(&mut reg);
     presence::register(&mut reg);
     preview::register(&mut reg);

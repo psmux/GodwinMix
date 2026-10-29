@@ -209,6 +209,19 @@ export type Audio = "follow" | "always" | "never";
 
 export type AudioCodec = "aac" | "opus" | "mp3" | "ac3" | "pcm" | "other";
 
+/** One sound card a bus can be played on. */
+export interface AudioDevice {
+  api?: string | null;
+  id: string;
+  index: number;
+  name: string;
+}
+
+/** `audio.device.list`. */
+export interface AudioDeviceList {
+  devices: AudioDevice[];
+}
+
 /**
  * `source.audio.set` takes an id as well as the levels: the id comes off the
  * path on REST and out of the params on `/rpc`, and both land in one object.
@@ -227,6 +240,13 @@ export interface AudioShape {
   channels: number;
   codec: AudioCodec;
   sample_rate: number;
+}
+
+/** The audio desk as `audio.bus.list` and the status snapshot report it. */
+export interface AudioStatus {
+  buses: BusStatus[];
+  cue?: string[];
+  master: MasterConfig;
 }
 
 /** The audio an output wants. Every field left out is taken from the source. */
@@ -363,6 +383,60 @@ export interface BundleAsset {
   path: string;
   sha256: string;
   size: number;
+}
+
+/**
+ * One bus: a mix of its own beside the programme.
+ *
+ * Three kinds, decided by two keys. With neither, it carries each source at
+ * the level its `sends` give it (a source with no send is not on it). With
+ * `minus`, it is the programme as heard, without that one source: a guest's
+ * return. With `cue`, it carries the sources marked cue at unity, and the
+ * programme while nothing is marked.
+ */
+export interface BusConfig {
+  cue?: boolean;
+  device?: string | null;
+  gain?: number;
+  id: string;
+  minus?: string | null;
+  muted?: boolean;
+  name?: string | null;
+  sends?: Record<string, unknown>;
+}
+
+/** `audio.bus.remove`, and anything else that names one bus. */
+export interface BusIdRequest {
+  id: string;
+}
+
+/**
+ * `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
+ * on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
+ */
+export interface BusSetRequest {
+  device?: string | null;
+  gain?: number | null;
+  id: string;
+  minus?: string | null;
+  muted?: boolean | null;
+  name?: string | null;
+}
+
+/** One bus and what is using it. */
+export interface BusStatus {
+  cue?: boolean;
+  device?: string | null;
+  device_state?: string | null;
+  gain?: number;
+  id: string;
+  kind: string;
+  listen: string;
+  minus?: string | null;
+  muted?: boolean;
+  name?: string | null;
+  outputs?: string[];
+  sends?: Record<string, unknown>;
 }
 
 /** `governor.calibrate`. */
@@ -780,6 +854,13 @@ export interface Crop {
   top: number;
 }
 
+/** `audio.cue.set`: mark or clear one source for the cue bus. */
+export interface CueSetRequest {
+  cue: boolean;
+  solo?: boolean;
+  source: string;
+}
+
 /** Whether an interlaced picture is made progressive. */
 export type Deinterlace = "off" | "on" | "auto";
 
@@ -1154,6 +1235,7 @@ export interface FilterListing {
 /** One filter as the core reports it. */
 export interface FilterRecord {
   id: string;
+  params?: Record<string, unknown>;
   side: string;
   source?: string | null;
   type: string;
@@ -1902,6 +1984,7 @@ export interface ImportObsRequest {
 
 export interface ImportReport {
   config_toml?: string | null;
+  filters_added?: string[] | null;
   filters_duplicated?: FilterReport[];
   items: number;
   scenes: string[];
@@ -2190,6 +2273,18 @@ export interface MarkRequest {
   label?: string | null;
 }
 
+/** A master fader and mute. */
+export interface MasterConfig {
+  gain?: number;
+  muted?: boolean;
+}
+
+/** `audio.master.set`. Only what is named moves. */
+export interface MasterSetRequest {
+  gain?: number | null;
+  muted?: boolean | null;
+}
+
 /** A rendition that follows a larger source's size, up to a limit. */
 export interface MatchSource {
   bitrate_kbps?: number | null;
@@ -2320,6 +2415,7 @@ export interface MediaTagged {
  * per second, rather than one message per meter as the legacy stream sends.
  */
 export interface Meters {
+  buses?: Record<string, unknown>;
   program: number[];
   sources: Record<string, unknown>;
 }
@@ -2348,6 +2444,7 @@ export type MissingWhy = "failed" | "not_started" | "removed" | "unknown";
 
 export interface MixerStatus {
   ad?: AdStatus | null;
+  audio?: AudioStatus | null;
   backend: BackendInfo;
   multiview: MultiviewStatus;
   outputs: OutputStatus[];
@@ -3222,6 +3319,13 @@ export interface SearchResults {
 export interface SeekParams {
   id: string;
   position_ms: number;
+}
+
+/** `audio.send.set`: how much of one source goes to one bus. */
+export interface SendSetRequest {
+  bus: string;
+  level: number;
+  source: string;
 }
 
 /** `core.session_log`. */
@@ -4267,6 +4371,14 @@ export interface MethodParams {
   "agent.setup": SetupRequest;
   "agent.state": AgentStateRequest;
   "agent.tools": Record<string, never>;
+  "audio.bus.add": BusConfig;
+  "audio.bus.list": Record<string, never>;
+  "audio.bus.remove": BusIdRequest;
+  "audio.bus.set": BusSetRequest;
+  "audio.cue.set": CueSetRequest;
+  "audio.device.list": Record<string, never>;
+  "audio.master.set": MasterSetRequest;
+  "audio.send.set": SendSetRequest;
   "channel.add": ChannelAddRequest;
   "channel.certificate.generate": CertificateGenerateRequest;
   "channel.certificate.set": CertificateSetRequest;
@@ -4521,6 +4633,14 @@ export interface MethodResults {
   "agent.setup": Setup;
   "agent.state": Record<string, unknown>;
   "agent.tools": Detected[];
+  "audio.bus.add": BusStatus;
+  "audio.bus.list": AudioStatus;
+  "audio.bus.remove": BusIdRequest;
+  "audio.bus.set": BusStatus;
+  "audio.cue.set": AudioStatus;
+  "audio.device.list": AudioDeviceList;
+  "audio.master.set": MasterConfig;
+  "audio.send.set": BusStatus;
   "channel.add": ChannelAdded;
   "channel.certificate.generate": CertificateInfo;
   "channel.certificate.set": CertificateInfo;
@@ -4830,6 +4950,14 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/agent/tools" } },
+  { name: "audio.bus.add", summary: "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/bus/add" } },
+  { name: "audio.bus.list", summary: "The programme master, every bus with its sends, and the sources marked cue.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/audio/bus/list" } },
+  { name: "audio.bus.remove", summary: "Take a bus out, live. Refused while an output takes its sound from it.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/audio/bus/remove" } },
+  { name: "audio.bus.set", summary: "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/bus/set" } },
+  { name: "audio.cue.set", summary: "Mark or clear a source for the cue bus. `solo` clears every other mark first.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/cue/set" } },
+  { name: "audio.device.list", summary: "The sound outputs on the mixer's machine that a bus can play on.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/audio/device/list" } },
+  { name: "audio.master.set", summary: "Move the programme's master fader or mute. Only what is named moves.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/master/set" } },
+  { name: "audio.send.set", summary: "Set how much of one source goes to one bus. 0 takes it off the bus.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/send/set" } },
   { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/generate" } },
   { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/set" } },
@@ -5167,6 +5295,46 @@ export class GeneratedMethods {
   /** The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. */
   agentTools(): Promise<Detected[]> {
     return this._call("agent.tools", {}) as Promise<Detected[]>;
+  }
+
+  /** Add a bus beside the programme mix, live. Nothing is built for buses until the first one. */
+  audioBusAdd(params: BusConfig): Promise<BusStatus> {
+    return this._call("audio.bus.add", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
+  }
+
+  /** The programme master, every bus with its sends, and the sources marked cue. */
+  audioBusList(): Promise<AudioStatus> {
+    return this._call("audio.bus.list", {}) as Promise<AudioStatus>;
+  }
+
+  /** Take a bus out, live. Refused while an output takes its sound from it. */
+  audioBusRemove(params: BusIdRequest): Promise<BusIdRequest> {
+    return this._call("audio.bus.remove", params as unknown as Record<string, unknown>) as Promise<BusIdRequest>;
+  }
+
+  /** Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card. */
+  audioBusSet(params: BusSetRequest): Promise<BusStatus> {
+    return this._call("audio.bus.set", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
+  }
+
+  /** Mark or clear a source for the cue bus. `solo` clears every other mark first. */
+  audioCueSet(params: CueSetRequest): Promise<AudioStatus> {
+    return this._call("audio.cue.set", params as unknown as Record<string, unknown>) as Promise<AudioStatus>;
+  }
+
+  /** The sound outputs on the mixer's machine that a bus can play on. */
+  audioDeviceList(): Promise<AudioDeviceList> {
+    return this._call("audio.device.list", {}) as Promise<AudioDeviceList>;
+  }
+
+  /** Move the programme's master fader or mute. Only what is named moves. */
+  audioMasterSet(params: MasterSetRequest = {}): Promise<MasterConfig> {
+    return this._call("audio.master.set", params as unknown as Record<string, unknown>) as Promise<MasterConfig>;
+  }
+
+  /** Set how much of one source goes to one bus. 0 takes it off the bus. */
+  audioSendSet(params: SendSetRequest): Promise<BusStatus> {
+    return this._call("audio.send.set", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
   }
 
   /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. */

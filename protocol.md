@@ -39,6 +39,14 @@ Keys accepted on every method, handled before a method runs.
 | `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
 | `agent.tools` | `POST /api/v1/agent/tools` | admin |  | 1 | The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. |
+| `audio.bus.add` | `POST /api/v1/audio/bus/add` | operate |  | 1 | Add a bus beside the programme mix, live. Nothing is built for buses until the first one. |
+| `audio.bus.list` | `GET /api/v1/audio/bus/list` | read |  | 1 | The programme master, every bus with its sends, and the sources marked cue. |
+| `audio.bus.remove` | `POST /api/v1/audio/bus/remove` | operate | yes | 1 | Take a bus out, live. Refused while an output takes its sound from it. |
+| `audio.bus.set` | `POST /api/v1/audio/bus/set` | operate |  | 1 | Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card. |
+| `audio.cue.set` | `POST /api/v1/audio/cue/set` | operate |  | 1 | Mark or clear a source for the cue bus. `solo` clears every other mark first. |
+| `audio.device.list` | `GET /api/v1/audio/device/list` | read |  | 1 | The sound outputs on the mixer's machine that a bus can play on. |
+| `audio.master.set` | `POST /api/v1/audio/master/set` | operate |  | 1 | Move the programme's master fader or mute. Only what is named moves. |
+| `audio.send.set` | `POST /api/v1/audio/send/set` | operate |  | 1 | Set how much of one source goes to one bus. 0 takes it off the bus. |
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. |
 | `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
 | `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
@@ -371,6 +379,142 @@ The AI agent tools this mixer can set up, the ones installed on its machine firs
       "$ref": "#/$defs/Detected"
     },
     "type": "array"
+  }
+}
+```
+
+#### `audio.bus.add`
+
+Add a bus beside the programme mix, live. Nothing is built for buses until the first one.
+
+MCP tool `add_audio_bus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusConfig"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
+  }
+}
+```
+
+#### `audio.bus.list`
+
+The programme master, every bus with its sends, and the sources marked cue.
+
+MCP tool `list_audio_buses` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioStatus"
+  }
+}
+```
+
+#### `audio.bus.remove`
+
+Take a bus out, live. Refused while an output takes its sound from it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusIdRequest"
+  }
+}
+```
+
+#### `audio.bus.set`
+
+Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.
+
+MCP tool `set_audio_bus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
+  }
+}
+```
+
+#### `audio.cue.set`
+
+Mark or clear a source for the cue bus. `solo` clears every other mark first.
+
+MCP tool `set_audio_cue` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CueSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioStatus"
+  }
+}
+```
+
+#### `audio.device.list`
+
+The sound outputs on the mixer's machine that a bus can play on.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioDeviceList"
+  }
+}
+```
+
+#### `audio.master.set`
+
+Move the programme's master fader or mute. Only what is named moves.
+
+MCP tool `set_master_audio` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MasterSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/MasterConfig"
+  }
+}
+```
+
+#### `audio.send.set`
+
+Set how much of one source goes to one bus. 0 takes it off the bus.
+
+MCP tool `set_audio_send` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SendSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
   }
 }
 ```
@@ -4468,7 +4612,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/channel.changed` |  |  | A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only. |
 | `event/channel.removed` |  |  | A channel was removed. Its publishers were turned away and its keys forgotten. |
 | `event/channel.refused` |  |  | A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it. |
-| `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
+| `event/meters` | `meters` | `audio_level, source_audio_level, bus_audio_level` | Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |
 | `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |

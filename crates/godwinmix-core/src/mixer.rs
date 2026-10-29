@@ -830,6 +830,16 @@ impl MixerHandle {
         self.ask(Command::SetAudio { source, gain, muted, page, media, reply: tx }, rx).await
     }
 
+    /// One `audio.*` call, answered with the whole desk or the refusal. See
+    /// `crate::buses`.
+    pub async fn audio(
+        &self,
+        call: crate::buses::AudioCall,
+    ) -> Result<Result<godwinmix_protocol::buses::AudioStatus, crate::buses::Refusal>> {
+        let (tx, rx) = oneshot::channel();
+        self.ask(Command::Audio(call, Some(tx)), rx).await
+    }
+
     /// Move a source and get back where it actually landed. Waits on a value
     /// like `set_audio` does: the answer is a position, and "this is a camera"
     /// is not a failure the caller should see as a generic 400.
