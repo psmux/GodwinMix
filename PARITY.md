@@ -26,7 +26,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Mix minus for each guest | none | built in, with the guest return | done in 0.3.20, as a bus with `minus`; one per guest comes with the guest invites |
 | More than two channels | stereo only | built in | |
 | VST3 and LV2 effects | none | plugin, out of process | |
-| Loudness to a target (EBU R128, LUFS meter) | peak meters | built in | |
+| Loudness to a target (EBU R128) | peak meters | built in, `loudness/filter` | on `feat/loudness`; a LUFS meter in the panel is still to do |
 
 ## Production
 

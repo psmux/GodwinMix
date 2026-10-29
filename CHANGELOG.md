@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* A loudness target, `loudness/filter`: it measures BS.1770 loudness over EBU R128's three second window and rides the gain towards `target_lufs` (-14 by default, where YouTube and Spotify play), at a speed you set, holding still in a pause. On the programme with a limiter after it, a stream sits at the level every platform expects. A stereo 1 kHz tone at 0 dBFS reads 0 LUFS, as EBU Tech 3341 asks, and it costs 0.07% of one core. It is in the Audio panel's FX as Loudness target.
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.
