@@ -86,7 +86,7 @@ impl Loudness {
 /// the cookbook's reads a 1 kHz tone a quarter of a decibel low.
 fn k_weighting(rate: u32, channels: usize) -> Vec<Biquad> {
     let fs = rate.max(1) as f64;
-    let k = (std::f64::consts::PI * 1681.974_450_955_532 / fs).tan();
+    let k = (std::f64::consts::PI * 1_681.974_450_955_532 / fs).tan();
     let (q, vh) = (0.707_175_236_955_419_3, 10f64.powf(3.999_843_853_97 / 20.0));
     let vb = vh.powf(0.499_666_774_154_541_6);
     let a0 = 1.0 + k / q + k * k;
