@@ -80,7 +80,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | RIST Main Profile and encryption | Simple Profile | built in | |
 | RTSP server with a login per stream | programme only, no login | plugin, `rtsp` | |
 | MPEG-2 encode, E-AC-3 conversion, AV1 ingest sized | not yet | built in, the codec catalogue | |
-| Per channel metrics in Prometheus | in the API only | built in | |
+| Per channel metrics in Prometheus | in the API only | built in, `station/metrics.rs` | on `feat/station-metrics` |
 | Browsing and playing back recordings | none | built in, UI | |
 
 ## Performance

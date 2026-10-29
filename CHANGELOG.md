@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* A station answers `GET /metrics/shows` with every show's health, input and outputs as Prometheus series labelled by show and output: a headend of fifty channels is one scrape, read from what `show.stats` holds and only when something scrapes. Before, those numbers were in the API only. See [the metrics reference](docs/reference/metrics.md#every-show-on-a-station).
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.
