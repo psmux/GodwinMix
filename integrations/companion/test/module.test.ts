@@ -210,6 +210,24 @@ describe("actions", () => {
     assert.deepEqual(seeks, [{ step: -1 }, { marker: "Weather" }]);
   });
 
+  it("the replay buttons mark, play the last event and save", async () => {
+    const fake = await core({ onSubscribe: serveSession });
+    fake.answer("replay.mark", { id: "replay-1" });
+    fake.answer("replay.event.list", { events: [{ id: "replay-1", out_ms: 9 }, { id: "replay-2" }] });
+    fake.answer("replay.play", { source: "replay" });
+    fake.answer("replay.save", { name: "Replays/a.mp4" });
+    const link = await linked(fake);
+
+    await ACTIONS.replay_mark.run(link, { point: "in", seconds: 2 });
+    await ACTIONS.replay_mark.run(link, { point: "last", seconds: 0 });
+    await ACTIONS.replay_play.run(link, { event: "", angle: "", speed: 0.5, take: true });
+    await ACTIONS.replay_save.run(link, { event: "" });
+    const marks = fake.calls.filter((c) => c.method === "replay.mark").map((c) => c.params);
+    assert.deepEqual(marks, [{ point: "in", seconds: 2 }, { seconds: 10 }]);
+    assert.deepEqual(fake.calls.find((c) => c.method === "replay.play")?.params, { speed: 0.5, take: true, event: "replay-1" });
+    assert.deepEqual(fake.calls.find((c) => c.method === "replay.save")?.params, {});
+  });
+
   it("every action has a name and a run", () => {
     for (const [id, action] of Object.entries(ACTIONS)) {
       assert.ok(action.name.length > 0, `${id} has a name`);

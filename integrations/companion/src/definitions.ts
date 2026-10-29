@@ -142,6 +142,56 @@ export const ACTIONS = {
     ],
     run: (link: Link, options: Options) => link.prompter("load", { id: text(options, "id"), play: options.play === true }),
   },
+  replay_mark: {
+    name: "Replay: mark in or out",
+    options: [
+      {
+        type: "dropdown",
+        id: "point",
+        label: "Which",
+        default: "in",
+        choices: [
+          { id: "in", label: "In point" },
+          { id: "out", label: "Out point" },
+          { id: "last", label: "The last seconds, as one event" },
+        ],
+      },
+      { type: "number", id: "seconds", label: "Seconds back (in point) or long (last seconds)", default: 0, min: 0, max: 1800, step: 1 },
+    ],
+    run: (link: Link, options: Options) => {
+      const seconds = number(options, "seconds", 0);
+      if (options.point === "last") return link.replay("mark", { seconds: seconds || 10 });
+      return link.replay("mark", seconds > 0 ? { point: options.point, seconds } : { point: options.point });
+    },
+  },
+  replay_play: {
+    name: "Replay: play",
+    options: [
+      { type: "textinput", id: "event", label: "Event id, empty for the last event", default: "", useVariables: true },
+      { type: "textinput", id: "angle", label: "Angle, empty for the event's own", default: "", useVariables: true },
+      { type: "number", id: "speed", label: "Speed (1 real time, 0.5 half)", default: 1, min: 0.1, max: 1, step: 0.05 },
+      { type: "checkbox", id: "take", label: "Put it on air", default: true },
+    ],
+    run: (link: Link, options: Options) => link.replayPlay(text(options, "event"), text(options, "angle"), number(options, "speed", 1), options.take !== false),
+  },
+  replay_set: {
+    name: "Replay: change angle or speed while it plays",
+    options: [
+      { type: "textinput", id: "angle", label: "Angle, empty to keep it", default: "", useVariables: true },
+      { type: "number", id: "speed", label: "Speed, 0 to keep it", default: 0, min: 0, max: 1, step: 0.05 },
+    ],
+    run: (link: Link, options: Options) => {
+      const params: Record<string, unknown> = {};
+      if (text(options, "angle")) params.angle = text(options, "angle");
+      if (number(options, "speed", 0) > 0) params.speed = number(options, "speed", 0);
+      return link.replay("set", params);
+    },
+  },
+  replay_save: {
+    name: "Replay: save the buffer",
+    options: [{ type: "textinput", id: "event", label: "Event id, empty for the whole buffer", default: "", useVariables: true }],
+    run: (link: Link, options: Options) => link.replay("save", text(options, "event") ? { event: text(options, "event") } : {}),
+  },
 } as const;
 
 export type ActionId = keyof typeof ACTIONS;
