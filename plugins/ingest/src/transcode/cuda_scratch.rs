@@ -22,7 +22,7 @@ impl Scratch {
             return Ok(self.ptr);
         }
         self.release(api);
-        super::cuda_deint::check((api.alloc)(&mut self.ptr, size), "allocating the copy")?;
+        super::cuda_launch::check((api.alloc)(&mut self.ptr, size), "allocating the copy")?;
         gstreamer::ffi::gst_object_ref(ctx.cast());
         (self.size, self.ctx) = (size, ctx as usize);
         Ok(self.ptr)

@@ -135,8 +135,9 @@ track to AAC at 128 kbit/s.
 
 Save your own from the profiles list: codec, size and how the picture fits
 (bars, crop or stretch), frame rate, bitrate, keyframe interval in seconds
-or frames, deinterlacing and its method (YADIF, Greedy H or linear; the
-deinterlace runs on the CPU, the scale and the encode stay on the GPU),
+or frames, deinterlacing and its method (YADIF, Greedy H or linear; on
+an NVIDIA card the deinterlace runs on the card with the scale and the
+encode),
 under Advanced the source's shape (as the stream says, or 16:9 or 4:3
 whatever it says), the encoder's preset and B frames, HD sources at their
 own size up to a height you pick with the bitrate there, more sizes for
