@@ -52,6 +52,7 @@ Start here if you have never run it.
 * [Make your plugin editable in every designer](how-to/extend-the-designer.md)
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
+* [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
@@ -178,6 +179,7 @@ Start here if you have never run it.
 * [Live data: the feed methods, events, formats and limits](reference/live-data.md)
 * [Feed paths and templates](reference/feed-paths.md)
 * [The chroma key](reference/chroma-key.md)
+* [Audio buses: the master, buses, cue and mix minus](reference/audio-buses.md)
 * [The cutout: a person with no screen behind them](reference/cutout.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
