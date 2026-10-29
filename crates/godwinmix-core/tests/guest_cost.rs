@@ -103,7 +103,7 @@ async fn guest_in(handle: &MixerHandle, id: &str) -> Browser {
     let out = whep(&format!("{source}-return"), Some(&source));
     handle.request(|ack| Command::AddOutput(Box::new(out), Some(ack))).await.expect("the return");
     let mut browser = Browser::start();
-    let shape = godwinmix_core::guest::Shape { fps: 30, rate: 48_000, channels: 2 };
+    let shape = godwinmix_core::guest::Shape { fps: godwinmix_core::config::FrameRate::whole(30), rate: 48_000, channels: 2 };
     let lan = godwinmix_core::preview::whep::IceConfig { stun: String::new(), turn: Vec::new() };
     let (_, answer) = godwinmix_core::guest::offer(id, &browser.offer(), shape, &lan).expect("the guest is answered");
     browser.answer(&answer);

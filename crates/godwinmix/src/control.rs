@@ -179,7 +179,7 @@ pub struct Engine {
 /// What a guest's session makes the picture and sound into: the canvas
 /// rate and the canvas's sound.
 fn guest_shape(cfg: &Config) -> godwinmix_core::guest::Shape {
-    godwinmix_core::guest::Shape { fps: cfg.canvas.fps.max(1), rate: cfg.canvas.sample_rate, channels: cfg.canvas.channels }
+    godwinmix_core::guest::Shape { fps: cfg.canvas.fps, rate: cfg.canvas.sample_rate, channels: cfg.canvas.channels }
 }
 
 /// Tell the mixer what the armed scene is, so a preview compositor draws it.

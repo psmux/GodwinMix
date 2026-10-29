@@ -4,7 +4,7 @@ use super::*;
 use crate::scene::document::{Content, Frame, Item, Scene};
 
 fn caps() -> CanvasCaps {
-    CanvasCaps::new(&crate::config::Canvas { width: 1920, height: 1080, fps: 30, sample_rate: 48000, channels: 2 })
+    CanvasCaps::new(&crate::config::Canvas { width: 1920, height: 1080, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 })
 }
 
 /// A full canvas scene of one source, and a lower third scene of another.

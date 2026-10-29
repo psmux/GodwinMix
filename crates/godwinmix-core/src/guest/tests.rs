@@ -10,7 +10,7 @@ use gstreamer::prelude::*;
 use gstreamer_webrtc as gst_webrtc;
 use std::time::{Duration, Instant};
 
-const SHAPE: Shape = Shape { fps: 30, rate: 48_000, channels: 2 };
+const SHAPE: Shape = Shape { fps: crate::config::FrameRate::whole(30), rate: 48_000, channels: 2 };
 
 fn lan() -> IceConfig {
     IceConfig { stun: String::new(), turn: Vec::new() }

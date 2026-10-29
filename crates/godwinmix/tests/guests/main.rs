@@ -157,7 +157,7 @@ async fn invites_are_kept_across_a_restart_and_refusals_say_what_to_send() {
     core.ok("guest.invite.create", json!({ "name": "Cara", "expires_in_secs": 3600 })).await;
     let file = core.path.with_file_name("godwinmix.guests.json");
     assert!(file.exists(), "the invites file is beside the config");
-    let shape = godwinmix_core::guest::Shape { fps: 30, rate: 48_000, channels: 2 };
+    let shape = godwinmix_core::guest::Shape { fps: godwinmix_core::config::FrameRate::whole(30), rate: 48_000, channels: 2 };
     let (detached, _rx) = godwinmix_core::mixer::MixerHandle::detached();
     let again = godwinmix::guests::Guests::open(&core.path, detached, shape);
     assert_eq!(again.list().guests[0].id, "cara", "the invite came back from the file");

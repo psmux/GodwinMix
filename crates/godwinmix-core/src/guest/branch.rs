@@ -76,7 +76,7 @@ fn video(pipeline: &gst::Pipeline, encoding: &str, channel: &str, shape: Shape) 
     } else {
         vec![make("rtpvp8depay", &format!("{channel}-vdepay"))?, make("vp8dec", &format!("{channel}-vdec"))?]
     };
-    let fixed = gst::Caps::builder("video/x-raw").field("format", "I420").field("framerate", gst::Fraction::new(shape.fps, 1)).build();
+    let fixed = gst::Caps::builder("video/x-raw").field("format", "I420").field("framerate", gst::Fraction::new(shape.fps.numer(), shape.fps.denom())).build();
     chain.push(make("videoconvert", &format!("{channel}-vconv"))?);
     chain.push(make("videorate", &format!("{channel}-vrate"))?);
     chain.push(crate::gstutil::capsfilter(&format!("{channel}-vcaps"), &fixed)?);
@@ -90,7 +90,7 @@ fn audio(pipeline: &gst::Pipeline, channel: &str, shape: Shape) -> Result<gst::E
     let caps = crate::caps::CanvasCaps {
         width: 0,
         height: 0,
-        fps: gst::Fraction::new(shape.fps, 1),
+        fps: gst::Fraction::new(shape.fps.numer(), shape.fps.denom()),
         sample_rate: shape.rate,
         channels: shape.channels,
     }

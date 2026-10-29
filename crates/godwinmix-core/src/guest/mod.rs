@@ -56,7 +56,7 @@ pub enum Link {
 /// What a session's media is made into before it crosses to the source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Shape {
-    pub fps: i32,
+    pub fps: crate::config::FrameRate,
     pub rate: i32,
     pub channels: i32,
 }

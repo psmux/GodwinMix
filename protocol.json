@@ -19726,6 +19726,11 @@
         "schemes": []
       },
       {
+        "description": "Brightness, contrast, gamma, saturation and hue",
+        "id": "color/filter",
+        "schemes": []
+      },
+      {
         "description": "The person cut out of the camera, with no green screen: a matting model on the GPU where there is one and the CPU where there is not",
         "id": "matte/filter",
         "schemes": []
@@ -19763,6 +19768,11 @@
       {
         "description": "Hold the sound back to meet a late picture",
         "id": "delay/filter",
+        "schemes": []
+      },
+      {
+        "description": "Ride the level towards a loudness target, in LUFS",
+        "id": "loudness/filter",
         "schemes": []
       },
       {

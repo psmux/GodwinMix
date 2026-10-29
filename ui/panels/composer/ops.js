@@ -143,7 +143,7 @@ export async function filterTypes(client) {
 }
 
 /** The sound filters, which the Audio panel puts on sources. */
-const SOUND = new Set(["gain", "eq", "gate", "expander", "compressor", "limiter", "delay", "denoise"]);
+const SOUND = new Set(["gain", "eq", "gate", "expander", "compressor", "limiter", "delay", "denoise", "loudness"]);
 
 /** What the built in filters are called in the menu. */
 export const FILTER_TITLES = {
