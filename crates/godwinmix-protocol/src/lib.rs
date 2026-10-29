@@ -71,6 +71,7 @@ pub mod page;
 pub mod plugin;
 pub mod presence;
 pub mod prompter;
+pub mod replay;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;
