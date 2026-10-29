@@ -19,11 +19,11 @@ Mark an item done only when it is merged with its tests and its how to page.
 
 | Item | Today | Where it goes | State |
 |---|---|---|---|
-| Gain, EQ, gate, expander, compressor, limiter, delay, noise suppression | the OBS names were imported and did nothing | built in, `plugin/filters/audio/` | on `feat/audio-filters` |
-| A sound filter chain per source in the audio panel | API only | built in, UI | on `feat/audio-filters` |
-| Audio delay per source | whole programme only, at restart | built in, `delay/filter` | on `feat/audio-filters` |
-| Buses: a master fader, solo, cue and a headphone bus | fader, mute and meter per source | built in, `buses/` | on `feat/audio-buses` |
-| Mix minus for each guest | none | built in, with the guest return | on `feat/audio-buses`, as a bus with `minus`; one per guest comes with the guest invites |
+| Gain, EQ, gate, expander, compressor, limiter, delay, noise suppression | the OBS names were imported and did nothing | built in, `plugin/filters/audio/` | done in 0.3.20 |
+| A sound filter chain per source in the audio panel | API only | built in, UI | done in 0.3.20 |
+| Audio delay per source | whole programme only, at restart | built in, `delay/filter` | done in 0.3.20 |
+| Buses: a master fader, solo, cue and a headphone bus | fader, mute and meter per source | built in, `buses/` | done in 0.3.20 |
+| Mix minus for each guest | none | built in, with the guest return | done in 0.3.20, as a bus with `minus`; one per guest comes with the guest invites |
 | More than two channels | stereo only | built in | |
 | VST3 and LV2 effects | none | plugin, out of process | |
 | Loudness to a target (EBU R128, LUFS meter) | peak meters | built in | |
@@ -32,7 +32,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 
 | Item | Today | Where it goes | State |
 |---|---|---|---|
-| Teleprompter: a page for a phone, tablet or a monitor behind glass, mirrored, several screens in step, speed from the desk, a pedal, a Stream Deck or an agent | none | built in, `prompter.*` methods and `/prompter/` | on `feat/teleprompter` |
+| Teleprompter: a page for a phone, tablet or a monitor behind glass, mirrored, several screens in step, speed from the desk, a pedal, a Stream Deck or an agent | none | built in, `prompter.*` methods and `/prompter/` | done in 0.3.20 |
 | Teleprompter that follows the speaker's voice | none | plugin | |
 | Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | |
 | Replay buffer: save the last minutes to a file | none | built in, the same ring | |
