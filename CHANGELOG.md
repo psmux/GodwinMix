@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.21 (2026-10-30)
 
 Guest invites, the way vMix Call and Wirecast Rendezvous have them.
 
@@ -12,6 +12,7 @@ Guest invites, the way vMix Call and Wirecast Rendezvous have them.
 * A Guests panel (View > Guests, or More on a phone): invite, copy the link, show the code, each guest's state (invited, joining, live, gone) and picture, Take, Mute, Talk and Revoke. It loads when first shown.
 * Up to eight guests at once. On an Apple M4 Pro one live guest costs the mixer under 1% of one core and eight together about a third of one. See [Invite a guest](docs/how-to/invite-a-guest.md) and [the reference](docs/reference/guest-invites.md).
 * MCP tools `create_guest_invite` and `list_guests`, behind `search_tools`.
+
 Instant replay, built in.
 
 * `replay.start` keeps the last `seconds` (60 by default, up to 30 minutes) of each angle you name, a source or the programme, in memory as the encoder wrote it: a ring of whole GOPs, so memory is the bitrate times the seconds, about 45 MB a minute at 6 Mbit/s. A source angle is encoded with the encoder the catalogue picked for the programme, VideoToolbox on a Mac, with a keyframe every second. The programme angle reads the programme encoder's own output and encodes nothing. Nothing is built until replay is on, and `replay.stop` leaves every pipeline as it was. `[replay]` in the config starts it with the mixer.
@@ -22,6 +23,7 @@ Instant replay, built in.
 * A Replay panel on the desk, loaded when first shown: the angles with how much each holds, mark in and out, the events, play or put on air at a speed, a change of angle while it plays, and save. I, O and P mark in, mark out and play the last event from anywhere on the desk. The Companion module has replay actions too.
 * The `esports` preset records the programme and its four players for a minute, with the Replay panel in its layout. It used to name a `replay` plugin that did not exist.
 * Agent tools behind `search_tools`: `get_replay`, `start_replay`, `mark_replay`, `play_replay`, `set_replay` and `save_replay`. See [Instant replay](docs/how-to/instant-replay.md) and [the reference](docs/reference/replay.md).
+
 The camera, the microphone, the screen and web pages work in the Intel Mac app. These fixes were made and tried on a 2020 Intel iMac with macOS 15.7.9 in October, on a branch that was never merged, so no release since 0.3.12 carried them.
 
 * A camera that takes a moment to open now opens. A capture plugin answers `start` straight away and opens its device on a thread of its own, binding its socket only once the device is open, and the mixer connected to that socket about 100 ms after `start`. A camera slower than that failed with "Failed to connect socket: No such file or directory", the mixer stopped the plugin and tried again two seconds later, and on the iMac the built in camera lost that race 216 times in a row without macOS ever being asked for it. The mixer now waits up to 10 s for a plugin's sockets before reading them. This was so on every platform; a fast camera that had permission already usually won the race.
@@ -30,6 +32,7 @@ The camera, the microphone, the screen and web pages work in the Intel Mac app. 
 * The Mac web page renderer loads the GStreamer inside the app. It was left pointing at the build machine's copy and worked only because the mixer starts it with `DYLD_LIBRARY_PATH`.
 * The desktop app asks for the camera, the microphone and the screen on macOS, on Intel and Apple silicon alike. While a camera, microphone or screen source is in the show and not live, it asks macOS where that permission stands. When macOS has been told no before, and so will not ask again, or for the screen, which macOS never asked about in a way a person could act on, a window says what is needed and has an **Open System Settings** button that opens the exact page: Camera, Microphone, or Screen & System Audio Recording. Once the switch is on and the source is still dark, it offers to restart GodwinMix, since macOS applies a screen recording permission only when the app starts again. Before, a screen source sat on "connecting" with nothing anywhere to say why.
 * `gmx ctl take <name>` takes the scene of that name when no source has it, as its help says. It was refused with "there is no source", and only `--scene` worked.
+
 Sound, picture, keys, links and the server.
 
 * Installing the `.msi` over a desktop app that is open closes the app first, as the setup `.exe` already did. Windows used to close only the mixer, the app started it again as it does after a crash, and the upgrade left part of GStreamer for the next restart of the machine.

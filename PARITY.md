@@ -23,10 +23,10 @@ Mark an item done only when it is merged with its tests and its how to page.
 | A sound filter chain per source in the audio panel | API only | built in, UI | done in 0.3.20 |
 | Audio delay per source | whole programme only, at restart | built in, `delay/filter` | done in 0.3.20 |
 | Buses: a master fader, solo, cue and a headphone bus | fader, mute and meter per source | built in, `buses/` | done in 0.3.20 |
-| Mix minus for each guest | none | built in, with the guest return | done in 0.3.20, as a bus with `minus`; one per guest made with each guest's return on `feat/guest-invites` |
+| Mix minus for each guest | none | built in, with the guest return | done in 0.3.20, as a bus with `minus`; one per guest made with each guest's return in 0.3.21 |
 | More than two channels | stereo only | built in | |
 | VST3 and LV2 effects | none | plugin, out of process | |
-| Loudness to a target (EBU R128) | peak meters | built in, `loudness/filter` | on `feat/loudness`; a LUFS meter in the panel is still to do |
+| Loudness to a target (EBU R128) | peak meters | built in, `loudness/filter` | done in 0.3.21; a LUFS meter in the panel is still to do |
 
 ## Production
 
@@ -34,18 +34,18 @@ Mark an item done only when it is merged with its tests and its how to page.
 |---|---|---|---|
 | Teleprompter: a page for a phone, tablet or a monitor behind glass, mirrored, several screens in step, speed from the desk, a pedal, a Stream Deck or an agent | none | built in, `prompter.*` methods and `/prompter/` | done in 0.3.20 |
 | Teleprompter that follows the speaker's voice | none | plugin | |
-| Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | on `feat/replay` |
-| Replay buffer: save the last minutes to a file | none | built in, the same ring | on `feat/replay` |
+| Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | done in 0.3.21 |
+| Replay buffer: save the last minutes to a file | none | built in, the same ring | done in 0.3.21 |
 | ISO recording of every input, separate audio tracks | only channel feeds | built in, the recording output with a source as its target | |
-| Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in, `guest.*`, `/guest/<id>/whip` and `/whep` | on `feat/guest-invites` |
-| Downstream keys or overlay channels that survive every take | a graphic has to be in each scene | built in, `scene/server/keys.rs` | on `feat/downstream-keys` |
+| Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in, `guest.*`, `/guest/<id>/whip` and `/whep` | done in 0.3.21 |
+| Downstream keys or overlay channels that survive every take | a graphic has to be in each scene | built in, `scene/server/keys.rs` | done in 0.3.21 |
 | Aux outputs: one source out on its own | outputs carry the programme | built in | |
 | Multiview layouts, and multiview out over NDI or to a screen | one fixed mosaic in the browser | built in | |
 | Vertical and horizontal from one show | a second show sharing the cameras | built in, a second canvas | |
-| Colour correction: brightness, contrast, gamma, saturation, hue | the OBS names were imported and did nothing | built in, `plugin/filters/colour/` | on `feat/colour-filter` |
+| Colour correction: brightness, contrast, gamma, saturation, hue | the OBS names were imported and did nothing | built in, `plugin/filters/colour/` | done in 0.3.21 |
 | LUTs, sharpen, masks | the OBS names are imported and do nothing | built in filters, GL where there is a GPU | |
 | Virtual camera moves inside a set | 2D sets only | built in | |
-| 29.97 and 59.94 canvases | whole number rates only | built in, `config/rate.rs` | on `feat/ntsc-rates` |
+| 29.97 and 59.94 canvases | whole number rates only | built in, `config/rate.rs` | done in 0.3.21 |
 | HDR and 10 bit | 8 bit I420 | built in, behind a canvas setting | |
 | Closed captions: CEA-608 and 708 in the encode, live captions from speech | none | embedding built in, speech to text a plugin | |
 | Chat from every platform on screen and in one panel | none | plugin | |
@@ -74,7 +74,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | DVR, timeshift and catch up | live window only, 600 s at most | built in, the HLS output | |
 | SCTE-35 cues in and out | none | built in, the TS muxer and HLS | |
 | Teletext, subtitles and CEA-608 passed through | detected, dropped | built in, the TS muxer | |
-| Signed playback URLs | a static viewer key | built in, `hls/signed.rs` | on `feat/hls-signed-links`; a link can be held to one address |
+| Signed playback URLs | a static viewer key | built in, `hls/signed.rs` | done in 0.3.21; a link can be held to one address |
 | IP allow lists per output | none | built in | |
 | DRM | none | plugin | |
 | Origin and edge, clustering | none | built in, with nodes | |
@@ -82,7 +82,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | RIST Main Profile and encryption | Simple Profile | built in | |
 | RTSP server with a login per stream | programme only, no login | plugin, `rtsp` | |
 | MPEG-2 encode, E-AC-3 conversion, AV1 ingest sized | not yet | built in, the codec catalogue | |
-| Per channel metrics in Prometheus | in the API only | built in, `station/metrics.rs` | on `feat/station-metrics` |
+| Per channel metrics in Prometheus | in the API only | built in, `station/metrics.rs` | done in 0.3.21 |
 | Browsing and playing back recordings | none | built in, UI | |
 
 ## Performance
