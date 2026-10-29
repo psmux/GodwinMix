@@ -112,3 +112,6 @@ wasm = ["dep:godwinmix-wasm"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+# A guest's browser in the guest tests: already in the tree through the core.
+gstreamer-webrtc = "0.24"
+gstreamer-sdp = "0.24"

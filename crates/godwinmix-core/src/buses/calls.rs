@@ -52,7 +52,12 @@ impl Desk {
                 self.transient.insert(id);
             }
             AudioCall::Talk(call) => self.talk(call, around)?,
-            AudioCall::Talker { source, on } => self.mark_talker(&source, on),
+            AudioCall::Talker { source, on } => {
+                if on && !around.has_source(&source) {
+                    return Err(around.no_source(&source));
+                }
+                self.mark_talker(&source, on)
+            }
         }
         Ok(self.status(around.outputs_on))
     }

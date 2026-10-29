@@ -56,6 +56,7 @@ pub mod feeds;
 pub mod fx;
 pub mod gallery;
 pub mod graphics;
+pub mod guests;
 pub mod headend;
 pub mod health;
 pub mod idempotency;

@@ -153,6 +153,9 @@ pub struct AppState {
     /// The teleprompter's scripts and its place in them. No task and no
     /// timer: see `crate::prompter`.
     pub prompter: Arc<crate::prompter::Prompter>,
+    /// Guest invites and talkback. Nothing runs until a guest offers: see
+    /// `crate::guests`.
+    pub guests: Arc<crate::guests::Guests>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -171,6 +174,12 @@ pub struct Engine {
     /// The plugin singletons. Built before the mixer thread starts so a
     /// service is up by the time the first client connects.
     pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
+}
+
+/// What a guest's session makes the picture and sound into: the canvas
+/// rate and the canvas's sound.
+fn guest_shape(cfg: &Config) -> godwinmix_core::guest::Shape {
+    godwinmix_core::guest::Shape { fps: cfg.canvas.fps.max(1), rate: cfg.canvas.sample_rate, channels: cfg.canvas.channels }
 }
 
 /// Tell the mixer what the armed scene is, so a preview compositor draws it.
@@ -259,7 +268,8 @@ impl AppState {
             plugins,
             feeds: crate::feeds::Feeds::open(&cfg.source_path),
             presence: presence::Presence::new(),
-            prompter: crate::prompter::Prompter::open(&cfg.source_path, bus),
+            prompter: crate::prompter::Prompter::open(&cfg.source_path, bus.clone()),
+            guests: crate::guests::Guests::open(&cfg.source_path, bus, guest_shape(cfg)),
         }
     }
 
@@ -408,6 +418,8 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         // not the control token, so it sits outside every token check.
         .merge(whip::router(ctx.clone()))
         .merge(whep::router(ctx.clone()))
+        // A guest's camera and return: the invite's key lets them in.
+        .merge(crate::guests::router(ctx.clone()))
         .merge(legacy(ctx.clone(), max_upload))
         .merge(rest::router(ctx.clone(), max_upload))
         // The Tauri shell and a browser on another origin both need this. It

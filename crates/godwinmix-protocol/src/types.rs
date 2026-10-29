@@ -445,6 +445,8 @@ pub enum Event {
     PrompterChanged { state: Box<crate::prompter::PrompterState> },
     /// A prompter script was saved or removed.
     PrompterScriptChanged { changed: crate::prompter::ScriptChanged },
+    /// An invite, a guest's state or talkback changed. See `guests.rs`.
+    GuestChanged { list: Box<crate::guests::GuestList> },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

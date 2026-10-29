@@ -1520,6 +1520,8 @@ dependencies = [
  "godwinmix-wasm",
  "gstreamer",
  "gstreamer-app",
+ "gstreamer-sdp",
+ "gstreamer-webrtc",
  "libc",
  "parking_lot",
  "reqwest",

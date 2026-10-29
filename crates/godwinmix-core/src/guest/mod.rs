@@ -132,7 +132,9 @@ pub fn offer(id: &str, sdp: &str, shape: Shape, ice: &crate::preview::whep::IceC
     let g = guest(id);
     let old = g.session.lock().take();
     drop(old);
-    let name = format!("s{}", g.next.fetch_add(1, Ordering::Relaxed));
+    // Random as well as numbered: ending a session takes only its name.
+    let tail = crate::secrets::random_key(12).map_err(|e| Refusal::internal(format!("{e:#}")))?;
+    let name = format!("s{}-{tail}", g.next.fetch_add(1, Ordering::Relaxed));
     let (session, answer) = Session::start(id, &name, sdp, shape, ice)?;
     let stale = g.session.lock().replace((name.clone(), session));
     drop(stale);
