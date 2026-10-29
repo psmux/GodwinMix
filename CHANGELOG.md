@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+A teleprompter, built in. vMix and Wirecast have none, and OBS needs a plugin.
+
+* Scripts are kept on the station by slug id, each with a title and its words. A line that starts with `#` is a marker to jump to, and `*italic*` and `**bold**` are drawn. They live in `godwinmix.prompter.json` beside the config and come back after a restart, paused where the prompter last stopped.
+* `/prompter/` is the screen: a phone, a tablet or the monitor under the glass, full screen, with white words on black and a cue line. Any number of screens follow one state. Each scrolls by itself from the position, the moment it was true on the mixer's clock and the speed, so the mixer sends nothing while the words move. Two screens of 390 and 1920 pixels read 0.004 rows apart at the same moment.
+* The mixer breaks the text into rows at one width in characters for every screen, which is also the text size: every screen fits that many characters across, so a row on a phone is the same words as a row on the monitor.
+* Keys on the screen: Space plays and pauses, the arrows change the speed, Page Down and Page Up go between markers, which is what most foot pedals and clickers send, M mirrors this screen and F is full screen. A tap brings up the same buttons. A screen opened with a read token follows and says it cannot drive.
+* Mirror for beam splitter glass is set from the desk for every screen, and a screen can override it for itself.
+* View > Prompter is a desk panel to write and pick scripts and to drive the prompter while live: play, speed, markers, a slider for the place, the text size, margins, the cue line and the mirror. **Open on a screen** shows a code for a phone, carrying a read token made for it.
+* New methods: `prompter.get`, `prompter.rows`, `prompter.script.list`, `get`, `save` and `remove`, `prompter.load`, `play`, `pause`, `speed`, `seek` and `set`, and the events `prompter.changed` and `prompter.script.changed`, sent only to a client that subscribes to them. `prompter.speed` carries on from where the prompter is, so a plugin that follows the voice can send it as often as it likes. The agent tools are behind `search_tools`, and the Companion module has five prompter actions. See [Use the teleprompter](docs/how-to/use-the-teleprompter.md) and [the reference](docs/reference/prompter.md).
+
 ## 0.3.19 (2026-10-28)
 
 * A converted channel whose encoder failed twice in a row, as one NVENC encoder did when fifty channels started at once, sent nothing until its show was stopped and started again. The second failure came inside the five seconds between two builds of a node, so the node was never built again; and the failure stopped the decode's stream, whose input then filled and held the stream's thread for good. A node that fails again too soon is now built again once the five seconds are over, and the thread never waits on a decoder: one that takes nothing more loses whole GOPs at its own input instead. A converted pair whose name was still held by the stream's last session is tried again a second later instead of never.
