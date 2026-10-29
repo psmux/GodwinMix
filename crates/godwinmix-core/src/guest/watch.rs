@@ -46,7 +46,7 @@ pub fn watch(id: &str, session: &str, bin: gst::Element, stop: Arc<AtomicBool>) 
             let never = !was_live && started.elapsed() > CONNECT_WITHIN;
             let lost = away.is_some_and(|t| t.elapsed() > DISCONNECTED_FOR);
             if never || lost || matches!(state, Peer::Failed | Peer::Closed) {
-                super::lost(&id, &session);
+                super::calls::lost(&id, &session);
                 return;
             }
         }

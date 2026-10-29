@@ -17,12 +17,15 @@
 //! thread. The one timer is the expiry, a sleeping task armed while some
 //! invite has a live guest or was just made.
 
+mod admit;
 mod create;
 mod http;
 mod join;
 mod link;
 mod qr;
+mod qr_ecc;
 mod qr_grid;
+mod qr_score;
 mod store;
 mod talk;
 #[cfg(test)]
