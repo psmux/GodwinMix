@@ -34,7 +34,9 @@ export function drive(client, failed) {
   ]);
 
   function tick() {
-    if (!state || !state.rows) return;
+    if (!state) return;
+    // An empty prompter, after its script was removed, shows no place.
+    if (!state.rows) { where.textContent = ""; place.value = "0"; return; }
     const at = positionAt(state, Date.now());
     if (document.activeElement !== place) place.value = String(Math.round((at / state.rows) * 1000));
     where.textContent = `row ${Math.min(Math.floor(at) + 1, state.rows)} of ${state.rows}`;
