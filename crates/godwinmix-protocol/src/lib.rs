@@ -44,6 +44,7 @@
 
 pub mod action;
 pub mod backup;
+pub mod buses;
 pub mod destination;
 pub mod devices;
 pub mod rendition;

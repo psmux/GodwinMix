@@ -43,6 +43,7 @@
 //! it is built and run in CI.
 
 pub mod armed;
+pub mod buses;
 pub mod caps;
 pub mod catalogue;
 mod child_lines;
