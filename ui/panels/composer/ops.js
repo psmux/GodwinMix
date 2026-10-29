@@ -127,7 +127,9 @@ export async function filterTypes(client) {
     const found = [];
     for (const plugin of (list && list.plugins) || []) {
       for (const provide of plugin.provides || []) {
-        if (provide.kind === "filter") {
+        // A sound filter has no place on an item, which has no sound of its
+        // own: those go on a source, from the Audio panel's FX.
+        if (provide.kind === "filter" && !SOUND.has(plugin.name)) {
           const id = `${plugin.name}/${provide.id}`;
           found.push({ id, title: provide.title || FILTER_TITLES[id] || provide.id, plugin: plugin.name });
         }
@@ -140,9 +142,13 @@ export async function filterTypes(client) {
   return BUILT_IN_FILTERS;
 }
 
+/** The sound filters, which the Audio panel puts on sources. */
+const SOUND = new Set(["gain", "eq", "gate", "expander", "compressor", "limiter", "delay", "denoise"]);
+
 /** What the built in filters are called in the menu. */
 export const FILTER_TITLES = {
   "chroma/filter": "Chroma key: a green or blue screen",
+  "color/filter": "Colour: brightness, contrast, saturation and hue",
   "matte/filter": "Background cutout: no screen needed",
 };
 

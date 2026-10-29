@@ -25,7 +25,7 @@ mod eq;
 mod gain;
 mod gate;
 pub mod run;
-mod values;
+pub(crate) mod values;
 
 use crate::caps::CanvasCaps;
 use crate::config::Params;

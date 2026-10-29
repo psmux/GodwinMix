@@ -1844,6 +1844,10 @@ impl Config {
                 crate::plugin::filters::chroma::validate(&f.params)
                     .with_context(|| format!("filter {}", f.id))?;
             }
+            if f.type_id == crate::plugin::filters::colour::MANIFEST.provide_id() {
+                crate::plugin::filters::colour::validate(&f.params)
+                    .with_context(|| format!("filter {}", f.id))?;
+            }
             crate::plugin::filters::audio::validate(&f.type_id, &f.params)
                 .with_context(|| format!("filter {}", f.id))?;
             #[cfg(feature = "matte")]

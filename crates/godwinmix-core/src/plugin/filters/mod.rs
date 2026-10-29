@@ -3,5 +3,6 @@
 
 pub mod audio;
 pub mod chroma;
+pub mod colour;
 #[cfg(feature = "matte")]
 pub mod matte;

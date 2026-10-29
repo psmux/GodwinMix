@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* A colour correction filter, `color/filter`: brightness, contrast, gamma, saturation and hue, on a scene item, a source or the programme, with sliders in the composer that change the picture on air. It works in place through two lookup tables: nothing with every setting at 0 and 2% of one core at 1080p30 with all five on an Apple silicon MacBook. An OBS colour correction comes across with its settings, which used to arrive under this name and do nothing. See [Correct a camera's colour](docs/how-to/correct-a-cameras-colour.md).
+* The composer's Add a filter list no longer offers the sound filters, which do nothing on an item; they are in the Audio panel's FX.
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

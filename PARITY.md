@@ -42,7 +42,8 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Aux outputs: one source out on its own | outputs carry the programme | built in | |
 | Multiview layouts, and multiview out over NDI or to a screen | one fixed mosaic in the browser | built in | |
 | Vertical and horizontal from one show | a second show sharing the cameras | built in, a second canvas | |
-| Colour correction, LUTs, sharpen, masks | the OBS names are imported and do nothing | built in filters, GL where there is a GPU | |
+| Colour correction: brightness, contrast, gamma, saturation, hue | the OBS names were imported and did nothing | built in, `plugin/filters/colour/` | on `feat/colour-filter` |
+| LUTs, sharpen, masks | the OBS names are imported and do nothing | built in filters, GL where there is a GPU | |
 | Virtual camera moves inside a set | 2D sets only | built in | |
 | 29.97 and 59.94 canvases | whole number rates only | built in | |
 | HDR and 10 bit | 8 bit I420 | built in, behind a canvas setting | |

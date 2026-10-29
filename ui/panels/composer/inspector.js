@@ -287,6 +287,10 @@ export class Inspector {
         const { keyEditor } = await import("./key.js");
         list.appendChild(keyEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, source, set: (ref, params) => api.set(ref, params) }));
       }
+      if (filter.type === "color/filter") {
+        const { colourEditor } = await import("./colour.js");
+        list.appendChild(colourEditor({ filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
+      }
       if (filter.type === "matte/filter") {
         const { cutoutEditor } = await import("./cutout.js");
         list.appendChild(cutoutEditor({ filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
