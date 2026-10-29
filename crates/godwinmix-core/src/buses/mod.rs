@@ -71,5 +71,3 @@ pub fn bus_of_target(target: &str) -> Option<&str> {
     target.strip_prefix("bus:")
 }
 
-#[cfg(test)]
-mod tests;

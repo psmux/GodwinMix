@@ -6067,6 +6067,7 @@ mod tests {
     mod preview_churn;
     mod preview_rate;
     mod slow_restart;
+    mod buses;
     mod sound_only;
     mod supervision;
     mod stale_work;
