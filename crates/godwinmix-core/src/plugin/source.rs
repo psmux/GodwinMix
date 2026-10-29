@@ -132,6 +132,7 @@ static REGISTRY: &[Provide] = &[
     kinds::ticker::PROVIDE,
     kinds::template::PROVIDE,
     kinds::html::PROVIDE,
+    crate::guest::source::PROVIDE,
 ];
 
 /// The provide named by `type`, if this core has one.

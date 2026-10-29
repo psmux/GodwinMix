@@ -55,6 +55,7 @@ pub mod fx;
 pub mod gallery;
 pub mod graphics;
 pub mod gstutil;
+pub mod guest;
 pub mod hls;
 pub mod hooks;
 pub mod inherit;
