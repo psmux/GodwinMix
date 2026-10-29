@@ -46,6 +46,7 @@ mod preview;
 pub(crate) mod plugins;
 mod plugin_gallery;
 mod presence;
+mod prompter;
 pub mod presets;
 pub mod renditions;
 pub(crate) mod program;
@@ -101,6 +102,7 @@ pub fn registry() -> Registry<Call> {
     filters::register(&mut reg);
     scenes::register(&mut reg);
     presence::register(&mut reg);
+    prompter::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);
     plugin_gallery::register(&mut reg);

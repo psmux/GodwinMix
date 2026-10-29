@@ -69,6 +69,7 @@ pub mod output_error;
 pub mod page;
 pub mod plugin;
 pub mod presence;
+pub mod prompter;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;

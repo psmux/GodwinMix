@@ -150,6 +150,9 @@ pub struct AppState {
     /// Who is connected to `/rpc` and what each says it is editing. See
     /// `control/presence.rs`.
     pub presence: Arc<presence::Presence>,
+    /// The teleprompter's scripts and its place in them. No task and no
+    /// timer: see `crate::prompter`.
+    pub prompter: Arc<crate::prompter::Prompter>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -194,6 +197,7 @@ impl AppState {
             plugins,
         } = engine;
         let channels = channels_for(cfg, &plugins, &mixer, &scenes);
+        let bus = mixer.clone();
         join_channels_to_renditions(&channels);
         // A show under a station has no channels of its own to feed.
         if !crate::station::show::under_station() {
@@ -255,6 +259,7 @@ impl AppState {
             plugins,
             feeds: crate::feeds::Feeds::open(&cfg.source_path),
             presence: presence::Presence::new(),
+            prompter: crate::prompter::Prompter::open(&cfg.source_path, bus),
         }
     }
 

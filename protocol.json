@@ -8043,6 +8043,16 @@
             "null"
           ]
         },
+        "filters_added": {
+          "description": "With `add_sources`: the sound filters put on the added sources, by id.\nA sound filter stays on its source, as in OBS; one the mixer refused is\nin `skipped` with its reason.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "filters_duplicated": {
           "description": "OBS attaches a filter to a source, so a camera keyed in one scene is\nkeyed in all of them. Here filters belong to the item, so a source\nfilter is copied onto each placement and each copy is named here. This\nis the one thing an import changes the meaning of, so it is reported\nrather than left for somebody to find on air.",
           "items": {
@@ -9074,6 +9084,24 @@
       ],
       "type": "object"
     },
+    "LoadRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.load`: put a script on the prompter, paused at the top.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "play": {
+          "default": false,
+          "description": "Start playing at once.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "LogGstRequest": {
       "description": "`log.gst`.",
       "properties": {
@@ -9147,6 +9175,48 @@
       "required": [
         "level"
       ],
+      "type": "object"
+    },
+    "LookRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.set`: change how the text looks. Only what is named changes.",
+      "properties": {
+        "cue": {
+          "default": null,
+          "description": "Where the cue line sits, 0.1 to 0.9 of the height from the top.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "line_chars": {
+          "default": null,
+          "description": "Characters a row holds, 12 to 80. Fewer is bigger.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "margin": {
+          "default": null,
+          "description": "Percent of the width left on each side, 0 to 30.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mirror": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "MachineStatus": {
@@ -9231,6 +9301,26 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "Marker": {
+      "description": "A place in a script a person can jump to: a line that starts with `#`.",
+      "properties": {
+        "name": {
+          "description": "The words after the `#`, or `marker <n>` for a bare `#`.",
+          "type": "string"
+        },
+        "row": {
+          "description": "The row it starts on.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "row"
+      ],
       "type": "object"
     },
     "MatchSource": {
@@ -11414,6 +11504,22 @@
       ],
       "type": "object"
     },
+    "PlayRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.play`.",
+      "properties": {
+        "speed": {
+          "default": null,
+          "description": "Rows a second to play at. Left out keeps the speed it has.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Playback": {
       "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
       "properties": {
@@ -12137,6 +12243,110 @@
       ],
       "description": "`ext.programme`. `true`, `false`, or an object."
     },
+    "PrompterState": {
+      "description": "`prompter.get`, and the payload of `event/prompter.changed`.",
+      "properties": {
+        "at_ms": {
+          "description": "When `position` was true, on the mixer's clock.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cue": {
+          "description": "Where the cue line sits, as a fraction of the screen's height from the\ntop. The row at `position` is drawn on it. 0.1 to 0.9.",
+          "format": "double",
+          "type": "number"
+        },
+        "line_chars": {
+          "description": "The text size, as how many characters a row holds. Fewer is bigger.\nEvery screen fits this many across its own width, so all of them break\nthe rows in the same places. 12 to 80; 32 to start.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "margin": {
+          "description": "Space left on each side, as a percentage of the screen's width. 0 to 30.",
+          "format": "double",
+          "type": "number"
+        },
+        "markers": {
+          "items": {
+            "$ref": "#/$defs/Marker"
+          },
+          "type": "array"
+        },
+        "mirror": {
+          "description": "Flip the text left to right, for a screen read through beam splitter\nglass. A screen may override it for itself.",
+          "type": "boolean"
+        },
+        "now_ms": {
+          "description": "The mixer's clock as this was written, so a screen can tell how far\nits own clock is from it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "playing": {
+          "type": "boolean"
+        },
+        "position": {
+          "description": "Where the prompter was at `at_ms`, in rows from the top. 2.5 is half\nway through the third row.",
+          "format": "double",
+          "type": "number"
+        },
+        "revision": {
+          "description": "Moves on every change, so a screen can drop an answer older than the\nlast event it applied.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rows": {
+          "description": "How many rows it makes at `line_chars`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "script": {
+          "description": "The script on the prompter, or null when none is loaded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed": {
+          "description": "Rows a second. Negative scrolls back. It applies only while `playing`.",
+          "format": "double",
+          "type": "number"
+        },
+        "title": {
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_ms": {
+          "description": "When its text last changed, in milliseconds since the Unix epoch. A\nscreen asks `prompter.rows` again when this or `line_chars` moves.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "updated_ms",
+        "rows",
+        "markers",
+        "position",
+        "at_ms",
+        "speed",
+        "playing",
+        "line_chars",
+        "margin",
+        "mirror",
+        "cue",
+        "now_ms",
+        "revision"
+      ],
+      "type": "object"
+    },
     "PublishAddress": {
       "description": "Where an encoder is pointed for one protocol.",
       "properties": {
@@ -12736,6 +12946,64 @@
         }
       ]
     },
+    "Row": {
+      "description": "One row of a script.",
+      "properties": {
+        "line": {
+          "description": "The line it came from, counting from 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "marker": {
+          "description": "True for the rows of a marker line, drawn as a heading.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "The words, with any asterisks still in them.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "line"
+      ],
+      "type": "object"
+    },
+    "RowsAnswer": {
+      "description": "`prompter.rows`: the script on the prompter, broken into rows.",
+      "properties": {
+        "line_chars": {
+          "description": "The width the rows were made at.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/Row"
+          },
+          "type": "array"
+        },
+        "script": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "updated_ms",
+        "line_chars",
+        "rows"
+      ],
+      "type": "object"
+    },
     "RtmpInfo": {
       "description": "The RTMP port every channel shares.",
       "properties": {
@@ -13139,6 +13407,163 @@
       ],
       "type": "string"
     },
+    "Script": {
+      "description": "One script, as `prompter.script.get` and `prompter.script.save` answer.",
+      "properties": {
+        "id": {
+          "description": "A slug: `evening-news`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Plain text. A line starting with `#` is a marker, `*word*` is drawn in\nitalics and `**word**` in bold.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_ms": {
+          "description": "When it was last saved, in milliseconds since the Unix epoch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "text",
+        "updated_ms"
+      ],
+      "type": "object"
+    },
+    "ScriptChanged": {
+      "description": "`event/prompter.script.changed`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "removed": {
+          "description": "True when the script was removed.",
+          "type": "boolean"
+        },
+        "updated_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "removed",
+        "updated_ms"
+      ],
+      "type": "object"
+    },
+    "ScriptIdRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.script.get` and `prompter.script.remove`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ScriptList": {
+      "description": "`prompter.script.list`.",
+      "properties": {
+        "on": {
+          "description": "The one on the prompter now.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scripts": {
+          "description": "Every script, by id.",
+          "items": {
+            "$ref": "#/$defs/ScriptSummary"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "scripts"
+      ],
+      "type": "object"
+    },
+    "ScriptSaveRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.script.save`: make a script, or replace one with the same id.",
+      "properties": {
+        "id": {
+          "default": null,
+          "description": "A slug. Made from the title when left out: \"Evening news\" is\n`evening-news`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "The words. A line starting with `#` is a marker.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ScriptSummary": {
+      "description": "One script in `prompter.script.list`, without its text.",
+      "properties": {
+        "bytes": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lines": {
+          "description": "Lines as written, blank ones included.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "markers": {
+          "description": "The names of its markers, in order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "lines",
+        "markers",
+        "bytes",
+        "updated_ms"
+      ],
+      "type": "object"
+    },
     "SearchRequest": {
       "description": "`plugin.search`.",
       "properties": {
@@ -13237,6 +13662,57 @@
         "id",
         "position_ms"
       ],
+      "type": "object"
+    },
+    "SeekRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.seek`: exactly one of these.",
+      "properties": {
+        "by": {
+          "default": null,
+          "description": "Move this many rows on, or back when negative.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fraction": {
+          "default": null,
+          "description": "A fraction of the way through: 0 is the top, 1 the end.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "marker": {
+          "default": null,
+          "description": "A marker by name, or by its number counting from 1 as a string (\"2\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "row": {
+          "default": null,
+          "description": "A row, from 0. 2.5 is half way through the third row.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "step": {
+          "default": null,
+          "description": "Move this many markers on (1 is the next, -1 the one before). From\ninside a section, -1 goes to the start of that section.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "SessionLogRequest": {
@@ -15205,6 +15681,31 @@
         "has_video",
         "has_audio"
       ],
+      "type": "object"
+    },
+    "SpeedRequest": {
+      "additionalProperties": false,
+      "description": "`prompter.speed`: one of `speed` or `by`.\n\nShaped for something that follows the speaker as well as for a person: a\nplugin listening to the voice sends `speed` as often as it likes, and the\nscreens follow without a jump, since the position carries on from where it\nwas at the moment of the change.",
+      "properties": {
+        "by": {
+          "default": null,
+          "description": "Add this to the speed it has: what a key or a Stream Deck button sends.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "speed": {
+          "default": null,
+          "description": "Rows a second, -20 to 20. Negative scrolls back.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "StatsListing": {
@@ -17928,6 +18429,28 @@
     {
       "ext": null,
       "legacy": null,
+      "name": "event/prompter.changed",
+      "pattern": "prompter.changed",
+      "payload": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "since": "1",
+      "summary": "The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/prompter.script.changed",
+      "pattern": "prompter.script.changed",
+      "payload": {
+        "$ref": "#/$defs/ScriptChanged"
+      },
+      "since": "1",
+      "summary": "A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter."
+    },
+    {
+      "ext": null,
+      "legacy": null,
       "name": "event/health",
       "pattern": "health",
       "payload": {
@@ -18003,6 +18526,46 @@
       {
         "description": "The person cut out of the camera, with no green screen: a matting model on the GPU where there is one and the CPU where there is not",
         "id": "matte/filter",
+        "schemes": []
+      },
+      {
+        "description": "Turn a source's sound up or down, in decibels",
+        "id": "gain/filter",
+        "schemes": []
+      },
+      {
+        "description": "A low cut, bass, middle and treble, and up to ten bands of your own",
+        "id": "eq/filter",
+        "schemes": []
+      },
+      {
+        "description": "Silence the room between words",
+        "id": "gate/filter",
+        "schemes": []
+      },
+      {
+        "description": "Push quiet background sound further down",
+        "id": "expander/filter",
+        "schemes": []
+      },
+      {
+        "description": "Even out loud and quiet speech",
+        "id": "compressor/filter",
+        "schemes": []
+      },
+      {
+        "description": "Keep the sound under a ceiling, whatever comes in",
+        "id": "limiter/filter",
+        "schemes": []
+      },
+      {
+        "description": "Hold the sound back to meet a late picture",
+        "id": "delay/filter",
+        "schemes": []
+      },
+      {
+        "description": "Take fans, hum and traffic out from under a voice",
+        "id": "denoise/filter",
         "schemes": []
       }
     ],
@@ -22183,6 +22746,298 @@
       "scope": "admin",
       "since": "1",
       "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "prompter_state"
+      },
+      "mutating": false,
+      "name": "prompter.get",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/prompter"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "load_prompter_script"
+      },
+      "mutating": true,
+      "name": "prompter.load",
+      "params": {
+        "$ref": "#/$defs/LoadRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/load"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Put a script on the prompter, at the top and paused unless play is true."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "prompter_pause"
+      },
+      "mutating": true,
+      "name": "prompter.pause",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/pause"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop the prompter where it is."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "prompter_play"
+      },
+      "mutating": true,
+      "name": "prompter.play",
+      "params": {
+        "$ref": "#/$defs/PlayRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/play"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Start the prompter scrolling, at speed when given. From the end it starts again at the top."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "prompter.rows",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/rows"
+      },
+      "result": {
+        "$ref": "#/$defs/RowsAnswer"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "prompter.script.get",
+      "params": {
+        "$ref": "#/$defs/ScriptIdRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/prompter/script/get"
+      },
+      "result": {
+        "$ref": "#/$defs/Script"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One prompter script with its text."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_prompter_scripts"
+      },
+      "mutating": false,
+      "name": "prompter.script.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/prompter/script/list"
+      },
+      "result": {
+        "$ref": "#/$defs/ScriptList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "prompter.script.remove",
+      "params": {
+        "$ref": "#/$defs/ScriptIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/script/remove"
+      },
+      "result": {
+        "$ref": "#/$defs/ScriptChanged"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Forget a prompter script. When it is on the prompter the screens go empty."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "save_prompter_script"
+      },
+      "mutating": true,
+      "name": "prompter.script.save",
+      "params": {
+        "$ref": "#/$defs/ScriptSaveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/script/save"
+      },
+      "result": {
+        "$ref": "#/$defs/Script"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "prompter_seek"
+      },
+      "mutating": true,
+      "name": "prompter.seek",
+      "params": {
+        "$ref": "#/$defs/SeekRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/seek"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by)."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "prompter.set",
+      "params": {
+        "$ref": "#/$defs/LookRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/set"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "prompter_speed"
+      },
+      "mutating": true,
+      "name": "prompter.speed",
+      "params": {
+        "$ref": "#/$defs/SpeedRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/prompter/speed"
+      },
+      "result": {
+        "$ref": "#/$defs/PrompterState"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted."
     },
     {
       "destructive": false,

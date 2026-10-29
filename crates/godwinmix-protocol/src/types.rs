@@ -435,6 +435,10 @@ pub enum Event {
     /// A piece the mixer sets up on first use moved on: started, got further
     /// through a download, finished or stopped. See `setup.rs`.
     SetupChanged { setup: Box<crate::setup::SetupStatus> },
+    /// The teleprompter was loaded, played, paused, moved or restyled.
+    PrompterChanged { state: Box<crate::prompter::PrompterState> },
+    /// A prompter script was saved or removed.
+    PrompterScriptChanged { changed: crate::prompter::ScriptChanged },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.
