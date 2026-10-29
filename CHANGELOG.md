@@ -30,6 +30,7 @@ The camera, the microphone, the screen and web pages work in the Intel Mac app. 
 * The Mac web page renderer loads the GStreamer inside the app. It was left pointing at the build machine's copy and worked only because the mixer starts it with `DYLD_LIBRARY_PATH`.
 * The desktop app asks for the camera, the microphone and the screen on macOS, on Intel and Apple silicon alike. While a camera, microphone or screen source is in the show and not live, it asks macOS where that permission stands. When macOS has been told no before, and so will not ask again, or for the screen, which macOS never asked about in a way a person could act on, a window says what is needed and has an **Open System Settings** button that opens the exact page: Camera, Microphone, or Screen & System Audio Recording. Once the switch is on and the source is still dark, it offers to restart GodwinMix, since macOS applies a screen recording permission only when the app starts again. Before, a screen source sat on "connecting" with nothing anywhere to say why.
 * `gmx ctl take <name>` takes the scene of that name when no source has it, as its help says. It was refused with "there is no source", and only `--scene` worked.
+* Installing the `.msi` over a desktop app that is open closes the app first, as the setup `.exe` already did. Windows used to close only the mixer, the app started it again as it does after a crash, and the upgrade left part of GStreamer for the next restart of the machine.
 
 ## 0.3.20 (2026-10-29)
 
