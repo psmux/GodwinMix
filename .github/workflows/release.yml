@@ -472,6 +472,24 @@ jobs:
         shell: pwsh
         run: ./.github/windows-signing/sign-staged.ps1
 
+      # Tauri signs the app and the bundles it can see, not a loose library
+      # inside one of them. The Intel CEF download carries unsigned dylibs
+      # (libvulkan.dylib in the framework's Libraries), which the check after
+      # the disk image refuses. Each unsigned program is signed ad hoc here,
+      # innermost first, and the renderer's bundle is sealed again over them.
+      - name: Sign every program the app carries (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for dir in gstreamer plugins browser models onnxruntime; do
+            [ -d "tauri-app/$dir" ] || continue
+            find "tauri-app/$dir" -type f -print0 | while IFS= read -r -d '' f; do
+              case "$(head -c 4 "$f" | xxd -p)" in cffaedfe|cafebabe|feedfacf) ;; *) continue ;; esac
+              codesign -v "$f" 2>/dev/null || { echo "signing $f"; codesign --force --sign - "$f"; }
+            done
+          done
+          codesign --force --deep --sign - tauri-app/browser/godwinmix-browser.app
+
       - name: Bundle
         working-directory: tauri-app
         run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ env.WINDOWS_SIGN_CONFIG }}
