@@ -2097,6 +2097,14 @@ class GroupSourcesRequest(TypedDict, total=False):
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
 
+class GuestList(TypedDict, total=False):
+    """What `guest.invite.list` answers, and the payload of `event/guest.changed`."""
+
+    guests: List[Invite]
+    max_guests: int
+    # The most guests this show takes at once.
+    talkback: TalkbackState
+
 class HeadendChannel(TypedDict, total=False):
     """One channel."""
 
@@ -2402,6 +2410,70 @@ class InstanceRecord(TypedDict, total=False):
     restarts: int
     rss_bytes: Optional[int]
     state: str
+
+class Invite(TypedDict, total=False):
+    """One invite, without its key."""
+
+    bus: str
+    # The mix minus bus the guest hears, `guest-<id>`: the programme without the guest, with talkback added while it is held.
+    created: str
+    # When it was made, RFC 3339.
+    expires: str
+    # When it stops letting the guest in, RFC 3339. The guest is let go then.
+    id: str
+    # A slug, made from the name unless one was given.
+    name: str
+    # What the guest is called on screen and in the desk.
+    source: str
+    # The mixer source the guest's camera is, `guest-<id>`. It exists from the guest's first offer until the invite goes.
+    state: GuestState
+    talkback: bool
+    # Whether talkback is held into this guest's return now.
+
+class InviteCreateRequest(TypedDict, total=False):
+    """`guest.invite.create`."""
+
+    base: Optional[str]
+    # The address the link starts with, such as `https://studio.example.com`, for a mixer reached through a name or a tunnel. Left out, the first https address of this machine that is not loopback.
+    expires_in_secs: Optional[int]
+    # How long the invite lasts, in seconds. One day when left out; at most thirty days.
+    id: Optional[str]
+    # A slug for the invite. Made from the name when left out.
+    name: str
+    # The guest's name, as it should appear on screen. 1 to 64 characters.
+
+class InviteCreated(TypedDict, total=False):
+    """What `guest.invite.create` answers."""
+
+    id: str
+    invite: Invite
+    link: str
+    # The `/join/` page with the guest's id and key in the fragment, which a browser never sends to a server.
+    note: Optional[str]
+    # Set when no guest on another device could open the link as it stands, with what to change.
+    qr_svg: str
+    # The link as a QR code, an SVG document a page can show as it is.
+
+class InviteIdRequest(TypedDict, total=False):
+    """`guest.invite.revoke` and `guest.invite.link`."""
+
+    id: str
+
+class InviteLink(TypedDict, total=False):
+    """The link to send a guest, and the same as a QR code."""
+
+    id: str
+    link: str
+    # The `/join/` page with the guest's id and key in the fragment, which a browser never sends to a server.
+    note: Optional[str]
+    # Set when no guest on another device could open the link as it stands, with what to change.
+    qr_svg: str
+    # The link as a QR code, an SVG document a page can show as it is.
+
+class InviteRevoked(TypedDict, total=False):
+    """What `guest.invite.revoke` answers."""
+
+    revoked: Invite
 
 class ItemFilterRequest(TypedDict, total=False):
     """`scene.item.filter.set` and `remove`."""
@@ -4487,6 +4559,26 @@ class TakeRequest(TypedDict, total=False):
     transition: Union[Transition, None]
     # "fade", or {type, duration_ms, params}. Absent is a cut.
 
+class TalkbackRequest(TypedDict, total=False):
+    """`guest.talkback.set`."""
+
+    guest: Optional[str]
+    # The guest to talk to. Left out, every guest that is live or joining.
+    on: bool
+    # Hold talkback (true) or let it go (false).
+    source: Optional[str]
+    # Another input to talk with, such as a microphone on the mixer. It is muted on the programme from then on, for as long as it is the talkback source. Left out, the source stays what it was.
+
+class TalkbackState(TypedDict, total=False):
+    """Talkback as it stands."""
+
+    held: List[str]
+    # The guests it is held into now.
+    present: bool
+    # Whether that source is in the mixer now.
+    source: str
+    # The source that talks: `guest-talkback` (the operator's browser microphone, published to `/guest/talkback/whip`) unless another input was chosen. It is kept muted on the programme.
+
 class Tally(TypedDict, total=False):
     """`event/tally`."""
 
@@ -5187,6 +5279,9 @@ GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 't
 # Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA device index (0 is the first card), or `"auto"`, the card with the least work when the channel starts. All three steps stay on that one card, so a picture never crosses from one card's memory to another's.
 GpuPick = Union[int, GpuWord]
 
+# Where a guest is.
+GuestState = Literal['invited', 'joining', 'live', 'gone']
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
@@ -5355,6 +5450,11 @@ METHODS = (
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "gpu.rebalance", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gpu/rebalance"), "summary": 'Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.'},
     {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
+    {"name": "guest.invite.create", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/invite/create"), "summary": "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."},
+    {"name": "guest.invite.link", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/invite/link"), "summary": "An invite's link and QR code again, to copy or show."},
+    {"name": "guest.invite.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/guest/invite/list"), "summary": "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."},
+    {"name": "guest.invite.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/guest/invite/revoke"), "summary": "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."},
+    {"name": "guest.talkback.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/talkback/set"), "summary": 'Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.'},
     {"name": "headend.channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/add"), "summary": "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."},
     {"name": "headend.channel.bulk", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/bulk"), "summary": 'The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.'},
     {"name": "headend.channel.follow", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/follow"), "summary": 'Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.'},
@@ -5588,6 +5688,7 @@ EVENT_NAMES = (
     "presence.changed",
     "prompter.changed",
     "prompter.script.changed",
+    "guest.changed",
     "health",
 )
 
@@ -6839,6 +6940,66 @@ class GeneratedMethods:
         if since_ms is not None:
             params["since_ms"] = since_ms
         return await self._call("gpu.status", params)
+
+    async def guest_invite_create(
+        self,
+        name: str,
+        *,
+        base: Optional[str] = None,
+        expires_in_secs: Optional[int] = None,
+        id: Optional[str] = None,
+    ) -> InviteCreated:
+        """Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if base is not None:
+            params["base"] = base
+        if expires_in_secs is not None:
+            params["expires_in_secs"] = expires_in_secs
+        if id is not None:
+            params["id"] = id
+        return await self._call("guest.invite.create", params)
+
+    async def guest_invite_link(
+        self,
+        id: str,
+    ) -> InviteLink:
+        """An invite's link and QR code again, to copy or show."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("guest.invite.link", params)
+
+    async def guest_invite_list(
+        self,
+    ) -> GuestList:
+        """Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."""
+        params: Dict[str, Any] = {}
+        return await self._call("guest.invite.list", params)
+
+    async def guest_invite_revoke(
+        self,
+        id: str,
+    ) -> InviteRevoked:
+        """Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("guest.invite.revoke", params)
+
+    async def guest_talkback_set(
+        self,
+        on: bool,
+        *,
+        guest: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> GuestList:
+        """Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with."""
+        params: Dict[str, Any] = {}
+        params["on"] = on
+        if guest is not None:
+            params["guest"] = guest
+        if source is not None:
+            params["source"] = source
+        return await self._call("guest.talkback.set", params)
 
     async def headend_channel_add(
         self,

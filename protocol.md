@@ -113,6 +113,11 @@ Keys accepted on every method, handled before a method runs.
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `gpu.rebalance` | `POST /api/v1/gpu/rebalance` | admin |  | 1 | Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it. |
 | `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `guest.invite.create` | `POST /api/v1/guest/invite/create` | admin |  | 1 | Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise. |
+| `guest.invite.link` | `POST /api/v1/guest/invite/link` | admin |  | 1 | An invite's link and QR code again, to copy or show. |
+| `guest.invite.list` | `GET /api/v1/guest/invite/list` | read |  | 1 | Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback. |
+| `guest.invite.revoke` | `POST /api/v1/guest/invite/revoke` | admin | yes | 1 | Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again. |
+| `guest.talkback.set` | `POST /api/v1/guest/talkback/set` | operate |  | 1 | Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with. |
 | `headend.channel.add` | `POST /api/v1/headend/channel/add` | admin |  | 1 | Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. |
 | `headend.channel.bulk` | `POST /api/v1/headend/channel/bulk` | admin |  | 1 | The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. |
 | `headend.channel.follow` | `POST /api/v1/headend/channel/follow` | admin |  | 1 | Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. |
@@ -1635,6 +1640,87 @@ MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHi
   },
   "result": {
     "$ref": "#/$defs/GpuStatus"
+  }
+}
+```
+
+#### `guest.invite.create`
+
+Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.
+
+MCP tool `create_guest_invite` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteCreateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteCreated"
+  }
+}
+```
+
+#### `guest.invite.link`
+
+An invite's link and QR code again, to copy or show.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteLink"
+  }
+}
+```
+
+#### `guest.invite.list`
+
+Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.
+
+MCP tool `list_guests` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/GuestList"
+  }
+}
+```
+
+#### `guest.invite.revoke`
+
+Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteRevoked"
+  }
+}
+```
+
+#### `guest.talkback.set`
+
+Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TalkbackRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GuestList"
   }
 }
 ```
@@ -4850,6 +4936,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/presence.changed` |  |  | Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has. |
 | `event/prompter.changed` |  |  | The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed. |
 | `event/prompter.script.changed` |  |  | A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter. |
+| `event/guest.changed` |  |  | An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces

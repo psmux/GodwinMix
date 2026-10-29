@@ -3361,6 +3361,21 @@ pub struct GroupSourcesRequest {
     pub sources: Vec<String>,
 }
 
+/// What `guest.invite.list` answers, and the payload of `event/guest.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GuestList {
+    pub guests: Vec<Invite>,
+    /// The most guests this show takes at once.
+    pub max_guests: i64,
+    pub talkback: TalkbackState,
+}
+
+/// Where a guest is.
+pub type GuestState = String;
+/// The values api_level 1 knows for [`GuestState`].
+pub const GUEST_STATE_VALUES: &[&str] = &["invited", "joining", "live", "gone"];
+
 /// One channel.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3854,6 +3869,96 @@ pub struct InstanceRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rss_bytes: Option<u64>,
     pub state: String,
+}
+
+/// One invite, without its key.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Invite {
+    /// The mix minus bus the guest hears, `guest-<id>`: the programme
+    /// without the guest, with talkback added while it is held.
+    pub bus: String,
+    /// When it was made, RFC 3339.
+    pub created: String,
+    /// When it stops letting the guest in, RFC 3339. The guest is let go then.
+    pub expires: String,
+    /// A slug, made from the name unless one was given.
+    pub id: String,
+    /// What the guest is called on screen and in the desk.
+    pub name: String,
+    /// The mixer source the guest's camera is, `guest-<id>`. It exists from
+    /// the guest's first offer until the invite goes.
+    pub source: String,
+    pub state: GuestState,
+    /// Whether talkback is held into this guest's return now.
+    pub talkback: bool,
+}
+
+/// `guest.invite.create`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteCreateRequest {
+    /// The address the link starts with, such as `https://studio.example.com`,
+    /// for a mixer reached through a name or a tunnel. Left out, the first
+    /// https address of this machine that is not loopback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// How long the invite lasts, in seconds. One day when left out; at most
+    /// thirty days.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in_secs: Option<u64>,
+    /// A slug for the invite. Made from the name when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The guest's name, as it should appear on screen. 1 to 64 characters.
+    pub name: String,
+}
+
+/// What `guest.invite.create` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteCreated {
+    pub id: String,
+    pub invite: Invite,
+    /// The `/join/` page with the guest's id and key in the fragment, which a
+    /// browser never sends to a server.
+    pub link: String,
+    /// Set when no guest on another device could open the link as it stands,
+    /// with what to change.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The link as a QR code, an SVG document a page can show as it is.
+    pub qr_svg: String,
+}
+
+/// `guest.invite.revoke` and `guest.invite.link`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteIdRequest {
+    pub id: String,
+}
+
+/// The link to send a guest, and the same as a QR code.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteLink {
+    pub id: String,
+    /// The `/join/` page with the guest's id and key in the fragment, which a
+    /// browser never sends to a server.
+    pub link: String,
+    /// Set when no guest on another device could open the link as it stands,
+    /// with what to change.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The link as a QR code, an SVG document a page can show as it is.
+    pub qr_svg: String,
+}
+
+/// What `guest.invite.revoke` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteRevoked {
+    pub revoked: Invite,
 }
 
 pub type ItemEdge = String;
@@ -7184,6 +7289,36 @@ pub struct TakeRequest {
     pub transition: Option<Transition>,
 }
 
+/// `guest.talkback.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TalkbackRequest {
+    /// The guest to talk to. Left out, every guest that is live or joining.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guest: Option<String>,
+    /// Hold talkback (true) or let it go (false).
+    pub on: bool,
+    /// Another input to talk with, such as a microphone on the mixer. It is
+    /// muted on the programme from then on, for as long as it is the
+    /// talkback source. Left out, the source stays what it was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// Talkback as it stands.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TalkbackState {
+    /// The guests it is held into now.
+    pub held: Vec<String>,
+    /// Whether that source is in the mixer now.
+    pub present: bool,
+    /// The source that talks: `guest-talkback` (the operator's browser
+    /// microphone, published to `/guest/talkback/whip`) unless another input
+    /// was chosen. It is kept muted on the programme.
+    pub source: String,
+}
+
 /// `event/tally`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8153,7 +8288,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 270] = [
+pub const METHODS: [MethodInfo; 275] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8233,6 +8368,11 @@ pub const METHODS: [MethodInfo; 270] = [
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
     MethodInfo { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gpu/rebalance")) },
     MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
+    MethodInfo { name: "guest.invite.create", summary: "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/invite/create")) },
+    MethodInfo { name: "guest.invite.link", summary: "An invite's link and QR code again, to copy or show.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/invite/link")) },
+    MethodInfo { name: "guest.invite.list", summary: "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/guest/invite/list")) },
+    MethodInfo { name: "guest.invite.revoke", summary: "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/guest/invite/revoke")) },
+    MethodInfo { name: "guest.talkback.set", summary: "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/talkback/set")) },
     MethodInfo { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/add")) },
     MethodInfo { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/bulk")) },
     MethodInfo { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/follow")) },
@@ -8426,7 +8566,7 @@ pub const METHODS: [MethodInfo; 270] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 40] = [
+pub const EVENT_NAMES: [&str; 41] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -8466,6 +8606,7 @@ pub const EVENT_NAMES: [&str; 40] = [
     "presence.changed",
     "prompter.changed",
     "prompter.script.changed",
+    "guest.changed",
     "health",
 ];
 
@@ -8565,6 +8706,8 @@ pub enum Event {
     PrompterChanged(PrompterState),
     /// A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter.
     PrompterScriptChanged(ScriptChanged),
+    /// An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key.
+    GuestChanged(GuestList),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -8721,6 +8864,10 @@ impl Event {
                 Ok(payload) => Event::PrompterScriptChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "guest.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::GuestChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -8771,6 +8918,7 @@ impl Event {
             Event::PresenceChanged(_) => "presence.changed",
             Event::PrompterChanged(_) => "prompter.changed",
             Event::PrompterScriptChanged(_) => "prompter.script.changed",
+            Event::GuestChanged(_) => "guest.changed",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
@@ -9173,6 +9321,31 @@ impl Client {
     /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
     pub async fn gpu_status(&self, params: &GpuStatusRequest) -> Result<GpuStatus> {
         self.call("gpu.status", params).await
+    }
+
+    /// Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.
+    pub async fn guest_invite_create(&self, params: &InviteCreateRequest) -> Result<InviteCreated> {
+        self.call("guest.invite.create", params).await
+    }
+
+    /// An invite's link and QR code again, to copy or show.
+    pub async fn guest_invite_link(&self, params: &InviteIdRequest) -> Result<InviteLink> {
+        self.call("guest.invite.link", params).await
+    }
+
+    /// Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.
+    pub async fn guest_invite_list(&self) -> Result<GuestList> {
+        self.call("guest.invite.list", &serde_json::json!({})).await
+    }
+
+    /// Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.
+    pub async fn guest_invite_revoke(&self, params: &InviteIdRequest) -> Result<InviteRevoked> {
+        self.call("guest.invite.revoke", params).await
+    }
+
+    /// Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.
+    pub async fn guest_talkback_set(&self, params: &TalkbackRequest) -> Result<GuestList> {
+        self.call("guest.talkback.set", params).await
     }
 
     /// Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.

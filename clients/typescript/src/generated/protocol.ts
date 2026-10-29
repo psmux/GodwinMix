@@ -1814,6 +1814,16 @@ export interface GroupSourcesRequest {
   sources: string[];
 }
 
+/** What `guest.invite.list` answers, and the payload of `event/guest.changed`. */
+export interface GuestList {
+  guests: Invite[];
+  max_guests: number;
+  talkback: TalkbackState;
+}
+
+/** Where a guest is. */
+export type GuestState = "invited" | "joining" | "live" | "gone";
+
 /** One channel. */
 export interface HeadendChannel {
   custom?: TranscodeProfile | null;
@@ -2066,6 +2076,53 @@ export interface InstanceRecord {
   restarts: number;
   rss_bytes?: number | null;
   state: string;
+}
+
+/** One invite, without its key. */
+export interface Invite {
+  bus: string;
+  created: string;
+  expires: string;
+  id: string;
+  name: string;
+  source: string;
+  state: GuestState;
+  talkback: boolean;
+}
+
+/** `guest.invite.create`. */
+export interface InviteCreateRequest {
+  base?: string | null;
+  expires_in_secs?: number | null;
+  id?: string | null;
+  name: string;
+}
+
+/** What `guest.invite.create` answers. */
+export interface InviteCreated {
+  id: string;
+  invite: Invite;
+  link: string;
+  note?: string | null;
+  qr_svg: string;
+}
+
+/** `guest.invite.revoke` and `guest.invite.link`. */
+export interface InviteIdRequest {
+  id: string;
+}
+
+/** The link to send a guest, and the same as a QR code. */
+export interface InviteLink {
+  id: string;
+  link: string;
+  note?: string | null;
+  qr_svg: string;
+}
+
+/** What `guest.invite.revoke` answers. */
+export interface InviteRevoked {
+  revoked: Invite;
 }
 
 export type ItemEdge = "left" | "right" | "top" | "bottom";
@@ -3974,6 +4031,20 @@ export interface TakeRequest {
   transition?: Transition | null;
 }
 
+/** `guest.talkback.set`. */
+export interface TalkbackRequest {
+  guest?: string | null;
+  on: boolean;
+  source?: string | null;
+}
+
+/** Talkback as it stands. */
+export interface TalkbackState {
+  held: string[];
+  present: boolean;
+  source: string;
+}
+
 /** `event/tally`. */
 export interface Tally {
   sources: Record<string, unknown>;
@@ -4569,6 +4640,11 @@ export interface MethodParams {
   "governor.status": Record<string, never>;
   "gpu.rebalance": GpuRebalanceRequest;
   "gpu.status": GpuStatusRequest;
+  "guest.invite.create": InviteCreateRequest;
+  "guest.invite.link": InviteIdRequest;
+  "guest.invite.list": Record<string, never>;
+  "guest.invite.revoke": InviteIdRequest;
+  "guest.talkback.set": TalkbackRequest;
   "headend.channel.add": ChannelAddRequest2;
   "headend.channel.bulk": ChannelBulkRequest;
   "headend.channel.follow": ChannelNames;
@@ -4843,6 +4919,11 @@ export interface MethodResults {
   "governor.status": GovernorStatus;
   "gpu.rebalance": GpuRebalance;
   "gpu.status": GpuStatus;
+  "guest.invite.create": InviteCreated;
+  "guest.invite.link": InviteLink;
+  "guest.invite.list": GuestList;
+  "guest.invite.revoke": InviteRevoked;
+  "guest.talkback.set": GuestList;
   "headend.channel.add": ChannelChange;
   "headend.channel.bulk": ChannelChange;
   "headend.channel.follow": ChannelChange;
@@ -5079,6 +5160,7 @@ export interface EventPayloads {
   "presence.changed": PresenceList;
   "prompter.changed": PrompterState;
   "prompter.script.changed": ScriptChanged;
+  "guest.changed": GuestList;
   "health": HealthEvent;
 }
 
@@ -5174,6 +5256,11 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gpu/rebalance" } },
   { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
+  { name: "guest.invite.create", summary: "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/guest/invite/create" } },
+  { name: "guest.invite.link", summary: "An invite's link and QR code again, to copy or show.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/guest/invite/link" } },
+  { name: "guest.invite.list", summary: "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/guest/invite/list" } },
+  { name: "guest.invite.revoke", summary: "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/guest/invite/revoke" } },
+  { name: "guest.talkback.set", summary: "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/guest/talkback/set" } },
   { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/add" } },
   { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/bulk" } },
   { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/follow" } },
@@ -5420,6 +5507,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "presence.changed",
   "prompter.changed",
   "prompter.script.changed",
+  "guest.changed",
   "health",
 ];
 
@@ -5829,6 +5917,31 @@ export class GeneratedMethods {
   /** Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. */
   gpuStatus(params: GpuStatusRequest = {}): Promise<GpuStatus> {
     return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
+  }
+
+  /** Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise. */
+  guestInviteCreate(params: InviteCreateRequest): Promise<InviteCreated> {
+    return this._call("guest.invite.create", params as unknown as Record<string, unknown>) as Promise<InviteCreated>;
+  }
+
+  /** An invite's link and QR code again, to copy or show. */
+  guestInviteLink(params: InviteIdRequest): Promise<InviteLink> {
+    return this._call("guest.invite.link", params as unknown as Record<string, unknown>) as Promise<InviteLink>;
+  }
+
+  /** Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback. */
+  guestInviteList(): Promise<GuestList> {
+    return this._call("guest.invite.list", {}) as Promise<GuestList>;
+  }
+
+  /** Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again. */
+  guestInviteRevoke(params: InviteIdRequest): Promise<InviteRevoked> {
+    return this._call("guest.invite.revoke", params as unknown as Record<string, unknown>) as Promise<InviteRevoked>;
+  }
+
+  /** Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with. */
+  guestTalkbackSet(params: TalkbackRequest): Promise<GuestList> {
+    return this._call("guest.talkback.set", params as unknown as Record<string, unknown>) as Promise<GuestList>;
   }
 
   /** Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. */
