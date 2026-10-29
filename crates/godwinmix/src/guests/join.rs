@@ -26,9 +26,6 @@ impl Guests {
     /// Make sure the guest's source, bus and return exist. Answers why not.
     pub(super) async fn ensure(&self, id: &str, name: &str) -> Result<(), String> {
         let _one_at_a_time = self.building.lock().await;
-        if self.joined.lock().contains(id) {
-            return Ok(());
-        }
         let have = self.mixer.configs().await.map_err(|e| format!("{e:#}"))?;
         let source = source_of(id);
         if !have.sources.iter().any(|s| s.id == source) {

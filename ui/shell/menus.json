@@ -148,6 +148,12 @@
           "check": "panel"
         },
         {
+          "command": "view.panel",
+          "arg": "core/guests",
+          "title": "Guests",
+          "check": "panel"
+        },
+        {
           "plugins": true
         },
         {

@@ -104,10 +104,18 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
     ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
     ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
+    // Guests: the entry loads with the page, the rest when the panel is first shown.
+    ("panels/guests/entry.js", include_str!("../../../ui/panels/guests/entry.js")),
+    ("panels/guests/panel.js", include_str!("../../../ui/panels/guests/panel.js")),
+    ("panels/guests/card.js", include_str!("../../../ui/panels/guests/card.js")),
+    ("panels/guests/share.js", include_str!("../../../ui/panels/guests/share.js")),
+    ("panels/guests/talk.js", include_str!("../../../ui/panels/guests/talk.js")),
+    ("panels/guests/guests.css", include_str!("../../../ui/panels/guests/guests.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
     ("join/wiring.js", include_str!("../../../ui/join/wiring.js")),
+    ("join/return.js", include_str!("../../../ui/join/return.js")),
     ("kits/canvas/draw.js", include_str!("../../../ui/kits/canvas/draw.js")),
     ("kits/canvas/geometry.js", include_str!("../../../ui/kits/canvas/geometry.js")),
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),
@@ -1190,7 +1198,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_399_kb() {
+    fn the_page_a_volunteer_opens_stays_under_400_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1211,6 +1219,12 @@ mod tests {
         // closed show. What closing asks and does loads only when a show is
         // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
         // them for this.
+        //
+        // Raised to 400 kB for the Guests panel: its entry, which only
+        // defines the element and fetches the panel when it is first shown,
+        // its line in View, and its card and icon on the phone's More screen,
+        // as the Prompter's were. Measured at 408860 bytes, about 850 of them for
+        // this; the panel, the link dialog and talkback load when opened.
         //
         // Raised to 399 kB for the Prompter panel: its entry, which only
         // defines the element and fetches the panel when it is first shown,
@@ -1261,8 +1275,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 399 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 399 kB budget",
+            bytes < 400 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 400 kB budget",
             eager.len()
         );
     }
@@ -1454,6 +1468,8 @@ mod tests {
         // panel's entry fetches the panel the first time it is shown.
         reachable.extend(closure_of("prompter/page.js"));
         reachable.extend(closure_of("panels/prompter/panel.js"));
+        // Guests: the entry imports the panel when it is first shown.
+        reachable.extend(closure_of("panels/guests/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
