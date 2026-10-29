@@ -1,5 +1,29 @@
 # Where GodwinMix stands
 
+## An intermittent heap corruption on Windows, 2026-10-29
+
+Found while testing 0.3.21 on the Zenbook Duo (Core Ultra 9 285H, Arc 140T,
+Windows 11), and present in 0.3.20 as well: about one run in five, a process
+that starts the engine ends with `0xc0000374` (STATUS_HEAP_CORRUPTION).
+
+* `cargo test -p godwinmix-core --test embed` crashed 1 run in 5 at the 0.3.20
+  commit (fe1bd38a) and at every wave 2 merge point tried, so it is not from
+  wave 2. The whole core library and five integration targets that start a
+  mixer (`embed`, `no_libav`, `overlay_html`, `overlay_template`,
+  `virtual_set`) crashed the same way in one full run.
+* A station started on a fresh folder lost its show once, 1.6 s after start,
+  just after "selected codec backends from the catalogue" and while the
+  station was calibrating the encoders. The station started it again at once
+  and nothing else was lost.
+* The installed desktop app's log on the same machine, a week of use, has no
+  such exit. It calibrated once and keeps the result, which fits a guess that
+  two threads opening the Windows hardware encoders (Media Foundation, Quick
+  Sync, D3D11) at once is the trigger. The `embed` test does not calibrate, so
+  that guess does not explain everything.
+* Under full page heap (`gflags /p /enable <test>.exe /full`) and `cdb` it did
+  not happen in six runs. Next: more runs under page heap, the catalogue's
+  encoder probe serialised, and the probe run alone in a loop.
+
 ## What CI failed on main after the transitions merge, 2026-10-06
 
 Branch `fix/ci-main`, draft pull request #2, from main at `d5bcb319`. The
