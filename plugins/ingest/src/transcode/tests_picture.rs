@@ -16,7 +16,7 @@ use super::spec::NodeSpec;
 const BLACK: u8 = 16;
 const WHITE: u8 = 235;
 
-fn node(extra: Value) -> NodeSpec {
+pub(super) fn node(extra: Value) -> NodeSpec {
     let mut raw = json!({"kind": "scale", "width": 320, "height": 180, "fps": [30, 1], "fit": "pad", "border": 0xff00_0000u64, "deinterlace": "off", "rate": false});
     for (k, v) in extra.as_object().unwrap() {
         raw[k] = v.clone();
@@ -47,8 +47,8 @@ fn picture(w: usize, h: usize, pts_ms: u64, fields: bool, luma: impl Fn(usize, u
 }
 
 /// What comes out of the node: each picture's luma plane and size.
-struct Out {
-    frames: Vec<(usize, usize, Vec<u8>)>,
+pub(super) struct Out {
+    pub(super) frames: Vec<(usize, usize, Vec<u8>)>,
 }
 
 impl Out {
@@ -60,12 +60,12 @@ impl Out {
 
 /// One run of pictures under one caps: `count` of them at `width` x
 /// `height`, flagged as fields or not, picture `k`'s luma `luma(k, x, y)`.
-struct Run<'a> {
-    caps: &'a str,
-    size: (usize, usize),
-    count: usize,
-    fields: bool,
-    luma: &'a dyn Fn(usize, usize, usize) -> u8,
+pub(super) struct Run<'a> {
+    pub(super) caps: &'a str,
+    pub(super) size: (usize, usize),
+    pub(super) count: usize,
+    pub(super) fields: bool,
+    pub(super) luma: &'a dyn Fn(usize, usize, usize) -> u8,
 }
 
 fn plain<'a>(caps: &'a str, size: (usize, usize), luma: &'a dyn Fn(usize, usize, usize) -> u8) -> Run<'a> {
@@ -74,6 +74,12 @@ fn plain<'a>(caps: &'a str, size: (usize, usize), luma: &'a dyn Fn(usize, usize,
 
 /// Push `runs` through the node, frames 33 ms apart.
 fn run(n: &NodeSpec, runs: &[Run]) -> Out {
+    run_with(n, runs, false)
+}
+
+/// The same, on the card when `cuda`: up to CUDA memory before the node
+/// and back down after it, as the decoder and the encoder would hand over.
+pub(super) fn run_with(n: &NodeSpec, runs: &[Run], cuda: bool) -> Out {
     gmx_netkit::init().unwrap();
     let built = build(n).unwrap_or_else(|e| panic!("{}: {e}", n.id));
     let pipeline = gst::Pipeline::new();
@@ -83,12 +89,17 @@ fn run(n: &NodeSpec, runs: &[Run]) -> Out {
     sink.set_sync(false);
     sink.set_max_buffers(0);
     let convert = gst::ElementFactory::make("videoconvert").build().unwrap();
-    pipeline.add(&src).unwrap();
+    let ends = if cuda { ["cudaupload", "cudadownload"] } else { ["identity", "identity"] };
+    let (up, down) = (gst::ElementFactory::make(ends[0]).build().unwrap(), gst::ElementFactory::make(ends[1]).build().unwrap());
+    if cuda {
+        keep_flags(&up);
+    }
+    pipeline.add_many([src.upcast_ref(), &up, &down]).unwrap();
     pipeline.add_many(built.elements.iter()).unwrap();
     pipeline.add_many([&convert, sink.upcast_ref()]).unwrap();
     gst::Element::link_many(built.elements.iter()).unwrap();
-    src.link(built.head.as_ref().unwrap()).unwrap();
-    gst::Element::link_many([built.tee.as_ref().unwrap(), &convert, sink.upcast_ref()]).unwrap();
+    gst::Element::link_many([src.upcast_ref(), &up, built.head.as_ref().unwrap()]).unwrap();
+    gst::Element::link_many([built.tee.as_ref().unwrap(), &down, &convert, sink.upcast_ref()]).unwrap();
     pipeline.set_state(gst::State::Playing).unwrap();
     let mut at = 0u64;
     let mut sent = 0;
@@ -114,6 +125,27 @@ fn run(n: &NodeSpec, runs: &[Run]) -> Out {
     let _ = pipeline.set_state(gst::State::Null);
     assert!(!frames.is_empty(), "{}: no picture came out", n.id);
     Out { frames }
+}
+
+/// `cudaupload` hands a picture on without its flags, where a decoder's
+/// CUDA pictures keep theirs: each one's put back on the way out.
+fn keep_flags(up: &gst::Element) {
+    let flags = std::sync::Arc::new(std::sync::Mutex::new(0u32));
+    let noted = flags.clone();
+    up.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+        if let Some(b) = info.buffer() {
+            *noted.lock().unwrap() = super::cuda_deint::raw_flags(b);
+        }
+        gst::PadProbeReturn::Ok
+    });
+    up.static_pad("src").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+        let f = *flags.lock().unwrap();
+        if let Some(b) = info.buffer_mut() {
+            // SAFETY: `make_mut` gives a buffer of our own to write.
+            unsafe { (*b.make_mut().as_mut_ptr()).mini_object.flags |= f }
+        }
+        gst::PadProbeReturn::Ok
+    });
 }
 
 fn white(_: usize, _: usize, _: usize) -> u8 {
@@ -168,7 +200,7 @@ fn a_shape_that_changes_mid_stream_changes_the_fit() {
 /// A white bar moving right 8 pixels a frame on black, each frame's two
 /// fields taken half a frame apart, as an interlaced camera sees it: the
 /// bar's edges comb.
-fn moving(k: usize, x: usize, y: usize) -> u8 {
+pub(super) fn moving(k: usize, x: usize, y: usize) -> u8 {
     let left = 40 + 8 * k + if y % 2 == 1 { 4 } else { 0 };
     if (left..left + 60).contains(&x) {
         WHITE
@@ -178,7 +210,7 @@ fn moving(k: usize, x: usize, y: usize) -> u8 {
 }
 
 /// How much neighbouring lines differ around the bar: high for a comb.
-fn comb(out: &Out, i: usize) -> u32 {
+pub(super) fn comb(out: &Out, i: usize) -> u32 {
     let (w, h, l) = &out.frames[i];
     let mut sum = 0u32;
     for y in (20..h - 20).step_by(2) {
