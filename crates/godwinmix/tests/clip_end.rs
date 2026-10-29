@@ -44,7 +44,7 @@ async fn serve() -> String {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
     cfg.canvas.width = 320;
     cfg.canvas.height = 180;
-    cfg.canvas.fps = 15;
+    cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(15);
     cfg.sources = vec![toml::from_str("id = \"cam\"\ntype = \"test/source\"\nuri = \"test://smpte\"\n").unwrap()];
     cfg.safety.min_hold_ms = 0;
     cfg.safety.flash_guard = false;

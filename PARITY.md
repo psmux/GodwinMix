@@ -45,7 +45,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Colour correction: brightness, contrast, gamma, saturation, hue | the OBS names were imported and did nothing | built in, `plugin/filters/colour/` | on `feat/colour-filter` |
 | LUTs, sharpen, masks | the OBS names are imported and do nothing | built in filters, GL where there is a GPU | |
 | Virtual camera moves inside a set | 2D sets only | built in | |
-| 29.97 and 59.94 canvases | whole number rates only | built in | |
+| 29.97 and 59.94 canvases | whole number rates only | built in, `config/rate.rs` | on `feat/ntsc-rates` |
 | HDR and 10 bit | 8 bit I420 | built in, behind a canvas setting | |
 | Closed captions: CEA-608 and 708 in the encode, live captions from speech | none | embedding built in, speech to text a plugin | |
 | Chat from every platform on screen and in one panel | none | plugin | |

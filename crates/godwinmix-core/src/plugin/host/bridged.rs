@@ -113,7 +113,7 @@ impl BridgedSource {
             canvas: Canvas {
                 width: canvas.width as u32,
                 height: canvas.height as u32,
-                fps: (canvas.fps.numer() as u32) / (canvas.fps.denom().max(1) as u32),
+                fps: canvas.fps_rounded().max(1) as u32,
             },
             media: self.spec.plan.clone(),
         };

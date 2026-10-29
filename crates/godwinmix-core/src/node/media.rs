@@ -429,7 +429,7 @@ fn video_chain(
     let enc = make(encoder, &format!("{id}-venc"))?;
     // Short GOP and no B frames: a remote source is a live feed and the person
     // watching cares about the delay, not the bitrate.
-    crate::probe::set_int(&enc, "key-int-max", canvas.fps.numer() as i64 * 2);
+    crate::probe::set_int(&enc, "key-int-max", canvas.fps_rounded() as i64 * 2);
     crate::probe::set_int(&enc, "bframes", 0);
     crate::probe::set_enum(&enc, "tune", "zerolatency");
     let parse = make("h264parse", &format!("{id}-vparse"))?;

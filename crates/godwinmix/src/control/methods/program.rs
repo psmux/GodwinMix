@@ -284,7 +284,7 @@ async fn take_one_item(
     let caps = godwinmix_core::caps::CanvasCaps::new(&godwinmix_core::config::Canvas {
         width: canvas.width as i32,
         height: canvas.height as i32,
-        fps: canvas.fps as i32,
+        fps: godwinmix_core::config::FrameRate::whole(canvas.fps.max(1) as i32),
         ..Default::default()
     });
     let scene = godwinmix_core::mixer::ProgramScene {

@@ -596,7 +596,7 @@ pub fn canvas_of(canvas: &CanvasCaps) -> Canvas {
     Canvas {
         width: canvas.width as u32,
         height: canvas.height as u32,
-        fps: (canvas.fps.numer() as u32) / (canvas.fps.denom().max(1) as u32),
+        fps: canvas.fps_rounded().max(1) as u32,
     }
 }
 
@@ -617,7 +617,7 @@ mod tests {
         let canvas = CanvasCaps::new(&crate::config::Canvas {
             width: 1280,
             height: 720,
-            fps: 30,
+            fps: crate::config::FrameRate::whole(30),
             sample_rate: 48000,
             channels: 2,
         });

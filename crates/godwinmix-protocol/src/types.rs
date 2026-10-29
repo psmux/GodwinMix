@@ -495,7 +495,12 @@ pub enum Severity {
 pub struct CanvasInfo {
     pub width: i32,
     pub height: i32,
+    /// Frames a second to the nearest whole frame: 30 for 29.97.
     pub fps: i32,
+    /// The exact rate as numerator and denominator, when it is not whole:
+    /// `[30000, 1001]` for 29.97. Absent for a whole rate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fps_fraction: Option<[i32; 2]>,
 }
 
 /// The ceilings a client should plan against rather than discover by being

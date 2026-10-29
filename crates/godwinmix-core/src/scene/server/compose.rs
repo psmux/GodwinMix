@@ -340,7 +340,7 @@ mod tests {
         CanvasCaps::new(&crate::config::Canvas {
             width: 1920,
             height: 1080,
-            fps: 30,
+            fps: crate::config::FrameRate::whole(30),
             sample_rate: 48000,
             channels: 2,
         })

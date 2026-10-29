@@ -31,7 +31,7 @@ pick it deliberately before you go live.
 |---|---|---|
 | `width` | 1920 | canvas width in pixels |
 | `height` | 1080 | canvas height |
-| `fps` | 30 | canvas frame rate; every source is retimed to it |
+| `fps` | 30 | canvas frame rate; every source is retimed to it. A whole number from 1 to 120, or a broadcast rate: `23.976`, `29.97`, `59.94` or `119.88`, kept as the exact fraction (30000/1001 for 29.97). A string such as `"30000/1001"` works too. `core.info` reports the whole rate in `fps` and the fraction in `fps_fraction` |
 | `sample_rate` | 48000 | audio sample rate in Hz |
 | `channels` | 2 | audio channels |
 

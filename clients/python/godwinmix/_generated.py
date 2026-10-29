@@ -529,6 +529,9 @@ class CanvasInfo(TypedDict, total=False):
     """The canvas every source is scaled onto and every output leaves by."""
 
     fps: int
+    # Frames a second to the nearest whole frame: 30 for 29.97.
+    fps_fraction: Optional[List[int]]
+    # The exact rate as numerator and denominator, when it is not whole: `[30000, 1001]` for 29.97. Absent for a whole rate.
     height: int
     width: int
 

@@ -42,7 +42,7 @@ async fn a_sidecar_whose_process_is_killed_is_restarted_within_a_second_or_two()
     install(&root, "exitbars", false);
 
     let mut cfg: Config = toml::from_str("").unwrap();
-    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (640, 360, 30);
+    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (640, 360, godwinmix_core::config::FrameRate::whole(30));
     let (mut mix, handle, cmd_rx, _bus) = Mixer::build(cfg).expect("a mixer");
     mix.start().expect("it starts");
     let thread = mixer::spawn(mix, cmd_rx, handle.clone());

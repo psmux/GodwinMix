@@ -472,6 +472,7 @@ export interface Canvas {
 /** The canvas every source is scaled onto and every output leaves by. */
 export interface CanvasInfo {
   fps: number;
+  fps_fraction?: number[] | null;
   height: number;
   width: number;
 }

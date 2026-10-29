@@ -104,7 +104,7 @@ impl SceneServer {
     /// Load the collection beside a runtime store, or start an empty one.
     pub fn open(runtime_store: Option<PathBuf>, canvas: CanvasCaps) -> Result<Arc<SceneServer>> {
         let document_canvas =
-            Canvas { width: canvas.width as u32, height: canvas.height as u32, fps: canvas.fps.numer().max(1) as u32 };
+            Canvas { width: canvas.width as u32, height: canvas.height as u32, fps: canvas.fps_rounded().max(1) as u32 };
         let path = runtime_store.as_deref().map(store::path_beside);
         let doc = match &path {
             Some(p) => store::load(p, document_canvas)?,
