@@ -652,6 +652,9 @@ pub struct FilterStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceId>,
     pub side: String,
+    /// The settings in force, as `filter.set` last left them.
+    #[serde(default, skip_serializing_if = "crate::config::Params::is_empty")]
+    pub params: crate::config::Params,
 }
 
 /// A change to the configured filter list. See `Mixer::remember_filter`.
@@ -2638,19 +2641,27 @@ impl Mixer {
                 type_id: f.spec.type_id.clone(),
                 source: None,
                 side: f.spec.side.as_str().to_string(),
+                params: self.configured_params(f.id()).unwrap_or_else(|| f.spec.params.clone()),
             })
             .collect();
         for slot in &self.sources {
             for f in slot.input.filters() {
+                let params = self.configured_params(&f.0).unwrap_or_default();
                 all.push(FilterStatus {
                     id: f.0,
                     type_id: f.1,
                     source: Some(slot.input.id.clone()),
                     side: f.2,
+                    params,
                 });
             }
         }
         all
+    }
+
+    /// A filter's settings as the configured list holds them.
+    fn configured_params(&self, id: &str) -> Option<crate::config::Params> {
+        self.cfg.filters.iter().find(|f| f.id == id).map(|f| f.params.clone())
     }
 
     /// Put a source pipeline on the programme's clock and base time.

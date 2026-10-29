@@ -126,6 +126,9 @@ pub struct FilterRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub side: String,
+    /// The settings in force, as `filter.set` last left them.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub params: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -164,6 +167,10 @@ fn record(status: godwinmix_core::mixer::FilterStatus) -> FilterRecord {
         type_id: status.type_id,
         source: status.source,
         side: status.side,
+        params: match serde_json::to_value(&status.params) {
+            Ok(Value::Object(map)) => map,
+            _ => Map::new(),
+        },
     }
 }
 
