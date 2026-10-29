@@ -268,6 +268,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "fx.remove",
             // A graphic deleted takes its files with it, like a clip.
             "gallery.remove",
+            // A guest is cut off on air, and the link they hold stops working:
+            // a new invite is a new link.
+            "guest.invite.revoke",
             // A headend channel removed takes its show with it, as
             // show.remove does, and a removed profile is gone.
             "headend.channel.remove",
