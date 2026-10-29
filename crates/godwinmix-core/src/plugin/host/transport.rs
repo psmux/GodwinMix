@@ -288,7 +288,7 @@ mod tests {
             std::fs::write(&bind, b"").unwrap();
         });
         let started = std::time::Instant::now();
-        let missing = super::wait_for_sockets(&[late.clone()], std::time::Duration::from_secs(5));
+        let missing = super::wait_for_sockets(std::slice::from_ref(&late), std::time::Duration::from_secs(5));
         binder.join().unwrap();
         assert!(missing.is_empty(), "{missing:?}");
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
