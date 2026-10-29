@@ -22,6 +22,6 @@ cd "$root"
 if command -v nvcc >/dev/null 2>&1; then
   nvcc $args
 else
-  docker run --rm -v "$root:/src" -w /src nvidia/cuda:12.6.3-devel-ubuntu24.04 nvcc $args
+  docker run --rm -u "$(id -u):$(id -g)" -v "$root:/src" -w /src nvidia/cuda:12.6.3-devel-ubuntu24.04 nvcc $args
 fi
 echo "wrote $dir/deinterlace.ptx"

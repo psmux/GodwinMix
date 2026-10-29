@@ -15,6 +15,7 @@
 use std::sync::{Arc, Mutex};
 
 use gstreamer as gst;
+use gstreamer::glib::translate::ToGlibPtr;
 use gstreamer::prelude::*;
 use gstreamer_video as gst_video;
 
@@ -40,54 +41,84 @@ pub fn available() -> bool {
 }
 
 /// What the stage knows from its caps, and the copy it reads from.
+#[derive(Default)]
 struct State {
+    /// The layout of the I420 picture the kernel works on.
     info: Option<gst_video::VideoInfo>,
-    mixed: bool,
+    /// The interlace mode of the pictures coming in.
+    mode: String,
+    /// Whether the picture now in the converter came in flagged as fields.
+    fields: bool,
     scratch: Scratch,
     failed: bool,
 }
 
-/// Run the kernel on every picture through `pad` that holds fields, all of
-/// them when `always`, and say downstream that they are progressive.
-pub fn install(pad: &gst::Pad, always: bool, linear: bool) {
-    let state = Arc::new(Mutex::new(State { info: None, mixed: false, scratch: Scratch::default(), failed: false }));
-    let caps_state = state.clone();
-    pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_, info| {
+/// Run the kernel on every picture that came in through `entry` holding
+/// fields, all of them when `always`, on its way out through `exit`, and
+/// say downstream that they are progressive.
+///
+/// The interlace mode and the fields flag are read going in: the converter
+/// between the two pads keeps neither. It hands each picture on in the call
+/// that brought it, so the flag noted at `entry` is that picture's at `exit`.
+pub fn install(entry: &gst::Pad, exit: &gst::Pad, always: bool, linear: bool) {
+    let state = Arc::new(Mutex::new(State::default()));
+    let lock = |s: &Arc<Mutex<State>>| s.clone();
+    let st = lock(&state);
+    entry.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM | gst::PadProbeType::BUFFER, move |_, info| {
+        let mut st = st.lock().unwrap_or_else(|p| p.into_inner());
+        match &info.data {
+            Some(gst::PadProbeData::Buffer(b)) => st.fields = raw_flags(b) & INTERLACED != 0,
+            Some(gst::PadProbeData::Event(e)) => {
+                if let gst::EventView::Caps(c) = e.view() {
+                    st.mode = c.caps().structure(0).and_then(|s| s.get::<&str>("interlace-mode").ok()).unwrap_or("progressive").to_string();
+                }
+            }
+            _ => {}
+        }
+        gst::PadProbeReturn::Ok
+    });
+    let st = lock(&state);
+    exit.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_, info| {
         let Some(gst::PadProbeData::Event(event)) = &info.data else { return gst::PadProbeReturn::Ok };
         let gst::EventView::Caps(c) = event.view() else { return gst::PadProbeReturn::Ok };
-        let Some(progressive) = progressive(c.caps(), &mut caps_state.lock().unwrap_or_else(|p| p.into_inner())) else {
-            return gst::PadProbeReturn::Ok;
+        let progressive = {
+            let mut st = st.lock().unwrap_or_else(|p| p.into_inner());
+            st.info = gst_video::VideoInfo::from_caps(c.caps()).ok();
+            progressive(c.caps())
         };
         info.data = Some(gst::PadProbeData::Event(gst::event::Caps::new(&progressive)));
         gst::PadProbeReturn::Ok
     });
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+    exit.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
         let mut st = state.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(buffer) = info.buffer_mut() {
-            deinterlace(buffer, &mut st, always, linear);
+            deinterlace(buffer.make_mut(), &mut st, always, linear);
         }
         gst::PadProbeReturn::Ok
     });
 }
 
-/// Note the picture's layout and the caps' interlace mode, and give back
-/// the caps made progressive, or `None` for caps that are already.
-fn progressive(caps: &gst::CapsRef, st: &mut State) -> Option<gst::Caps> {
-    st.info = gst_video::VideoInfo::from_caps(caps).ok();
-    let mode = caps.structure(0)?.get::<&str>("interlace-mode").unwrap_or("progressive");
-    st.mixed = mode == "mixed";
-    if mode == "progressive" {
-        return None;
-    }
+const INTERLACED: u32 = gst_video::VideoBufferFlags::INTERLACED.bits();
+
+/// A buffer's flags as they are: `flags()` drops the bits GStreamer core
+/// has no name for, and the video library's are exactly those.
+pub(super) fn raw_flags(b: &gst::BufferRef) -> u32 {
+    // SAFETY: reading a field of a buffer we hold a reference to.
+    unsafe { (*b.as_ptr()).mini_object.flags }
+}
+
+/// The caps said progressive, as every picture out of the stage is.
+fn progressive(caps: &gst::CapsRef) -> gst::Caps {
     let mut changed = caps.to_owned();
-    let s = changed.make_mut().structure_mut(0)?;
-    s.set("interlace-mode", "progressive");
-    s.remove_field("field-order");
-    Some(changed)
+    if let Some(s) = changed.make_mut().structure_mut(0) {
+        s.set("interlace-mode", "progressive");
+        s.remove_field("field-order");
+    }
+    changed
 }
 
 fn deinterlace(buffer: &mut gst::BufferRef, st: &mut State, always: bool, linear: bool) {
-    let fields = !st.mixed || always || buffer.flags().contains(gst::BufferFlags::from_bits_truncate(gst_video::VideoBufferFlags::INTERLACED.bits()));
+    let fields = always || st.mode == "interleaved" || (st.mode == "mixed" && st.fields);
     let Some(info) = st.info.clone() else { return };
     if fields {
         if let Err(e) = run(buffer, &info, &mut st.scratch, if linear { -1 } else { THRESHOLD }) {
@@ -96,7 +127,8 @@ fn deinterlace(buffer: &mut gst::BufferRef, st: &mut State, always: bool, linear
             }
         }
     }
-    buffer.unset_flags(gst::BufferFlags::from_bits_truncate(FIELDS.bits()));
+    // SAFETY: the buffer is writable (`make_mut` above).
+    unsafe { (*buffer.as_mut_ptr()).mini_object.flags &= !FIELDS.bits() }
 }
 
 /// The kernel over each plane of `buffer`, in its memory's context and

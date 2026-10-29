@@ -60,8 +60,9 @@ fn on_card(node: &NodeSpec, always: bool) -> Result<Vec<gst::Element>, String> {
     let convert = super::build::on_card(make("cudaconvert")?, node);
     let fields = caps("video/x-raw(memory:CUDAMemory),format=I420")?;
     let back = super::build::on_card(make("cudaconvert")?, node);
-    let pad = fields.static_pad("src").ok_or("a capsfilter has no src pad")?;
-    super::cuda_deint::install(&pad, always, node.text("method") == Some("linear"));
+    let entry = convert.static_pad("sink").ok_or("cudaconvert has no sink pad")?;
+    let exit = fields.static_pad("src").ok_or("a capsfilter has no src pad")?;
+    super::cuda_deint::install(&entry, &exit, always, node.text("method") == Some("linear"));
     Ok(vec![convert, fields, back, caps("video/x-raw(memory:CUDAMemory),format=NV12")?])
 }
 
