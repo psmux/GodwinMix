@@ -247,6 +247,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             // It rewrites another program's configuration file, keeping a
             // copy of the old one beside it.
             "agent.setup",
+            // A guest's return or the operator's headphones go quiet, and the
+            // sends on it are forgotten.
+            "audio.bus.remove",
             // It takes a live stream off a platform, and repeating the call
             // does not put it back.
             "channel.destination.remove",
@@ -297,6 +300,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
+         audio.bus.remove (a guest's return goes quiet and its sends are forgotten), \
          plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
          preset.apply (it rewrites the operator's configuration file), core.restart \
          (the programme goes off air until the mixer is back), the two scene \

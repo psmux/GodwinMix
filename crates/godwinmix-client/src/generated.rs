@@ -414,6 +414,28 @@ pub type AudioCodec = String;
 /// The values api_level 1 knows for [`AudioCodec`].
 pub const AUDIO_CODEC_VALUES: &[&str] = &["aac", "opus", "mp3", "ac3", "pcm", "other"];
 
+/// One sound card a bus can be played on.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioDevice {
+    /// The platform's sound API, when it says: `osxaudio`, `wasapi2`,
+    /// `pulse`, `alsa`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api: Option<String>,
+    /// The id `device` takes, the most stable thing the platform says about it.
+    pub id: String,
+    /// Its number in this list, which `device` also takes.
+    pub index: i64,
+    pub name: String,
+}
+
+/// `audio.device.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioDeviceList {
+    pub devices: Vec<AudioDevice>,
+}
+
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -447,6 +469,16 @@ pub struct AudioShape {
     pub channels: u8,
     pub codec: AudioCodec,
     pub sample_rate: u32,
+}
+
+/// The audio desk as `audio.bus.list` and the status snapshot report it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioStatus {
+    pub buses: Vec<BusStatus>,
+    /// The sources marked cue, in the order they were marked.
+    pub cue: Vec<String>,
+    pub master: MasterConfig,
 }
 
 /// The audio an output wants. Every field left out is taken from the source.
@@ -686,6 +718,104 @@ pub struct BundleAsset {
     pub path: String,
     pub sha256: String,
     pub size: u64,
+}
+
+/// One bus: a mix of its own beside the programme.
+///
+/// Three kinds, decided by two keys. With neither, it carries each source at
+/// the level its `sends` give it (a source with no send is not on it). With
+/// `minus`, it is the programme as heard, without that one source: a guest's
+/// return. With `cue`, it carries the sources marked cue at unity, and the
+/// programme while nothing is marked.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusConfig {
+    /// Make this the cue bus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<bool>,
+    /// Play the bus on a sound card here: `default`, a device name, its id,
+    /// or its number in `audio.device.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The bus master, 0.0 to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    /// A slug: `monitor`, `guest-return`, `recording-b`.
+    pub id: String,
+    /// Make this bus the programme without this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// What the desk shows. The id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Level per source id, 0.0 to 10.0, after the source's own fader and
+    /// mute. Read only on a bus with neither `minus` nor `cue`.
+    pub sends: BTreeMap<String, Value>,
+}
+
+/// `audio.bus.remove`, and anything else that names one bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusIdRequest {
+    pub id: String,
+}
+
+/// `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
+/// on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// One bus and what is using it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusStatus {
+    /// Make this the cue bus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<bool>,
+    /// Play the bus on a sound card here: `default`, a device name, its id,
+    /// or its number in `audio.device.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The device it is playing on, once it opened, or why it is not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_state: Option<String>,
+    /// The bus master, 0.0 to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    /// A slug: `monitor`, `guest-return`, `recording-b`.
+    pub id: String,
+    /// `sends`, `minus` or `cue`.
+    pub kind: String,
+    /// Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
+    pub listen: String,
+    /// Make this bus the programme without this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// What the desk shows. The id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The outputs that take their sound from this bus.
+    pub outputs: Vec<String>,
+    /// Level per source id, 0.0 to 10.0, after the source's own fader and
+    /// mute. Read only on a bus with neither `minus` nor `cue`.
+    pub sends: BTreeMap<String, Value>,
 }
 
 /// `governor.calibrate`.
@@ -1488,6 +1618,17 @@ pub struct Crop {
     pub left: f64,
     pub right: f64,
     pub top: f64,
+}
+
+/// `audio.cue.set`: mark or clear one source for the cue bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CueSetRequest {
+    pub cue: bool,
+    /// Clear every other mark first, so only this source is heard: solo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solo: Option<bool>,
+    pub source: String,
 }
 
 /// Whether an interlaced picture is made progressive.
@@ -4077,6 +4218,27 @@ pub struct MarkRequest {
     pub label: Option<String>,
 }
 
+/// A master fader and mute.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MasterConfig {
+    /// 0.0 silent, 1.0 unity, up to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+}
+
+/// `audio.master.set`. Only what is named moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MasterSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+}
+
 /// A rendition that follows a larger source's size, up to a limit.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4324,6 +4486,9 @@ pub struct MediaTagged {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Meters {
+    /// Peak dBFS per channel, per audio bus id, after the bus master. Left out
+    /// while there are no buses.
+    pub buses: BTreeMap<String, Value>,
     /// Peak dBFS per channel on the programme bus.
     pub program: Vec<f64>,
     /// Peak dBFS per channel, per source id.
@@ -4371,6 +4536,10 @@ pub struct MixerStatus {
     /// Present while an ad break is armed or running.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ad: Option<AdStatus>,
+    /// The programme master, the buses and the cue marks. Left out by a core
+    /// that has no audio desk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioStatus>,
     pub backend: BackendInfo,
     pub multiview: MultiviewStatus,
     pub outputs: Vec<OutputStatus>,
@@ -5793,6 +5962,16 @@ pub struct SeekParams {
     /// Milliseconds from the start of the clip. Off either end is clamped
     /// rather than refused, so a scrubber flicked past the end lands there.
     pub position_ms: f64,
+}
+
+/// `audio.send.set`: how much of one source goes to one bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SendSetRequest {
+    pub bus: String,
+    /// 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
+    pub level: f64,
+    pub source: String,
 }
 
 /// `core.session_log`.
@@ -7751,12 +7930,20 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 250] = [
+pub const METHODS: [MethodInfo; 258] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
     MethodInfo { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/agent/tools")) },
+    MethodInfo { name: "audio.bus.add", summary: "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/bus/add")) },
+    MethodInfo { name: "audio.bus.list", summary: "The programme master, every bus with its sends, and the sources marked cue.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/audio/bus/list")) },
+    MethodInfo { name: "audio.bus.remove", summary: "Take a bus out, live. Refused while an output takes its sound from it.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/audio/bus/remove")) },
+    MethodInfo { name: "audio.bus.set", summary: "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/bus/set")) },
+    MethodInfo { name: "audio.cue.set", summary: "Mark or clear a source for the cue bus. `solo` clears every other mark first.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/cue/set")) },
+    MethodInfo { name: "audio.device.list", summary: "The sound outputs on the mixer's machine that a bus can play on.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/audio/device/list")) },
+    MethodInfo { name: "audio.master.set", summary: "Move the programme's master fader or mute. Only what is named moves.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/master/set")) },
+    MethodInfo { name: "audio.send.set", summary: "Set how much of one source goes to one bus. 0 takes it off the bus.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/send/set")) },
     MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/generate")) },
     MethodInfo { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/set")) },
@@ -8097,7 +8284,7 @@ pub enum Event {
     ChannelRemoved(ChannelRemovedEvent),
     /// A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it.
     ChannelRefused(ChannelRefusedEvent),
-    /// Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws.
+    /// Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws.
     Meters(Meters),
     /// Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to.
     Tally(Tally),
@@ -8365,6 +8552,46 @@ impl Client {
     /// The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.
     pub async fn agent_tools(&self) -> Result<Vec<Detected>> {
         self.call("agent.tools", &serde_json::json!({})).await
+    }
+
+    /// Add a bus beside the programme mix, live. Nothing is built for buses until the first one.
+    pub async fn audio_bus_add(&self, params: &BusConfig) -> Result<BusStatus> {
+        self.call("audio.bus.add", params).await
+    }
+
+    /// The programme master, every bus with its sends, and the sources marked cue.
+    pub async fn audio_bus_list(&self) -> Result<AudioStatus> {
+        self.call("audio.bus.list", &serde_json::json!({})).await
+    }
+
+    /// Take a bus out, live. Refused while an output takes its sound from it.
+    pub async fn audio_bus_remove(&self, params: &BusIdRequest) -> Result<BusIdRequest> {
+        self.call("audio.bus.remove", params).await
+    }
+
+    /// Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.
+    pub async fn audio_bus_set(&self, params: &BusSetRequest) -> Result<BusStatus> {
+        self.call("audio.bus.set", params).await
+    }
+
+    /// Mark or clear a source for the cue bus. `solo` clears every other mark first.
+    pub async fn audio_cue_set(&self, params: &CueSetRequest) -> Result<AudioStatus> {
+        self.call("audio.cue.set", params).await
+    }
+
+    /// The sound outputs on the mixer's machine that a bus can play on.
+    pub async fn audio_device_list(&self) -> Result<AudioDeviceList> {
+        self.call("audio.device.list", &serde_json::json!({})).await
+    }
+
+    /// Move the programme's master fader or mute. Only what is named moves.
+    pub async fn audio_master_set(&self, params: &MasterSetRequest) -> Result<MasterConfig> {
+        self.call("audio.master.set", params).await
+    }
+
+    /// Set how much of one source goes to one bus. 0 takes it off the bus.
+    pub async fn audio_send_set(&self, params: &SendSetRequest) -> Result<BusStatus> {
+        self.call("audio.send.set", params).await
     }
 
     /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.

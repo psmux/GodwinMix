@@ -23,8 +23,17 @@ impl Mixer {
                 Err(refusal) => return Err(anyhow::Error::new(refusal)),
             }
         }
-        let slot = OutputSlot::attach(&self.program, &self.venc_tee, &self.aenc_tee, cfg, self.bus_tx.clone())?;
+        let audio = match self.bus_audio_for(cfg)? {
+            Some(tee) => tee,
+            None => self.aenc_tee.clone(),
+        };
+        let slot = OutputSlot::attach(&self.program, &self.venc_tee, &audio, cfg, self.bus_tx.clone());
+        // Held either way, so a refused attach lets go of a bus encoder too.
         self.hold_encoder_for(&cfg.id);
+        if slot.is_err() {
+            self.release_encoder_for(&cfg.id);
+        }
+        let slot = slot?;
         Ok(slot)
     }
 

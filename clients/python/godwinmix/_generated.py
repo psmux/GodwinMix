@@ -234,6 +234,22 @@ class Asset(TypedDict, total=False):
     sha256: Optional[str]
     size: Optional[int]
 
+class AudioDevice(TypedDict, total=False):
+    """One sound card a bus can be played on."""
+
+    api: Optional[str]
+    # The platform's sound API, when it says: `osxaudio`, `wasapi2`, `pulse`, `alsa`.
+    id: str
+    # The id `device` takes, the most stable thing the platform says about it.
+    index: int
+    # Its number in this list, which `device` also takes.
+    name: str
+
+class AudioDeviceList(TypedDict, total=False):
+    """`audio.device.list`."""
+
+    devices: List[AudioDevice]
+
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -256,6 +272,14 @@ class AudioShape(TypedDict, total=False):
     channels: int
     codec: AudioCodec
     sample_rate: int
+
+class AudioStatus(TypedDict, total=False):
+    """The audio desk as `audio.bus.list` and the status snapshot report it."""
+
+    buses: List[BusStatus]
+    cue: List[str]
+    # The sources marked cue, in the order they were marked.
+    master: MasterConfig
 
 class AudioWant(TypedDict, total=False):
     """The audio an output wants. Every field left out is taken from the source."""
@@ -405,6 +429,67 @@ class BundleAsset(TypedDict, total=False):
     # Relative to the bundle root, forward slashes. Never absolute: see the head of this module.
     sha256: str
     size: int
+
+class BusConfig(TypedDict, total=False):
+    """One bus: a mix of its own beside the programme. Three kinds, decided by two keys. With neither, it carries each source at the level its `sends` give it (a source with no send is not on it). With `minus`, it is the programme as heard, without that one source: a guest's return. With `cue`, it carries the sources marked cue at unity, and the programme while nothing is marked."""
+
+    cue: bool
+    # Make this the cue bus.
+    device: Optional[str]
+    # Play the bus on a sound card here: `default`, a device name, its id, or its number in `audio.device.list`.
+    gain: float
+    # The bus master, 0.0 to 10.0.
+    id: str
+    # A slug: `monitor`, `guest-return`, `recording-b`.
+    minus: Optional[str]
+    # Make this bus the programme without this source.
+    muted: bool
+    name: Optional[str]
+    # What the desk shows. The id when left out.
+    sends: Dict[str, Any]
+    # Level per source id, 0.0 to 10.0, after the source's own fader and mute. Read only on a bus with neither `minus` nor `cue`.
+
+class BusIdRequest(TypedDict, total=False):
+    """`audio.bus.remove`, and anything else that names one bus."""
+
+    id: str
+
+class BusSetRequest(TypedDict, total=False):
+    """`audio.bus.set`. Only what is named moves. `device: ""` stops playing it on a sound card, and `minus: ""` makes a mix minus bus an ordinary one."""
+
+    device: Optional[str]
+    gain: Optional[float]
+    id: str
+    minus: Optional[str]
+    muted: Optional[bool]
+    name: Optional[str]
+
+class BusStatus(TypedDict, total=False):
+    """One bus and what is using it."""
+
+    cue: bool
+    # Make this the cue bus.
+    device: Optional[str]
+    # Play the bus on a sound card here: `default`, a device name, its id, or its number in `audio.device.list`.
+    device_state: Optional[str]
+    # The device it is playing on, once it opened, or why it is not.
+    gain: float
+    # The bus master, 0.0 to 10.0.
+    id: str
+    # A slug: `monitor`, `guest-return`, `recording-b`.
+    kind: str
+    # `sends`, `minus` or `cue`.
+    listen: str
+    # Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
+    minus: Optional[str]
+    # Make this bus the programme without this source.
+    muted: bool
+    name: Optional[str]
+    # What the desk shows. The id when left out.
+    outputs: List[str]
+    # The outputs that take their sound from this bus.
+    sends: Dict[str, Any]
+    # Level per source id, 0.0 to 10.0, after the source's own fader and mute. Read only on a bus with neither `minus` nor `cue`.
 
 class CalibrateRequest(TypedDict, total=False):
     """`governor.calibrate`."""
@@ -913,6 +998,14 @@ class Crop(TypedDict, total=False):
     left: float
     right: float
     top: float
+
+class CueSetRequest(TypedDict, total=False):
+    """`audio.cue.set`: mark or clear one source for the cue bus."""
+
+    cue: bool
+    solo: bool
+    # Clear every other mark first, so only this source is heard: solo.
+    source: str
 
 class Destination(TypedDict, total=False):
     """One destination as a client sees it. The key never appears: `has_key` says whether there is one."""
@@ -2540,6 +2633,19 @@ class MarkRequest(TypedDict, total=False):
     label: Optional[str]
     # What to call the group of changes that follows. Omit it to end the group, so the next change is its own undo step.
 
+class MasterConfig(TypedDict, total=False):
+    """A master fader and mute."""
+
+    gain: float
+    # 0.0 silent, 1.0 unity, up to 10.0.
+    muted: bool
+
+class MasterSetRequest(TypedDict, total=False):
+    """`audio.master.set`. Only what is named moves."""
+
+    gain: Optional[float]
+    muted: Optional[bool]
+
 class MatchSource(TypedDict, total=False):
     """A rendition that follows a larger source's size, up to a limit."""
 
@@ -2700,6 +2806,8 @@ class MediaTagged(TypedDict, total=False):
 class Meters(TypedDict, total=False):
     """`event/meters`: the programme bus and every source, in one message at 10 per second, rather than one message per meter as the legacy stream sends."""
 
+    buses: Dict[str, Any]
+    # Peak dBFS per channel, per audio bus id, after the bus master. Left out while there are no buses.
     program: List[float]
     # Peak dBFS per channel on the programme bus.
     sources: Dict[str, Any]
@@ -2728,6 +2836,8 @@ class MissingSource(TypedDict, total=False):
 class MixerStatus(TypedDict, total=False):
     ad: Union[AdStatus, None]
     # Present while an ad break is armed or running.
+    audio: Union[AudioStatus, None]
+    # The programme master, the buses and the cue marks. Left out by a core that has no audio desk.
     backend: BackendInfo
     multiview: MultiviewStatus
     outputs: List[OutputStatus]
@@ -3630,6 +3740,14 @@ class SeekParams(TypedDict, total=False):
     # Source id.
     position_ms: float
     # Milliseconds from the start of the clip. Off either end is clamped rather than refused, so a scrubber flicked past the end lands there.
+
+class SendSetRequest(TypedDict, total=False):
+    """`audio.send.set`: how much of one source goes to one bus."""
+
+    bus: str
+    level: float
+    # 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
+    source: str
 
 class SessionLogRequest(TypedDict, total=False):
     """`core.session_log`."""
@@ -5005,6 +5123,14 @@ METHODS = (
     {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "agent.tools", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/agent/tools"), "summary": 'The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.'},
+    {"name": "audio.bus.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/bus/add"), "summary": 'Add a bus beside the programme mix, live. Nothing is built for buses until the first one.'},
+    {"name": "audio.bus.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/audio/bus/list"), "summary": 'The programme master, every bus with its sends, and the sources marked cue.'},
+    {"name": "audio.bus.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/audio/bus/remove"), "summary": 'Take a bus out, live. Refused while an output takes its sound from it.'},
+    {"name": "audio.bus.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/bus/set"), "summary": 'Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.'},
+    {"name": "audio.cue.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/cue/set"), "summary": 'Mark or clear a source for the cue bus. `solo` clears every other mark first.'},
+    {"name": "audio.device.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/audio/device/list"), "summary": "The sound outputs on the mixer's machine that a bus can play on."},
+    {"name": "audio.master.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/master/set"), "summary": "Move the programme's master fader or mute. Only what is named moves."},
+    {"name": "audio.send.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/send/set"), "summary": 'Set how much of one source goes to one bus. 0 takes it off the bus.'},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer\'s programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.'},
     {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
     {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
@@ -5380,6 +5506,127 @@ class GeneratedMethods:
         """The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder."""
         params: Dict[str, Any] = {}
         return await self._call("agent.tools", params)
+
+    async def audio_bus_add(
+        self,
+        id: str,
+        *,
+        cue: Optional[bool] = None,
+        device: Optional[str] = None,
+        gain: Optional[float] = None,
+        minus: Optional[str] = None,
+        muted: Optional[bool] = None,
+        name: Optional[str] = None,
+        sends: Optional[Dict[str, Any]] = None,
+    ) -> BusStatus:
+        """Add a bus beside the programme mix, live. Nothing is built for buses until the first one."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if cue is not None:
+            params["cue"] = cue
+        if device is not None:
+            params["device"] = device
+        if gain is not None:
+            params["gain"] = gain
+        if minus is not None:
+            params["minus"] = minus
+        if muted is not None:
+            params["muted"] = muted
+        if name is not None:
+            params["name"] = name
+        if sends is not None:
+            params["sends"] = sends
+        return await self._call("audio.bus.add", params)
+
+    async def audio_bus_list(
+        self,
+    ) -> AudioStatus:
+        """The programme master, every bus with its sends, and the sources marked cue."""
+        params: Dict[str, Any] = {}
+        return await self._call("audio.bus.list", params)
+
+    async def audio_bus_remove(
+        self,
+        id: str,
+    ) -> BusIdRequest:
+        """Take a bus out, live. Refused while an output takes its sound from it."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("audio.bus.remove", params)
+
+    async def audio_bus_set(
+        self,
+        id: str,
+        *,
+        device: Optional[str] = None,
+        gain: Optional[float] = None,
+        minus: Optional[str] = None,
+        muted: Optional[bool] = None,
+        name: Optional[str] = None,
+    ) -> BusStatus:
+        """Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if device is not None:
+            params["device"] = device
+        if gain is not None:
+            params["gain"] = gain
+        if minus is not None:
+            params["minus"] = minus
+        if muted is not None:
+            params["muted"] = muted
+        if name is not None:
+            params["name"] = name
+        return await self._call("audio.bus.set", params)
+
+    async def audio_cue_set(
+        self,
+        cue: bool,
+        source: str,
+        *,
+        solo: Optional[bool] = None,
+    ) -> AudioStatus:
+        """Mark or clear a source for the cue bus. `solo` clears every other mark first."""
+        params: Dict[str, Any] = {}
+        params["cue"] = cue
+        params["source"] = source
+        if solo is not None:
+            params["solo"] = solo
+        return await self._call("audio.cue.set", params)
+
+    async def audio_device_list(
+        self,
+    ) -> AudioDeviceList:
+        """The sound outputs on the mixer's machine that a bus can play on."""
+        params: Dict[str, Any] = {}
+        return await self._call("audio.device.list", params)
+
+    async def audio_master_set(
+        self,
+        *,
+        gain: Optional[float] = None,
+        muted: Optional[bool] = None,
+    ) -> MasterConfig:
+        """Move the programme's master fader or mute. Only what is named moves."""
+        params: Dict[str, Any] = {}
+        if gain is not None:
+            params["gain"] = gain
+        if muted is not None:
+            params["muted"] = muted
+        return await self._call("audio.master.set", params)
+
+    async def audio_send_set(
+        self,
+        bus: str,
+        level: float,
+        source: str,
+    ) -> BusStatus:
+        """Set how much of one source goes to one bus. 0 takes it off the bus."""
+        params: Dict[str, Any] = {}
+        params["bus"] = bus
+        params["level"] = level
+        params["source"] = source
+        return await self._call("audio.send.set", params)
 
     async def channel_add(
         self,

@@ -843,6 +843,52 @@
       ],
       "type": "string"
     },
+    "AudioDevice": {
+      "description": "One sound card a bus can be played on.",
+      "properties": {
+        "api": {
+          "description": "The platform's sound API, when it says: `osxaudio`, `wasapi2`,\n`pulse`, `alsa`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The id `device` takes, the most stable thing the platform says about it.",
+          "type": "string"
+        },
+        "index": {
+          "description": "Its number in this list, which `device` also takes.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "AudioDeviceList": {
+      "description": "`audio.device.list`.",
+      "properties": {
+        "devices": {
+          "items": {
+            "$ref": "#/$defs/AudioDevice"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "devices"
+      ],
+      "type": "object"
+    },
     "AudioSetParams": {
       "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
       "properties": {
@@ -919,6 +965,32 @@
         "channels",
         "sample_rate",
         "bitrate_kbps"
+      ],
+      "type": "object"
+    },
+    "AudioStatus": {
+      "description": "The audio desk as `audio.bus.list` and the status snapshot report it.",
+      "properties": {
+        "buses": {
+          "items": {
+            "$ref": "#/$defs/BusStatus"
+          },
+          "type": "array"
+        },
+        "cue": {
+          "description": "The sources marked cue, in the order they were marked.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "master": {
+          "$ref": "#/$defs/MasterConfig"
+        }
+      },
+      "required": [
+        "master",
+        "buses"
       ],
       "type": "object"
     },
@@ -1538,6 +1610,193 @@
         "path",
         "sha256",
         "size"
+      ],
+      "type": "object"
+    },
+    "BusConfig": {
+      "description": "One bus: a mix of its own beside the programme.\n\nThree kinds, decided by two keys. With neither, it carries each source at\nthe level its `sends` give it (a source with no send is not on it). With\n`minus`, it is the programme as heard, without that one source: a guest's\nreturn. With `cue`, it carries the sources marked cue at unity, and the\nprogramme while nothing is marked.",
+      "properties": {
+        "cue": {
+          "description": "Make this the cue bus.",
+          "type": "boolean"
+        },
+        "device": {
+          "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gain": {
+          "description": "The bus master, 0.0 to 10.0.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+          "type": "string"
+        },
+        "minus": {
+          "description": "Make this bus the programme without this source.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "muted": {
+          "type": "boolean"
+        },
+        "name": {
+          "description": "What the desk shows. The id when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sends": {
+          "additionalProperties": {
+            "format": "double",
+            "type": "number"
+          },
+          "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "BusIdRequest": {
+      "description": "`audio.bus.remove`, and anything else that names one bus.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "BusSetRequest": {
+      "description": "`audio.bus.set`. Only what is named moves. `device: \"\"` stops playing it\non a sound card, and `minus: \"\"` makes a mix minus bus an ordinary one.",
+      "properties": {
+        "device": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gain": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "minus": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "muted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "BusStatus": {
+      "description": "One bus and what is using it.",
+      "properties": {
+        "cue": {
+          "description": "Make this the cue bus.",
+          "type": "boolean"
+        },
+        "device": {
+          "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "device_state": {
+          "description": "The device it is playing on, once it opened, or why it is not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gain": {
+          "description": "The bus master, 0.0 to 10.0.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`sends`, `minus` or `cue`.",
+          "type": "string"
+        },
+        "listen": {
+          "description": "Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.",
+          "type": "string"
+        },
+        "minus": {
+          "description": "Make this bus the programme without this source.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "muted": {
+          "type": "boolean"
+        },
+        "name": {
+          "description": "What the desk shows. The id when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outputs": {
+          "description": "The outputs that take their sound from this bus.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sends": {
+          "additionalProperties": {
+            "format": "double",
+            "type": "number"
+          },
+          "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "listen"
       ],
       "type": "object"
     },
@@ -3289,6 +3548,26 @@
         "top",
         "right",
         "bottom"
+      ],
+      "type": "object"
+    },
+    "CueSetRequest": {
+      "description": "`audio.cue.set`: mark or clear one source for the cue bus.",
+      "properties": {
+        "cue": {
+          "type": "boolean"
+        },
+        "solo": {
+          "description": "Clear every other mark first, so only this source is heard: solo.",
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "cue"
       ],
       "type": "object"
     },
@@ -9248,6 +9527,41 @@
       },
       "type": "object"
     },
+    "MasterConfig": {
+      "description": "A master fader and mute.",
+      "properties": {
+        "gain": {
+          "default": 1.0,
+          "description": "0.0 silent, 1.0 unity, up to 10.0.",
+          "format": "double",
+          "type": "number"
+        },
+        "muted": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "MasterSetRequest": {
+      "description": "`audio.master.set`. Only what is named moves.",
+      "properties": {
+        "gain": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "muted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "MatchSource": {
       "additionalProperties": false,
       "description": "A rendition that follows a larger source's size, up to a limit.",
@@ -9742,6 +10056,11 @@
     "Meters": {
       "description": "`event/meters`: the programme bus and every source, in one message at 10\nper second, rather than one message per meter as the legacy stream sends.",
       "properties": {
+        "buses": {
+          "additionalProperties": true,
+          "description": "Peak dBFS per channel, per audio bus id, after the bus master. Left out\nwhile there are no buses.",
+          "type": "object"
+        },
         "program": {
           "description": "Peak dBFS per channel on the programme bus.",
           "items": {
@@ -9864,6 +10183,17 @@
             }
           ],
           "description": "Present while an ad break is armed or running."
+        },
+        "audio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AudioStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The programme master, the buses and the cue marks. Left out by a core\nthat has no audio desk."
         },
         "backend": {
           "$ref": "#/$defs/BackendInfo"
@@ -13251,6 +13581,28 @@
       "required": [
         "id",
         "position_ms"
+      ],
+      "type": "object"
+    },
+    "SendSetRequest": {
+      "description": "`audio.send.set`: how much of one source goes to one bus.",
+      "properties": {
+        "bus": {
+          "type": "string"
+        },
+        "level": {
+          "description": "0.0 takes the source off the bus, 1.0 is unity, up to 10.0.",
+          "format": "double",
+          "type": "number"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bus",
+        "source",
+        "level"
       ],
       "type": "object"
     },
@@ -17603,14 +17955,14 @@
     },
     {
       "ext": "meters",
-      "legacy": "audio_level, source_audio_level",
+      "legacy": "audio_level, source_audio_level, bus_audio_level",
       "name": "event/meters",
       "pattern": "meters",
       "payload": {
         "$ref": "#/$defs/Meters"
       },
       "since": "1",
-      "summary": "Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws."
+      "summary": "Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws."
     },
     {
       "ext": "tally",
@@ -18850,6 +19202,204 @@
       "scope": "admin",
       "since": "1",
       "summary": "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "add_audio_bus"
+      },
+      "mutating": true,
+      "name": "audio.bus.add",
+      "params": {
+        "$ref": "#/$defs/BusConfig"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/audio/bus/add"
+      },
+      "result": {
+        "$ref": "#/$defs/BusStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Add a bus beside the programme mix, live. Nothing is built for buses until the first one."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_audio_buses"
+      },
+      "mutating": false,
+      "name": "audio.bus.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/audio/bus/list"
+      },
+      "result": {
+        "$ref": "#/$defs/AudioStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The programme master, every bus with its sends, and the sources marked cue."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "audio.bus.remove",
+      "params": {
+        "$ref": "#/$defs/BusIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/audio/bus/remove"
+      },
+      "result": {
+        "$ref": "#/$defs/BusIdRequest"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Take a bus out, live. Refused while an output takes its sound from it."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_audio_bus"
+      },
+      "mutating": true,
+      "name": "audio.bus.set",
+      "params": {
+        "$ref": "#/$defs/BusSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/audio/bus/set"
+      },
+      "result": {
+        "$ref": "#/$defs/BusStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_audio_cue"
+      },
+      "mutating": true,
+      "name": "audio.cue.set",
+      "params": {
+        "$ref": "#/$defs/CueSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/audio/cue/set"
+      },
+      "result": {
+        "$ref": "#/$defs/AudioStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Mark or clear a source for the cue bus. `solo` clears every other mark first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "audio.device.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/audio/device/list"
+      },
+      "result": {
+        "$ref": "#/$defs/AudioDeviceList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The sound outputs on the mixer's machine that a bus can play on."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_master_audio"
+      },
+      "mutating": true,
+      "name": "audio.master.set",
+      "params": {
+        "$ref": "#/$defs/MasterSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/audio/master/set"
+      },
+      "result": {
+        "$ref": "#/$defs/MasterConfig"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Move the programme's master fader or mute. Only what is named moves."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_audio_send"
+      },
+      "mutating": true,
+      "name": "audio.send.set",
+      "params": {
+        "$ref": "#/$defs/SendSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/audio/send/set"
+      },
+      "result": {
+        "$ref": "#/$defs/BusStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Set how much of one source goes to one bus. 0 takes it off the bus."
     },
     {
       "destructive": false,

@@ -849,6 +849,52 @@
         ],
         "type": "string"
       },
+      "AudioDevice": {
+        "description": "One sound card a bus can be played on.",
+        "properties": {
+          "api": {
+            "description": "The platform's sound API, when it says: `osxaudio`, `wasapi2`,\n`pulse`, `alsa`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "The id `device` takes, the most stable thing the platform says about it.",
+            "type": "string"
+          },
+          "index": {
+            "description": "Its number in this list, which `device` also takes.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AudioDeviceList": {
+        "description": "`audio.device.list`.",
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/AudioDevice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "type": "object"
+      },
       "AudioSetParams": {
         "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
         "properties": {
@@ -925,6 +971,32 @@
           "channels",
           "sample_rate",
           "bitrate_kbps"
+        ],
+        "type": "object"
+      },
+      "AudioStatus": {
+        "description": "The audio desk as `audio.bus.list` and the status snapshot report it.",
+        "properties": {
+          "buses": {
+            "items": {
+              "$ref": "#/components/schemas/BusStatus"
+            },
+            "type": "array"
+          },
+          "cue": {
+            "description": "The sources marked cue, in the order they were marked.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "master": {
+            "$ref": "#/components/schemas/MasterConfig"
+          }
+        },
+        "required": [
+          "master",
+          "buses"
         ],
         "type": "object"
       },
@@ -1544,6 +1616,193 @@
           "path",
           "sha256",
           "size"
+        ],
+        "type": "object"
+      },
+      "BusConfig": {
+        "description": "One bus: a mix of its own beside the programme.\n\nThree kinds, decided by two keys. With neither, it carries each source at\nthe level its `sends` give it (a source with no send is not on it). With\n`minus`, it is the programme as heard, without that one source: a guest's\nreturn. With `cue`, it carries the sources marked cue at unity, and the\nprogramme while nothing is marked.",
+        "properties": {
+          "cue": {
+            "description": "Make this the cue bus.",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "description": "The bus master, 0.0 to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+            "type": "string"
+          },
+          "minus": {
+            "description": "Make this bus the programme without this source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What the desk shows. The id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sends": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusIdRequest": {
+        "description": "`audio.bus.remove`, and anything else that names one bus.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusSetRequest": {
+        "description": "`audio.bus.set`. Only what is named moves. `device: \"\"` stops playing it\non a sound card, and `minus: \"\"` makes a mix minus bus an ordinary one.",
+        "properties": {
+          "device": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "minus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusStatus": {
+        "description": "One bus and what is using it.",
+        "properties": {
+          "cue": {
+            "description": "Make this the cue bus.",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_state": {
+            "description": "The device it is playing on, once it opened, or why it is not.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "description": "The bus master, 0.0 to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`sends`, `minus` or `cue`.",
+            "type": "string"
+          },
+          "listen": {
+            "description": "Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.",
+            "type": "string"
+          },
+          "minus": {
+            "description": "Make this bus the programme without this source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What the desk shows. The id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputs": {
+            "description": "The outputs that take their sound from this bus.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sends": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "listen"
         ],
         "type": "object"
       },
@@ -3295,6 +3554,26 @@
           "top",
           "right",
           "bottom"
+        ],
+        "type": "object"
+      },
+      "CueSetRequest": {
+        "description": "`audio.cue.set`: mark or clear one source for the cue bus.",
+        "properties": {
+          "cue": {
+            "type": "boolean"
+          },
+          "solo": {
+            "description": "Clear every other mark first, so only this source is heard: solo.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "cue"
         ],
         "type": "object"
       },
@@ -9153,6 +9432,41 @@
         },
         "type": "object"
       },
+      "MasterConfig": {
+        "description": "A master fader and mute.",
+        "properties": {
+          "gain": {
+            "default": 1.0,
+            "description": "0.0 silent, 1.0 unity, up to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "muted": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MasterSetRequest": {
+        "description": "`audio.master.set`. Only what is named moves.",
+        "properties": {
+          "gain": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "MatchSource": {
         "additionalProperties": false,
         "description": "A rendition that follows a larger source's size, up to a limit.",
@@ -9746,6 +10060,17 @@
               }
             ],
             "description": "Present while an ad break is armed or running."
+          },
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The programme master, the buses and the cue marks. Left out by a core\nthat has no audio desk."
           },
           "backend": {
             "$ref": "#/components/schemas/BackendInfo"
@@ -12958,6 +13283,28 @@
         "required": [
           "id",
           "position_ms"
+        ],
+        "type": "object"
+      },
+      "SendSetRequest": {
+        "description": "`audio.send.set`: how much of one source goes to one bus.",
+        "properties": {
+          "bus": {
+            "type": "string"
+          },
+          "level": {
+            "description": "0.0 takes the source off the bus, 1.0 is unity, up to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bus",
+          "source",
+          "level"
         ],
         "type": "object"
       },
@@ -16734,6 +17081,290 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/audio/bus/add": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusConfig"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/bus/list": {
+      "get": {
+        "description": "JSON-RPC method `audio.bus.list`. Needs the `read` scope.",
+        "operationId": "audio.bus.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The programme master, every bus with its sends, and the sources marked cue.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/audio/bus/remove": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusIdRequest"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a bus out, live. Refused while an output takes its sound from it.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/bus/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/cue/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.cue.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.cue.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CueSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Mark or clear a source for the cue bus. `solo` clears every other mark first.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/device/list": {
+      "get": {
+        "description": "JSON-RPC method `audio.device.list`. Needs the `read` scope.",
+        "operationId": "audio.device.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioDeviceList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The sound outputs on the mixer's machine that a bus can play on.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/audio/master/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.master.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.master.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterConfig"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move the programme's master fader or mute. Only what is named moves.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/send/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.send.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.send.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set how much of one source goes to one bus. 0 takes it off the bus.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/channels": {

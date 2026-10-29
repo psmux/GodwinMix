@@ -280,6 +280,10 @@ pub struct MixerStatus {
     pub backend: BackendInfo,
     /// Present while an ad break is armed or running.
     pub ad: Option<AdStatus>,
+    /// The programme master, the buses and the cue marks. Left out by a core
+    /// that has no audio desk.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<crate::buses::AudioStatus>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -381,6 +385,8 @@ pub enum Event {
     /// operator's fader and before the mute. The mosaic carries no audio, so
     /// this is what puts a meter beside each picture.
     SourceAudioLevel { source: SourceId, peak_db: Vec<f64> },
+    /// Peak level per channel for one audio bus, in dBFS, after its master.
+    BusAudioLevel { bus: String, peak_db: Vec<f64> },
     /// How far through a seekable source has got. Sent a few times a second for
     /// those sources only, because a camera has no position to report and a
     /// scrubber updated twice a minute is worse than no scrubber.

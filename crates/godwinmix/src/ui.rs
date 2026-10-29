@@ -210,6 +210,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/failure.js", include_str!("../../../ui/panels/outputs/failure.js")),
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
     ("panels/audio/chain.js", include_str!("../../../ui/panels/audio/chain.js")),
+    ("panels/audio/desk.js", include_str!("../../../ui/panels/audio/desk.js")),
+    ("panels/audio/desk.css", include_str!("../../../ui/panels/audio/desk.css")),
+    ("panels/audio/bus-strip.js", include_str!("../../../ui/panels/audio/bus-strip.js")),
+    ("panels/audio/level.js", include_str!("../../../ui/panels/audio/level.js")),
+    ("panels/audio/listen.js", include_str!("../../../ui/panels/audio/listen.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
     ("panels/outputs/record-stop.js", include_str!("../../../ui/panels/outputs/record-stop.js")),
@@ -1423,6 +1428,9 @@ mod tests {
         // A source's backup line and the programme's list of them, fetched by
         // backup-slot.js when a source first goes down or gets a backup.
         reachable.extend(closure_of("panels/sources/backup-line.js"));
+        // The audio desk: the master, buses, cue and sends, which the audio
+        // panel fetches when it is first put on screen.
+        reachable.extend(closure_of("panels/audio/desk.js"));
         reachable.extend(closure_of("panels/multiview/backup-banner.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
@@ -1542,6 +1550,7 @@ mod tests {
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("panels/sources/backup-line.js", "a source that goes down or has a backup"),
+            ("panels/audio/desk.js", "the audio panel on screen"),
             ("panels/multiview/backup-banner.js", "a source on its backup"),
             ("panels/sources/backup-form.js", "the settings drawer"),
             ("panels/sources/page-interact.js", "Interact on a web page source"),
