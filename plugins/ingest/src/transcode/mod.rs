@@ -22,7 +22,10 @@
 mod build;
 mod caps;
 mod cuda;
+mod cuda_api;
 mod cuda_ctx;
+mod cuda_deint;
+mod cuda_scratch;
 mod build_video;
 mod graph;
 pub(crate) mod input;
