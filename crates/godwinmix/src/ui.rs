@@ -228,6 +228,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/failure.js", include_str!("../../../ui/panels/outputs/failure.js")),
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
     ("panels/audio/chain.js", include_str!("../../../ui/panels/audio/chain.js")),
+    ("panels/audio/chain.css", include_str!("../../../ui/panels/audio/chain.css")),
     ("panels/audio/desk.js", include_str!("../../../ui/panels/audio/desk.js")),
     ("panels/audio/desk.css", include_str!("../../../ui/panels/audio/desk.css")),
     ("panels/audio/bus-strip.js", include_str!("../../../ui/panels/audio/bus-strip.js")),
@@ -1285,7 +1286,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_507_kb() {
+    fn the_page_with_the_composer_open_stays_under_508_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1304,7 +1305,11 @@ mod tests {
         // own files did not grow. Measured at 516509 bytes. Raised to 507 kB
         // with the page's own budget, for closing a show from its tab, and
         // again the composer's files did not grow: measured at 518135 bytes.
-        assert!(bytes < 507 * 1024, "the page with the composer open is {bytes} bytes, over the 507 kB budget");
+        // Raised to 508 kB for the teleprompter's panel entry, the audio
+        // panel's lazy desk hooks and its FX button, which landed together;
+        // each alone fitted, and the composer's files did not grow. The FX
+        // dialog and the desk load when first used. Measured at 519182 bytes.
+        assert!(bytes < 508 * 1024, "the page with the composer open is {bytes} bytes, over the 508 kB budget");
     }
 
     #[test]
@@ -1461,6 +1466,8 @@ mod tests {
         // The audio desk: the master, buses, cue and sends, which the audio
         // panel fetches when it is first put on screen.
         reachable.extend(closure_of("panels/audio/desk.js"));
+        // A source's sound filters, fetched when its FX button is first pressed.
+        reachable.extend(closure_of("panels/audio/chain.js"));
         reachable.extend(closure_of("panels/multiview/backup-banner.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when

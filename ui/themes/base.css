@@ -688,14 +688,6 @@ gmx-program .monitor-pane canvas { flex: 0 0 auto; }
 .audio-channel input { width: 100%; accent-color: var(--accent); }
 .audio-channel.muted .meter { opacity: .4; }
 .audio-channel [aria-pressed="true"] { color: var(--warn); }
-/* The sound filter chain on one source (panels/audio/chain.js). */
-.chain { display: flex; flex-direction: column; gap: 12px; min-width: min(420px, 86vw); }
-.chain .row { gap: 8px; align-items: center; }
-.chain-list { display: flex; flex-direction: column; gap: 10px; }
-.chain-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; }
-.chain-knob { display: grid; grid-template-columns: 7.5em 1fr 5em; gap: 8px; align-items: center; }
-.chain-knob input { width: 100%; accent-color: var(--accent); }
-.chain-card [aria-pressed="false"] { color: var(--warn); }
 /* Keep studio controls reachable when the monitor dock is resized. */
 @media (min-width: 761px) {
   .dock-frame[data-dock-panel="core/program"] .dock-content { overflow: hidden; }

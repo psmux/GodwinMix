@@ -2,10 +2,15 @@
 //
 // Every change goes through filter.add, filter.set and filter.remove, the
 // same methods an agent or a script uses. A slider sends its value at most
-// ten times a second while it moves and once more when it is let go.
+// ten times a second while it moves and once more when it is let go. The
+// panel imports this when FX is first pressed, so the page a volunteer opens
+// does not carry it.
 import { el } from '../../shell/dom.js';
 import { modal } from '../../shell/modal.js';
 import { errorToast } from '../../shell/toast.js';
+
+// Loaded the first time FX is pressed, so its styles come with it.
+document.head.appendChild(el('link', { rel: 'stylesheet', href: new URL('./chain.css', import.meta.url).href }));
 
 // What each kind shows: its name, and the settings a person reaches for.
 export const KINDS = {
@@ -96,7 +101,8 @@ async function add(client, source, items) {
   }
 }
 
-export function openChain(client, source) {
+export function openChain(client, id) {
+  const source = client.state.sources?.find(s => s.id === id) || { id };
   const name = source.name || source.id;
   const list = el('div.chain-list');
   const picker = el('select', { 'aria-label': 'Add a sound filter' }, [
