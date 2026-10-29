@@ -96,7 +96,7 @@ impl Drop for Renderer {
 /// this canvas.
 fn spec(page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<ExecSpec> {
     let program = crate::input::graphic_renderer(browser)?;
-    let fps = if page.fps == 0 { canvas.fps.numer().max(1) as u32 } else { page.fps };
+    let fps = if page.fps == 0 { canvas.fps_rounded().max(1) as u32 } else { page.fps };
     let mut argv = vec![
         program.to_string_lossy().to_string(),
         "--url".into(),

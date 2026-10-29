@@ -206,7 +206,7 @@ impl AppState {
         let tokens = plugin_access::accepting_plugins(crate::station::show::with_station_token(cfg.tokens(rehearsal)))
             .with_devices(crate::devices::for_config(&cfg.source_path));
         let safety =
-            godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
+            godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.rounded().max(1) as u32);
         // The flash guard needs a luminance measurement and the telemetry
         // probes are the only thing that takes one. Binding them here is what
         // lets the guard tell a flash from a dissolve while a client is
@@ -236,11 +236,7 @@ impl AppState {
                 max_idempotency_key_bytes: 255,
                 event_queue: 256,
             },
-            canvas: CanvasInfo {
-                width: cfg.canvas.width,
-                height: cfg.canvas.height,
-                fps: cfg.canvas.fps,
-            },
+            canvas: canvas_info(&cfg.canvas),
             tokens: Arc::new(tokens),
             confirmations: Confirmations::new(),
             idempotency: idempotency::Cache::new(),
@@ -1705,6 +1701,13 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
         // reads, so the two doors answer the same.
         config_path: crate::observe::doctor_config_path(&state.config_path),
     }
+}
+
+/// The canvas as the protocol reports it: the whole rate, and the exact one
+/// beside it when it is a fraction such as 29.97.
+pub(crate) fn canvas_info(c: &godwinmix_core::config::Canvas) -> CanvasInfo {
+    let exact = (c.fps.denom() != 1).then(|| [c.fps.numer(), c.fps.denom()]);
+    CanvasInfo { width: c.width, height: c.height, fps: c.fps.rounded(), fps_fraction: exact }
 }
 
 #[cfg(test)]

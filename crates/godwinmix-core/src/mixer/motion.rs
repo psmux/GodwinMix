@@ -147,7 +147,7 @@ impl Mixer {
         // duration` on the compositor's timeline and pushed one latency
         // later, which is `duration` from now.
         let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
-        let frame = gst::ClockTime::from_mseconds(1000 / self.canvas.fps.numer().max(1) as u64);
+        let frame = self.canvas.frame_duration();
         let end = self
             .schedule_command(Command::TransitionEnd { transition: id }, (now + duration + frame).mseconds())
             .ok();

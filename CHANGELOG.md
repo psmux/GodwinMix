@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* The canvas runs at the broadcast rates: `[canvas] fps = 29.97`, `59.94`, `23.976` or `119.88`, kept as the exact fraction, so a 29.97 programme records and streams at 30000/1001 with every frame 33.4 ms apart. It used to take whole numbers only. A whole rate is written as before, so existing config files read and write unchanged. Whatever counts in whole frames (a page's paint rate, a plugin's frame rate) uses the nearest whole one, and the keyframe interval is worked out from the true rate. `core.info` and the status keep `canvas.fps` as the whole rate and add `canvas.fps_fraction`, `[30000, 1001]`, when it is not whole.
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

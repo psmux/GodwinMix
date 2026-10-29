@@ -48,7 +48,7 @@ pub async fn start(
         canvas: godwinmix_protocol::plugin::wire::Canvas {
             width: canvas.width as u32,
             height: canvas.height as u32,
-            fps: (canvas.fps.numer() as u32) / (canvas.fps.denom().max(1) as u32),
+            fps: canvas.fps_rounded().max(1) as u32,
         },
         expected: cfg
             .nodes

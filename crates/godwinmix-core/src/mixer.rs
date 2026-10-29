@@ -1510,12 +1510,14 @@ const FREEZE_HOLD: Duration = Duration::from_secs(45);
 /// The running configuration in the units the catalogue's `{unit, from}`
 /// properties name.
 fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
-    let fps = cfg.canvas.fps.max(1) as i64;
+    // Whole frames for whatever counts in frames; the keyframe interval is
+    // worked out from the true rate, so 29.97 gets 60 frames in 2 s and not 58.
+    let fps = cfg.canvas.fps.rounded().max(1) as i64;
     crate::catalogue::apply::Vars {
         video_bitrate_kbps: cfg.program.video_bitrate_kbps as i64,
         audio_bitrate_kbps: cfg.program.audio_bitrate_kbps as i64,
         keyframe_secs: cfg.program.keyframe_interval_secs as i64,
-        keyframe_frames: fps * cfg.program.keyframe_interval_secs as i64,
+        keyframe_frames: (cfg.canvas.fps.as_f64() * cfg.program.keyframe_interval_secs as f64).round().max(1.0) as i64,
         fps,
         cpu_count: crate::catalogue::apply::cpu_count(),
     }
@@ -4079,7 +4081,7 @@ impl Mixer {
         }
         let id = self.take_generation.load(Ordering::SeqCst);
         let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
-        let frame = gst::ClockTime::from_mseconds(1000 / self.canvas.fps.numer().max(1) as u64);
+        let frame = self.canvas.frame_duration();
         let end = self
             .schedule_command(Command::TransitionEnd { transition: id }, (now + duration + frame).mseconds())
             .ok();
@@ -6344,7 +6346,7 @@ mod tests {
             canvas: crate::config::Canvas {
                 width: 320,
                 height: 180,
-                fps: 30,
+                fps: crate::config::FrameRate::whole(30),
                 sample_rate: 48000,
                 channels: 2,
             },

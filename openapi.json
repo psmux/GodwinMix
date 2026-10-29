@@ -1859,8 +1859,22 @@
         "description": "The canvas every source is scaled onto and every output leaves by.",
         "properties": {
           "fps": {
+            "description": "Frames a second to the nearest whole frame: 30 for 29.97.",
             "format": "int32",
             "type": "integer"
+          },
+          "fps_fraction": {
+            "description": "The exact rate as numerator and denominator, when it is not whole:\n`[30000, 1001]` for 29.97. Absent for a whole rate.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "height": {
             "format": "int32",

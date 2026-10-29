@@ -223,7 +223,7 @@ impl Core {
         let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
         cfg.canvas.width = 320;
         cfg.canvas.height = 180;
-        cfg.canvas.fps = 30;
+        cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(30);
         cfg.multiview.enabled = false;
         // The hooks are the thing under test, so nothing else may refuse a
         // take while they are being measured.

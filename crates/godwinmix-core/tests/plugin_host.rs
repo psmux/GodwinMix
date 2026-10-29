@@ -42,7 +42,7 @@ fn install(tag: &str) -> (PathBuf, Arc<Supervisor>) {
     loader::set_dir(dir.clone());
     loader::set_runtime_dir(dir.join("run"));
     loader::install_from_path(&fixture()).expect("installing the fixture");
-    let canvas = CanvasCaps::new(&godwinmix_core::config::Canvas { width: 320, height: 180, fps: 30, sample_rate: 48_000, channels: 2 });
+    let canvas = CanvasCaps::new(&godwinmix_core::config::Canvas { width: 320, height: 180, fps: godwinmix_core::config::FrameRate::whole(30), sample_rate: 48_000, channels: 2 });
     let supervisor = Supervisor::new(canvas, Default::default());
     let failures = supervisor.start_all();
     assert!(failures.is_empty(), "the service would not start: {failures:?}");

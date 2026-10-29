@@ -58,7 +58,7 @@ async fn serve() -> (SocketAddr, String, godwinmix_protocol::TlsInfo) {
     let _ = gstreamer::init();
     let dir = scratch();
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
-    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, 15);
+    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, godwinmix_core::config::FrameRate::whole(15));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("a port");
     let address = listener.local_addr().unwrap();

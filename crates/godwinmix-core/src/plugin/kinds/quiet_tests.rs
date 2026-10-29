@@ -15,7 +15,7 @@ fn ctx() -> BuildCtx {
     let canvas = CanvasCaps::new(&Canvas {
         width: 160,
         height: 90,
-        fps: 30,
+        fps: crate::config::FrameRate::whole(30),
         sample_rate: 48_000,
         channels: 2,
     });
