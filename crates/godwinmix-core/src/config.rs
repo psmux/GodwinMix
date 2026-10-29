@@ -77,6 +77,10 @@ pub struct Config {
     /// `docs/reference/audio-buses.md`.
     #[serde(default)]
     pub audio: godwinmix_protocol::buses::AudioConfig,
+    /// Instant replay: the angles kept in memory and for how long. Off until
+    /// it names an angle. See `crate::replay` and `docs/reference/replay.md`.
+    #[serde(default, skip_serializing_if = "godwinmix_protocol::replay::ReplayConfig::is_default")]
+    pub replay: godwinmix_protocol::replay::ReplayConfig,
     /// Settings belonging to a plugin, one table per plugin name, plus the
     /// handful of switches that are about installing plugins rather than about
     /// one plugin. The core never reads inside a plugin's own table; it hands
@@ -1531,6 +1535,9 @@ struct StoredRuntime {
     /// The master and the buses, as the desk last left them.
     #[serde(default)]
     audio: Option<godwinmix_protocol::buses::AudioConfig>,
+    /// Replay as it was last turned on or off.
+    #[serde(default)]
+    replay: Option<godwinmix_protocol::replay::ReplayConfig>,
     /// What `gmx preset apply` chose for the surface. Absent means the config
     /// file's own `[ui]` section stands.
     #[serde(default)]
@@ -1719,6 +1726,10 @@ impl Config {
             if let Some(audio) = stored.audio {
                 tracing::info!(path = %store.display(), buses = audio.buses.len(), "using the audio desk managed at runtime");
                 cfg.audio = audio;
+            }
+            if let Some(replay) = stored.replay {
+                tracing::info!(path = %store.display(), angles = ?replay.angles, "using replay as it was last set at runtime");
+                cfg.replay = replay;
             }
             if let Some(ui) = stored.ui {
                 if !ui.is_empty() {
@@ -2246,6 +2257,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             outputs: vec![],
             filters: vec![],
             audio: Default::default(),
+            replay: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],

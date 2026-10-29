@@ -29,7 +29,7 @@ pub mod save;
 pub mod shared;
 mod status;
 
-pub use desk::{Desk, Taps};
+pub use desk::{Desk, SourceTaps, Taps};
 pub use shared::{Shared, Window};
 
 use godwinmix_protocol::replay::{EventRenameRequest, MarkRequest, ReplayConfig};
