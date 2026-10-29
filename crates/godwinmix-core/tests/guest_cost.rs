@@ -141,23 +141,59 @@ async fn guests_cost_this_much() {
     handle.request(|ack| Command::AddSource(Box::new(host), Some(ack))).await.expect("add the host");
     handle.request(|ack| Command::Take { source: Some("host".into()), at_running_time_ms: None, ack: Some(ack) }).await.expect("take");
     handle.request(|ack| Command::AddOutput(Box::new(whep("monitor", None)), Some(ack))).await.expect("the monitor");
-    tokio::time::sleep(Duration::from_secs(4)).await;
-    let base = measure(10).await;
+    // Long enough for the programme encoder and the monitor to settle, so
+    // the baseline is not a programme still starting.
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    let base = measure(15).await;
     let mut browsers = Vec::new();
     for i in 1..=n {
         browsers.push(guest_in(&handle, &format!("g{i}")).await);
     }
+    let is_live = |i: usize| godwinmix_core::guest::link(&format!("g{i}")) == godwinmix_core::guest::Link::Live;
+    let until = Instant::now() + Duration::from_secs(30);
+    while !(1..=n).all(is_live) && Instant::now() < until {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     tokio::time::sleep(Duration::from_secs(5)).await;
     let live = (1..=n).filter(|i| godwinmix_core::guest::link(&format!("g{i}")) == godwinmix_core::guest::Link::Live).count();
-    let with = measure(10).await;
+    let with = measure(15).await;
+    let status = handle.status().await.expect("status");
+    let stalled: Vec<String> = status
+        .sources
+        .iter()
+        .filter(|s| s.id.starts_with("guest-") && !matches!(s.state, godwinmix_protocol::types::SourceState::Live))
+        .map(|s| format!("{} {:?}", s.id, s.state))
+        .collect();
+    let pictures = (1..=n).filter(|i| sent_size_arrives(&format!("g{i}"))).count();
     drop(browsers);
     handle.send(Command::Shutdown).ok();
+    assert_eq!(pictures, n, "every guest's 1280x720 picture was decoded");
     let _ = thread.join();
     println!(
         "{canvas} 30 programme: no guest {base:.1} percent of a core; {live} of {n} guests live {with:.1}; each guest {:.1}",
         (with - base) / n as f64
     );
     assert_eq!(live, n, "every guest went live");
+    assert!(stalled.is_empty(), "every guest's source stayed live through the measurement: {stalled:?}");
+}
+
+/// Whether the guest's own 1280x720 picture is on their inter channel, which
+/// only a decoded frame of theirs can be: the source alone makes 320x240.
+fn sent_size_arrives(id: &str) -> bool {
+    use gstreamer::prelude::*;
+    let channel = godwinmix_core::guest::channel(id);
+    let reader = gst::parse::launch(&format!("intervideosrc channel={channel} ! appsink name=out sync=false max-buffers=2 drop=true")).unwrap();
+    let reader = reader.downcast::<gst::Pipeline>().unwrap();
+    let out = reader.by_name("out").unwrap();
+    reader.set_state(gst::State::Playing).unwrap();
+    let until = Instant::now() + Duration::from_secs(3);
+    let mut seen = false;
+    while !seen && Instant::now() < until {
+        let sample = out.emit_by_name::<Option<gst::Sample>>("try-pull-sample", &[&100_000_000u64]);
+        seen = sample.and_then(|s| s.caps().and_then(|c| c.structure(0).and_then(|st| st.get::<i32>("width").ok()))) == Some(1280);
+    }
+    let _ = reader.set_state(gst::State::Null);
+    seen
 }
 
 /// The guest's browser when this binary is started as one. Does nothing in

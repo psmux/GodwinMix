@@ -97,7 +97,7 @@ whenever any of it changes, to clients that subscribed to `guest.*`.
 
 The guest's camera session and their return end at once, and the source,
 the bus and the return output are removed, in well under a second. A scene
-that placed the source shows nothing where it was. The link lets nobody in
+that placed the source no longer shows it. The link lets nobody in
 again: the page says the invite is gone.
 
 ### `guest.talkback.set`
@@ -199,18 +199,21 @@ with `guest_cost`:
 GMX_GUESTS=4 cargo test -p godwinmix-core --release --test guest_cost -- --ignored --nocapture guests_cost
 ```
 
-| Guests live | The mixer, percent of one core | Each guest |
-|---|---|---|
-| none | 6.5 to 6.9 | |
-| 1 | 13.0 | 6.3 |
-| 4 | 28.9 | 5.5 |
-| 8 | 54.9 | 6.1 |
+| Guests live | The mixer, percent of one core | Above no guest | Each guest |
+|---|---|---|---|
+| none | 18.8 to 19.6 | | |
+| 1 | 19.9 to 20.1 | 0.5 to 0.9 | 0.5 to 0.9 |
+| 4 | 26.1 | 7.3 | 1.8 |
+| 8 | 52.5 to 54.5 | 33.7 to 35.3 | 4.2 to 4.4 |
 
 A 1280x720 canvas at 30 frames with one test source on air, each guest
 sending 1280x720 H.264 at 30 frames and 2.5 Mbps with Opus, and watching
-their return. The machine was shared with other work (load average 6 to 8),
-which is most of the spread. So a live guest costs about 6 percent of one
-core on this Mac, and eight about half of one.
+their return. Each run checks that every guest's own picture was decoded.
+The machine was shared with other work (load average 4 to 6). The cost per
+guest rises with the number of guests: one is under one percent of a core,
+eight together are about a third of one. The guests' picture is a moving
+test pattern, which is easier to decode than a real camera, so a real
+guest costs somewhat more.
 
 The guests' browsers run in child processes and are not counted. Most of a
 guest is the decode of their 720p camera; the rest is the bus, its AAC
