@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Installing the `.msi` over a desktop app that is open closes the app first, as the setup `.exe` already did. Windows used to close only the mixer, the app started it again as it does after a crash, and the upgrade left part of GStreamer for the next restart of the machine.
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.
