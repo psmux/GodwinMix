@@ -39,6 +39,8 @@ Mark an item done only when it is merged with its tests and its how to page.
 | ISO recording of every input, separate audio tracks | only channel feeds | built in, the recording output with a source as its target | |
 | Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in, `guest.*`, `/guest/<id>/whip` and `/whep` | on `feat/guest-invites` |
 | Downstream keys or overlay channels that survive every take | a graphic has to be in each scene | built in | |
+| Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in | |
+| Downstream keys or overlay channels that survive every take | a graphic has to be in each scene | built in, `scene/server/keys.rs` | on `feat/downstream-keys` |
 | Aux outputs: one source out on its own | outputs carry the programme | built in | |
 | Multiview layouts, and multiview out over NDI or to a screen | one fixed mosaic in the browser | built in | |
 | Vertical and horizontal from one show | a second show sharing the cameras | built in, a second canvas | |

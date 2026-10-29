@@ -188,6 +188,8 @@ Keys accepted on every method, handled before a method runs.
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
+| `program.key.list` | `GET /api/v1/program/key/list` | read |  | 1 | The downstream keys on air, bottom first. |
+| `program.key.set` | `POST /api/v1/program/key/set` | operate |  | 1 | Put a scene on air as a downstream key, above whatever is taken, or take it off. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
 | `program.thumbnail` | `GET /api/v1/program/thumbnail` | read |  | 1 | What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks. |
@@ -2898,6 +2900,40 @@ MCP tool `program_history` in the `search` profile: readOnlyHint true, destructi
       "$ref": "#/$defs/TakeRecord"
     },
     "type": "array"
+  }
+}
+```
+
+#### `program.key.list`
+
+The downstream keys on air, bottom first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyListing"
+  }
+}
+```
+
+#### `program.key.set`
+
+Put a scene on air as a downstream key, above whatever is taken, or take it off.
+
+MCP tool `set_downstream_key` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/KeySetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyListing"
   }
 }
 ```

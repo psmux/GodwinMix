@@ -11,11 +11,13 @@ use godwinmix_core::mixer::transition::TransitionSpec;
 use godwinmix_core::mixer::Command;
 use serde_json::{json, Value};
 
+mod keys;
 pub(crate) mod missing;
 mod thumbnail;
 
 pub fn register(reg: &mut Registry<Call>) {
     thumbnail::register(reg);
+    keys::register(reg);
     reg.register(
         MethodDef::new(
             "program.get",
@@ -180,7 +182,7 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
         let Some(spec) = transition else {
             return cut(&call, Some(id), req.at_running_time_ms).await;
         };
-        return take_one_item(&call, &id, req.at_running_time_ms, spec).await;
+        return take_one_item(&call, &id, req.at_running_time_ms, Some(spec)).await;
     }
 
     // A scene by name, or the armed one when nothing was named. A `source`
@@ -278,22 +280,9 @@ async fn take_one_item(
     call: &Call,
     source: &str,
     at_running_time_ms: Option<u64>,
-    transition: TransitionSpec,
+    transition: Option<TransitionSpec>,
 ) -> Result<Value, RpcError> {
-    let canvas = call.app.scenes.canvas();
-    let caps = godwinmix_core::caps::CanvasCaps::new(&godwinmix_core::config::Canvas {
-        width: canvas.width as i32,
-        height: canvas.height as i32,
-        fps: godwinmix_core::config::FrameRate::whole(canvas.fps.max(1) as i32),
-        ..Default::default()
-    });
-    let scene = godwinmix_core::mixer::ProgramScene {
-        name: source.to_string(),
-        placements: vec![godwinmix_core::mixer::slots::Placement::full_canvas(
-            source.to_string(),
-            &caps,
-        )],
-    };
+    let scene = keys::one_source(call, source);
     call.app.history.expect(&call.token.id);
     call.app
         .mixer
@@ -301,7 +290,7 @@ async fn take_one_item(
             scene: Box::new(scene.clone()),
             at_running_time_ms,
             duration_ms: None,
-            transition: Some(transition.clone()),
+            transition: transition.clone(),
             ack: Some(ack),
         })
         .await
@@ -428,15 +417,25 @@ async fn cut_with(
         .with("source", source.clone()));
     }
     call.app.history.expect(&call.token.id);
-    call.app
-        .mixer
-        .request(|ack| Command::Take {
-            source: source.clone(),
-            at_running_time_ms,
-            ack: Some(ack),
-        })
-        .await
-        .map_err(|e| call.mixer_error(e))?;
+    // A downstream key up: the source goes on air under it, which a plain
+    // cut would leave out. A revert comes through here as well.
+    let keyed = source.as_deref().and_then(|s| call.app.scenes.source_with_keys(s));
+    let taken = match keyed {
+        Some(scene) => {
+            call.app
+                .mixer
+                .request(|ack| Command::TakeScene {
+                    scene: Box::new(scene),
+                    at_running_time_ms,
+                    duration_ms: None,
+                    transition: None,
+                    ack: Some(ack),
+                })
+                .await
+        }
+        None => call.app.mixer.request(|ack| Command::Take { source: source.clone(), at_running_time_ms, ack: Some(ack) }).await,
+    };
+    taken.map_err(|e| call.mixer_error(e))?;
     // Only once the mixer has taken it: a cut the pipeline refused must not
     // start the hold on the next one.
     call.app.safety.record(&call.token.id);

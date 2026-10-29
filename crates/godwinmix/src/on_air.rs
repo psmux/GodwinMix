@@ -121,7 +121,17 @@ pub async fn restore(handle: &MixerHandle, scenes: &Arc<SceneServer>, path: &Pat
             }),
             Err(_) => return,
         },
-        OnAir::Source(id) => handle.send(Command::Take { source: Some(id.clone()), at_running_time_ms: None, ack: None }),
+        // Under the downstream keys that were up, when any were.
+        OnAir::Source(id) => match scenes.source_with_keys(id) {
+            Some(scene) => handle.send(Command::TakeScene {
+                scene: Box::new(scene),
+                at_running_time_ms: None,
+                duration_ms: None,
+                transition: None,
+                ack: None,
+            }),
+            None => handle.send(Command::Take { source: Some(id.clone()), at_running_time_ms: None, ack: None }),
+        },
         OnAir::Black => return,
     };
     if let Err(e) = sent {

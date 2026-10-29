@@ -3947,15 +3947,18 @@ impl Mixer {
     }
 
     /// The source id a scene is shorthand for, when it is one full canvas item
-    /// of one source and nothing else.
+    /// of one source and nothing else, or that source under downstream keys:
+    /// a source taken while a key is up is named after the source, which
+    /// fills the canvas beneath the key's items.
     fn shorthand_source(&self, scene: &ProgramScene) -> Option<SourceId> {
-        let [only] = scene.placements.as_slice() else { return None };
-        let full = only.xpos == 0
-            && only.ypos == 0
-            && only.width == self.canvas.width
-            && only.height == self.canvas.height
-            && only.alpha >= 1.0;
-        full.then(|| only.source.clone())
+        let full = |p: &Placement| {
+            p.xpos == 0 && p.ypos == 0 && p.width == self.canvas.width && p.height == self.canvas.height && p.alpha >= 1.0
+        };
+        match scene.placements.as_slice() {
+            [only] if full(only) => Some(only.source.clone()),
+            [first, ..] if full(first) && first.source == scene.name => Some(first.source.clone()),
+            _ => None,
+        }
     }
 
     fn schedule_scene_take(

@@ -2614,10 +2614,29 @@ class KeyColorRequest(TypedDict, total=False):
     y: Optional[float]
     # 0 to 1 down the source's picture.
 
+class KeyListing(TypedDict, total=False):
+    """The keys on air, bottom first."""
+
+    keys: List[KeyRecord]
+
+class KeyRecord(TypedDict, total=False):
+    id: str
+    name: str
+
 class KeyRevealed(TypedDict, total=False):
     """What `channel.key.reveal` answers: the key itself, and nothing a list would carry."""
 
     secret: str
+
+class KeySetRequest(TypedDict, total=False):
+    """`program.key.set`."""
+
+    on: bool
+    # True to put it on air, false to take it off.
+    scene: str
+    # The scene to put on air as a key, or take off, by name or by id.
+    transition: Union[Transition, None]
+    # How the key comes and goes: a name or {type, duration_ms, params}, as in `program.take`. A fade of 300 ms when absent; `"cut"` for none.
 
 class LadderRef(TypedDict, total=False):
     """A custom ladder."""
@@ -5671,6 +5690,8 @@ METHODS = (
     {"name": "program.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program"), "summary": 'What is on air, the programme running time, and what revert would go back to.'},
     {"name": "program.golive", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/golive"), "summary": 'One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.'},
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
+    {"name": "program.key.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/key/list"), "summary": 'The downstream keys on air, bottom first.'},
+    {"name": "program.key.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/key/set"), "summary": 'Put a scene on air as a downstream key, above whatever is taken, or take it off.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
     {"name": "program.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/thumbnail"), "summary": 'What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.'},
@@ -7967,6 +7988,28 @@ class GeneratedMethods:
         if limit is not None:
             params["limit"] = limit
         return await self._call("program.history", params)
+
+    async def program_key_list(
+        self,
+    ) -> KeyListing:
+        """The downstream keys on air, bottom first."""
+        params: Dict[str, Any] = {}
+        return await self._call("program.key.list", params)
+
+    async def program_key_set(
+        self,
+        on: bool,
+        scene: str,
+        *,
+        transition: Optional[Union[Transition, None]] = None,
+    ) -> KeyListing:
+        """Put a scene on air as a downstream key, above whatever is taken, or take it off."""
+        params: Dict[str, Any] = {}
+        params["on"] = on
+        params["scene"] = scene
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("program.key.set", params)
 
     async def program_revert(
         self,
