@@ -9,6 +9,7 @@
 //! prompter that plays for an hour sends nothing in that hour.
 
 mod check;
+mod place;
 mod scripts;
 mod store;
 mod transport;
