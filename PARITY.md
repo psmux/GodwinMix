@@ -20,7 +20,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Item | Today | Where it goes | State |
 |---|---|---|---|
 | Gain, EQ, gate, expander, compressor, limiter, delay, noise suppression | the OBS names were imported and did nothing | built in, `plugin/filters/audio/` | on `feat/audio-filters` |
-| A sound filter chain per source in the audio panel | API only | built in, UI | |
+| A sound filter chain per source in the audio panel | API only | built in, UI | on `feat/audio-filters` |
 | Audio delay per source | whole programme only, at restart | built in, `delay/filter` | on `feat/audio-filters` |
 | Buses: a master fader, solo, cue and a headphone bus | fader, mute and meter per source | built in | |
 | Mix minus for each guest | none | built in, with the guest return | |

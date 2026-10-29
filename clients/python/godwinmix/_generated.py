@@ -1308,6 +1308,8 @@ class FilterRecord(TypedDict, total=False):
     """One filter as the core reports it."""
 
     id: str
+    params: Dict[str, Any]
+    # The settings in force, as `filter.set` last left them.
     side: str
     source: Optional[str]
     # Absent on a programme filter.
@@ -2199,6 +2201,8 @@ class ImportObsRequest(TypedDict, total=False):
 class ImportReport(TypedDict, total=False):
     config_toml: Optional[str]
     # The `[[sources]]` block for a config file. Only for an import that did not add the sources itself, which is what the command line wants.
+    filters_added: Optional[List[str]]
+    # With `add_sources`: the sound filters put on the added sources, by id. A sound filter stays on its source, as in OBS; one the mixer refused is in `skipped` with its reason.
     filters_duplicated: List[FilterReport]
     # OBS attaches a filter to a source, so a camera keyed in one scene is keyed in all of them. Here filters belong to the item, so a source filter is copied onto each placement and each copy is named here. This is the one thing an import changes the meaning of, so it is reported rather than left for somebody to find on air.
     items: int

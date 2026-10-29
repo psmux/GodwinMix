@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+Sound filters, built in.
+
+* Eight filters work on sound: gain, EQ (a low cut, bass, middle and treble, and up to ten bands of your own), noise gate, expander, compressor, limiter, delay and noise suppression (RNNoise, in pure Rust). Each runs in place on the thread that carries the samples, with no thread or copy of its own: under 0.1% of one core each on an Apple silicon MacBook, and about 1% for noise suppression. They go on a source or on the programme with `filter.add`, or in `[[filters]]`. See [Clean up a microphone](docs/how-to/clean-up-a-microphone.md) and [the reference](docs/reference/sound-filters.md).
+* Each channel of the Audio panel has an FX button: add, set, switch off and remove filters live, or press Voice for a low cut, a gate, a compressor and a limiter in one go.
+* An OBS import brings each source's gain, noise gate, noise suppression, compressor, limiter, expander and three band equaliser across with their settings. They used to arrive under GodwinMix names that nothing ran. They now stay on their source, as in OBS, and are added with it. OBS's video delay is no longer mistaken for a sound delay.
+* A filter added from the page or the API is kept in the runtime store and comes back when the mixer restarts, and when a stalled source is rebuilt. Before, both lost it.
+* `filter.set` changes only the settings it names, as its description says. It used to reset the others to their defaults.
+* A second filter on the same source or the same point of the programme now runs after the first. It used to fail to link, and removing a filter from the middle of a chain relinked the wrong pair.
+* A sound filter on a source's input side went nowhere: it was linked to the proxy below the audio tee, which the capsfilter above was never linked to. It now goes in above the tee.
+* `filter.list` answers with each filter's settings.
+
 ## 0.3.19 (2026-10-28)
 
 * A converted channel whose encoder failed twice in a row, as one NVENC encoder did when fifty channels started at once, sent nothing until its show was stopped and started again. The second failure came inside the five seconds between two builds of a node, so the node was never built again; and the failure stopped the decode's stream, whose input then filled and held the stream's thread for good. A node that fails again too soon is now built again once the five seconds are over, and the thread never waits on a decoder: one that takes nothing more loses whole GOPs at its own input instead. A converted pair whose name was still held by the stream's last session is tried again a second later instead of never.

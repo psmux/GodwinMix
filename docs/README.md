@@ -100,6 +100,7 @@ Start here if you have never run it.
 * [Show live data on air: RSS, JSON, a sheet or a websocket](how-to/show-live-data.md)
 * [Put a presenter on a green screen into a designed studio](how-to/green-screen-presenter.md)
 * [Key out a green or blue screen on any item](how-to/chroma-key.md)
+* [Clean up a microphone with sound filters](how-to/clean-up-a-microphone.md)
 * [Replace the background behind a person, with or without a green screen](how-to/replace-the-background.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
 * [Keep the show on air when a feed drops](how-to/keep-the-show-on-air-when-a-feed-drops.md): a backup source that takes over by itself and hands back when the feed is steady
@@ -178,6 +179,7 @@ Start here if you have never run it.
 * [Live data: the feed methods, events, formats and limits](reference/live-data.md)
 * [Feed paths and templates](reference/feed-paths.md)
 * [The chroma key](reference/chroma-key.md)
+* [Sound filters](reference/sound-filters.md)
 * [The cutout: a person with no screen behind them](reference/cutout.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)

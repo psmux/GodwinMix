@@ -75,3 +75,51 @@ fn a_bad_setting_is_refused_before_anything_is_built() {
 fn db_to_gain_f(db: f64) -> f64 {
     10f64.powf(db / 20.0)
 }
+
+/// What each filter costs, as a share of one core: a minute of canvas audio
+/// pushed through it as fast as it goes, against the same minute with no
+/// filter. A measurement, not a check:
+///
+/// ```text
+/// cargo test -p godwinmix-core --release --features denoise --lib cost_of_each -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "a measurement; see the comment above"]
+fn cost_of_each_sound_filter() {
+    let _ = gst::init();
+    let seconds = 60.0;
+    let run = |type_id: Option<&str>| -> f64 {
+        let pipeline = gst::Pipeline::new();
+        let src = gst::ElementFactory::make("audiotestsrc")
+            .property("num-buffers", (seconds * 50.0) as i32)
+            .property("samplesperbuffer", 960i32)
+            .property_from_str("wave", "pink-noise")
+            .build()
+            .unwrap();
+        let caps = gst::ElementFactory::make("capsfilter").property("caps", canvas().audio()).build().unwrap();
+        let sink = gst::ElementFactory::make("fakesink").property("sync", false).build().unwrap();
+        pipeline.add_many([&src, &caps, &sink]).unwrap();
+        let mut chain = vec![src.clone(), caps.clone()];
+        if let Some(t) = type_id {
+            let bin = make_filter(t).unwrap().build(&canvas(), &Params::new()).unwrap();
+            pipeline.add(&bin).unwrap();
+            chain.push(bin);
+        }
+        chain.push(sink);
+        gst::Element::link_many(&chain).unwrap();
+        let started = std::time::Instant::now();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let bus = pipeline.bus().unwrap();
+        bus.timed_pop_filtered(gst::ClockTime::NONE, &[gst::MessageType::Eos, gst::MessageType::Error]);
+        let took = started.elapsed().as_secs_f64();
+        pipeline.set_state(gst::State::Null).unwrap();
+        took
+    };
+    let bare = run(None);
+    println!("48 kHz stereo, {seconds} s of pink noise; share of one core over the bare pipeline");
+    for m in built_in() {
+        let id = m.provide_id();
+        let took = run(Some(&id));
+        println!("{id:<20} {:>6.2}%", (took - bare).max(0.0) / seconds * 100.0);
+    }
+}

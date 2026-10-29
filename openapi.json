@@ -4821,6 +4821,11 @@
           "id": {
             "type": "string"
           },
+          "params": {
+            "additionalProperties": true,
+            "description": "The settings in force, as `filter.set` last left them.",
+            "type": "object"
+          },
           "side": {
             "type": "string"
           },
@@ -7945,6 +7950,16 @@
             "description": "The `[[sources]]` block for a config file. Only for an import that did\nnot add the sources itself, which is what the command line wants.",
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "filters_added": {
+            "description": "With `add_sources`: the sound filters put on the added sources, by id.\nA sound filter stays on its source, as in OBS; one the mixer refused is\nin `skipped` with its reason.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
               "null"
             ]
           },

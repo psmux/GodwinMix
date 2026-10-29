@@ -1154,6 +1154,7 @@ export interface FilterListing {
 /** One filter as the core reports it. */
 export interface FilterRecord {
   id: string;
+  params?: Record<string, unknown>;
   side: string;
   source?: string | null;
   type: string;
@@ -1902,6 +1903,7 @@ export interface ImportObsRequest {
 
 export interface ImportReport {
   config_toml?: string | null;
+  filters_added?: string[] | null;
   filters_duplicated?: FilterReport[];
   items: number;
   scenes: string[];

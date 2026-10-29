@@ -36,7 +36,7 @@ impl Channel {
             cleaned: vec![0.0; FRAME],
             // One frame of silence ahead, so a sample always has one to
             // come out in its place: that frame is the 10 ms this costs.
-            output: std::iter::repeat(0.0).take(FRAME).collect(),
+            output: std::iter::repeat_n(0.0, FRAME).collect(),
         }
     }
 

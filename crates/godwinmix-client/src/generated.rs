@@ -2170,6 +2170,8 @@ pub struct FilterListing {
 #[serde(default)]
 pub struct FilterRecord {
     pub id: String,
+    /// The settings in force, as `filter.set` last left them.
+    pub params: BTreeMap<String, Value>,
     pub side: String,
     /// Absent on a programme filter.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3539,6 +3541,11 @@ pub struct ImportReport {
     /// not add the sources itself, which is what the command line wants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_toml: Option<String>,
+    /// With `add_sources`: the sound filters put on the added sources, by id.
+    /// A sound filter stays on its source, as in OBS; one the mixer refused is
+    /// in `skipped` with its reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filters_added: Option<Vec<String>>,
     /// OBS attaches a filter to a source, so a camera keyed in one scene is
     /// keyed in all of them. Here filters belong to the item, so a source
     /// filter is copied onto each placement and each copy is named here. This

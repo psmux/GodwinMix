@@ -61,7 +61,7 @@ impl Dynamics {
         let s = &self.s;
         let over = level_db - s.threshold_db;
         match self.mode {
-            Mode::Limit => over.max(0.0) * -1.0,
+            Mode::Limit => -over.max(0.0),
             Mode::Expand => (over.min(0.0) * (s.ratio - 1.0)).max(-80.0),
             Mode::Compress => {
                 let slope = 1.0 / s.ratio - 1.0;
