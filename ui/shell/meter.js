@@ -38,7 +38,7 @@ export function dbToPos(db) {
   return 1;
 }
 
-/** key ("program", "src:<id>" or "bus:<id>") -> {peaks, t} */
+/** key ("program" or "src:<id>") -> {peaks, t} */
 const levels = new Map();
 /** view id -> {key, node, orient, bars, held, shown, readout} */
 const views = new Map();
@@ -88,9 +88,6 @@ export function takeMeters(params) {
   if (params.program) takeLevel("program", params.program);
   if (params.sources) {
     for (const [id, peaks] of Object.entries(params.sources)) takeLevel("src:" + id, peaks);
-  }
-  if (params.buses) {
-    for (const [id, peaks] of Object.entries(params.buses)) takeLevel("bus:" + id, peaks);
   }
 }
 

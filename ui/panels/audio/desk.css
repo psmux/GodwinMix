@@ -8,6 +8,7 @@
 .audio-desk select { min-width: 0; max-width: 100%; }
 .audio-bus-pick select { flex: 1 1 auto; }
 .audio-bus { display: flex; flex-direction: column; gap: 8px; padding: 8px; background: var(--panel2); border-radius: 6px; }
+.audio-bus > input[type="range"] { flex: none; width: 100%; }
 .audio-bus .meter { width: 100%; height: 12px; }
 .audio-bus p { margin: 0; }
 .audio-bus-add input { flex: 1 1 120px; min-width: 0; }

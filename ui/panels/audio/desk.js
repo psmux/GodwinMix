@@ -3,6 +3,7 @@
 // `audio` part of the status snapshot and goes back through the audio.*
 // methods, the same ones the CLI and an agent use.
 import { el } from '../../shell/dom.js';
+import { takeLevel } from '../../shell/meter.js';
 import { errorToast } from '../../shell/toast.js';
 import { BusStrip, addForm } from './bus-strip.js';
 import { LevelGestures, levelInput } from './level.js';
@@ -110,11 +111,23 @@ export class AudioDesk {
   }
 
   drop() {
+    this.offMeters?.();
     this.strip.drop();
     this.listener.stop();
   }
 }
 
-export function mountDesk(client) {
-  return new AudioDesk(client);
+/** Put the desk into an audio panel that is on screen, once the panel has
+ *  fetched this module. The panel calls the desk from then on. */
+export function attach(panel) {
+  if (!panel.isConnected || panel.desk) return;
+  const desk = new AudioDesk(panel.client);
+  panel.desk = desk;
+  panel.list.before(desk.node);
+  for (const [id, row] of panel.rows) desk.decorate(row, { id, name: row.name.textContent });
+  // Bus peaks ride in the same meters message as the sources'.
+  desk.offMeters = panel.client.on('meters', data => {
+    if (panel.active) for (const [id, peaks] of Object.entries(data.buses || {})) takeLevel('bus:' + id, peaks);
+  });
+  panel.render(panel.client.state);
 }
