@@ -46,6 +46,13 @@ impl Desk {
             AudioCall::Send(req) => self.send(req, around)?,
             AudioCall::Cue(req) => self.mark_cue(req, around)?,
             AudioCall::DeviceFound(found) => self.device_found(found),
+            AudioCall::AddGuest(cfg) => {
+                let id = cfg.id.clone();
+                self.add(cfg, around)?;
+                self.transient.insert(id);
+            }
+            AudioCall::Talk(call) => self.talk(call, around)?,
+            AudioCall::Talker { source, on } => self.mark_talker(&source, on),
         }
         Ok(self.status(around.outputs_on))
     }
@@ -119,6 +126,7 @@ impl Desk {
         }
         self.tear_down(id);
         self.config.buses.retain(|b| b.id != id);
+        self.transient.remove(id);
         Ok(())
     }
 }

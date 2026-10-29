@@ -3457,12 +3457,15 @@ impl Mixer {
         let RuntimeConfigs { sources: mut live, outputs, .. } = self.runtime_configs();
         // A recording is for this run only. See `config::recordings`.
         let outputs = crate::config::recordings::kept_across_restart(&outputs);
+        // A guest's source and return come and go with an invite.
+        let outputs: Vec<OutputConfig> = outputs.into_iter().filter(|o| !crate::guest::made_for_a_guest_output(o)).collect();
         // A source that could not start this time is still wanted next time.
         for cfg in self.unstarted.configs() {
             if !live.iter().any(|c| c.id == cfg.id) {
                 live.push(cfg.clone());
             }
         }
+        live.retain(|c| !crate::guest::made_for_a_guest_source(c));
 
         #[derive(serde::Serialize)]
         struct Stored<'a> {
@@ -5021,6 +5024,8 @@ impl Mixer {
         if let Some(gain) = gain {
             slot.set_gain(gain);
         }
+        // A talkback source stays off the programme however it is asked.
+        let muted = if self.desk.is_talker(id) { muted.map(|_| true) } else { muted };
         if let Some(muted) = muted {
             slot.set_muted(muted);
         }
@@ -6079,6 +6084,7 @@ mod tests {
     mod slow_restart;
     mod buses;
     mod buses_outlets;
+    mod buses_talk;
     mod sound_only;
     mod supervision;
     mod stale_work;

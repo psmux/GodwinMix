@@ -11,7 +11,7 @@ fn programme(source: &str, pad_volume: f64, muted: bool) -> Programme {
 }
 
 fn weights(mode: Mode, sends: &[(&str, f64)]) -> Weights {
-    Weights { mode, sends: sends.iter().map(|(k, v)| (k.to_string(), *v)).collect() }
+    Weights { mode, sends: sends.iter().map(|(k, v)| (k.to_string(), *v)).collect(), talk: Default::default() }
 }
 
 #[test]
@@ -36,6 +36,16 @@ fn cue_hears_what_is_marked_even_muted_and_the_programme_otherwise() {
     assert_eq!(target(&w, &marked, &programme("mic", 0.0, true)), 1.0);
     assert_eq!(target(&w, &marked, &programme("cam1", 1.0, false)), 0.0);
     assert_eq!(target(&w, &[], &programme("cam1", 1.0, false)), 1.0);
+}
+
+#[test]
+fn a_source_held_for_talkback_is_heard_on_that_bus_though_it_is_muted() {
+    let mut w = weights(Mode::Minus("guest-ana".into()), &[]);
+    let talkback = programme("guest-talkback", 1.0, true);
+    assert_eq!(target(&w, &[], &talkback), 0.0, "muted on the programme, so not on the return either");
+    w.talk.insert("guest-talkback".into());
+    assert_eq!(target(&w, &[], &talkback), 1.0, "held: in the return at full level");
+    assert_eq!(target(&w, &[], &programme("host", 0.7, false)), 0.7, "the rest of the return is unchanged");
 }
 
 #[test]

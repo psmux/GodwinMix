@@ -105,6 +105,20 @@ pub fn link(id: &str) -> Link {
     registry().read().get(id).map(|g| *g.link.lock()).unwrap_or(Link::Waiting)
 }
 
+/// Whether a source is a guest's, which the runtime store never keeps: the
+/// guests module adds it again when the guest offers.
+pub fn made_for_a_guest_source(cfg: &crate::config::SourceConfig) -> bool {
+    source::guest_of(&cfg.uri).is_some()
+}
+
+/// The param that marks a `whep/output` as a guest's return.
+pub const RETURN_PARAM: &str = "guest";
+
+/// Whether an output is a guest's return, which the runtime store never keeps.
+pub fn made_for_a_guest_output(cfg: &crate::config::OutputConfig) -> bool {
+    cfg.params.contains_key(RETURN_PARAM)
+}
+
 /// The inter channel a guest's session writes and its source reads.
 pub fn channel(id: &str) -> String {
     format!("gmx-guest-{id}")

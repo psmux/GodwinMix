@@ -14,6 +14,7 @@ use godwinmix_protocol::buses::{AudioConfig, BusConfig};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 mod sources;
@@ -43,6 +44,10 @@ pub struct Desk {
     pub(super) cue: CueMarks,
     pub(super) notify: Option<Notify>,
     pub(super) tickets: u64,
+    /// The buses made for this run only, a guest's return: never saved.
+    pub(super) transient: BTreeSet<String>,
+    /// The sources used for talkback, kept muted on the programme.
+    pub(super) talkers: BTreeSet<String>,
 }
 
 impl Desk {
@@ -59,6 +64,8 @@ impl Desk {
             cue: Arc::new(Mutex::new(Vec::new())),
             notify: None,
             tickets: 0,
+            transient: BTreeSet::new(),
+            talkers: BTreeSet::new(),
         };
         desk.apply_master();
         desk
@@ -90,7 +97,7 @@ impl Desk {
         let graph = BusGraph::build(&self.pipeline, &self.canvas, &cfg.id, self.latency_ns)
             .map_err(|e| Refusal::Failed(format!("bus {} could not be built: {e:#}. Nothing was changed.", cfg.id)))?;
         graph.set_master(cfg.gain, cfg.muted);
-        let shared = Arc::new(Mutex::new(Weights { mode: mode_of(cfg), sends: cfg.sends.clone() }));
+        let shared = Arc::new(Mutex::new(Weights { mode: mode_of(cfg), sends: cfg.sends.clone(), talk: Default::default() }));
         if self.live.is_empty() {
             for b in branches {
                 self.point_for(b);

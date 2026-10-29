@@ -9,6 +9,10 @@
 //! | minus | what the programme gives it (audio follows video, take fades), 0 for the one left out |
 //! | cue | 1.0 when it is marked cue, muted or not; while nothing is marked, the programme |
 //!
+//! Over all three, a source held for talkback on a bus is at 1.0 there,
+//! muted or not: that is how the operator's voice reaches one guest's return
+//! while the source stays muted on the programme (see `talk.rs`).
+//!
 //! "What the programme gives it" is the source's own `amix` pad volume, read
 //! as it is, so a mix minus follows every take and crossfade without being
 //! told about one. The weight is written to the bus mixer's pad for that
@@ -21,7 +25,7 @@
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -42,6 +46,8 @@ pub enum Mode {
 pub struct Weights {
     pub mode: Mode,
     pub sends: BTreeMap<String, f64>,
+    /// The sources held for talkback on this bus, at 1.0 whatever else.
+    pub talk: BTreeSet<String>,
 }
 
 pub type Shared = Arc<Mutex<Weights>>;
@@ -62,6 +68,9 @@ pub struct Programme {
 pub fn target(w: &Weights, cue: &[String], p: &Programme) -> f64 {
     let muted = || p.amute.property::<bool>("mute");
     let programme = || if muted() { 0.0 } else { p.apad.property::<f64>("volume") };
+    if w.talk.contains(&p.source) {
+        return 1.0;
+    }
     match &w.mode {
         Mode::Sends => {
             let send = w.sends.get(&p.source).copied().unwrap_or(0.0);
