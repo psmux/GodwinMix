@@ -654,6 +654,13 @@ pub struct FilterStatus {
     pub side: String,
 }
 
+/// A change to the configured filter list. See `Mixer::remember_filter`.
+enum FilterChange<'a> {
+    Added(&'a crate::config::FilterConfig),
+    Set(&'a str, &'a crate::config::Params),
+    Removed(&'a str),
+}
+
 /// What `filter.set` answers with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterOutcome {
@@ -2664,6 +2671,29 @@ impl Mixer {
         }
     }
 
+    /// Keep the configured filter list in step with what was put in place,
+    /// and save it. That list is what a source rebuilt after a stall puts back
+    /// on, and what the next start reads from the runtime store, so a
+    /// microphone's EQ set from the desk outlives a restart of either.
+    fn remember_filter(&mut self, change: FilterChange<'_>) {
+        let list = &mut self.cfg.filters;
+        match change {
+            FilterChange::Added(cfg) => {
+                list.retain(|f| f.id != cfg.id);
+                list.push(cfg.clone());
+            }
+            FilterChange::Set(id, params) => {
+                if let Some(f) = list.iter_mut().find(|f| f.id == id) {
+                    for (k, v) in params {
+                        f.params.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            FilterChange::Removed(id) => list.retain(|f| f.id != id),
+        }
+        self.persist_runtime();
+    }
+
     /// The configured filters that name one source.
     fn configured_filters(&self, id: &SourceId) -> Vec<crate::config::FilterConfig> {
         self.cfg
@@ -3383,6 +3413,7 @@ impl Mixer {
         struct Stored<'a> {
             sources: &'a [SourceConfig],
             outputs: &'a [OutputConfig],
+            filters: &'a [crate::config::FilterConfig],
             /// The `[ui]` section `gmx preset apply` wrote, carried through
             /// untouched. Without this, adding one source from the UI would
             /// throw away the layout and theme the preset chose.
@@ -3393,9 +3424,9 @@ impl Mixer {
             .ok()
             .and_then(|text| text.parse::<toml::Table>().ok())
             .and_then(|table| table.get("ui").cloned());
-        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, ui }) {
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, filters: &self.cfg.filters, ui }) {
             Ok(b) => format!(
-                "# Sources and outputs managed from the GodwinMix UI or API.\n\
+                "# Sources, outputs and filters managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
                  # Delete this file to go back to the config file's lists.\n\n{b}"
             ),
@@ -4421,14 +4452,24 @@ impl Mixer {
             }
             Command::AddFilter(cfg, ack) => {
                 let r = self.add_filter(&cfg);
+                if r.is_ok() {
+                    self.remember_filter(FilterChange::Added(&cfg));
+                }
                 reply(ack, &r);
                 r?;
             }
             Command::SetFilter { id, params, reply } => {
-                let _ = reply.send(self.set_filter(&id, &params));
+                let outcome = self.set_filter(&id, &params);
+                if outcome == FilterOutcome::Applied {
+                    self.remember_filter(FilterChange::Set(&id, &params));
+                }
+                let _ = reply.send(outcome);
             }
             Command::RemoveFilter(id, ack) => {
                 let r = self.remove_filter(&id);
+                if r.is_ok() {
+                    self.remember_filter(FilterChange::Removed(&id));
+                }
                 reply(ack, &r);
                 r?;
             }

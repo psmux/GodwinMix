@@ -400,3 +400,37 @@ fn a_group_that_contains_itself_is_reported_and_not_recursed_into() {
         imported.report.notes
     );
 }
+
+#[test]
+fn sound_filters_stay_on_their_source_once_and_come_out_as_config() {
+    let text = full().replacen(
+        r#""settings": { "key_color": 4278255360, "similarity": 400, "smoothness": 80 }
+        }"#,
+        r#""settings": { "key_color": 4278255360, "similarity": 400, "smoothness": 80 }
+        },
+        { "id": "compressor_filter", "name": "Comp", "enabled": true, "settings": { "ratio": 6.0, "threshold": -20.0 } },
+        { "id": "noise_gate_filter", "name": "Gate", "enabled": false, "settings": {} }"#,
+        1,
+    );
+    assert_ne!(text, full(), "the fixture's key filter moved; this test edits it");
+    let imported = import(&text, &Options::default()).unwrap();
+
+    // Not copied onto either placement: the camera's sound is mixed once.
+    for scene in &imported.document.scenes {
+        for item in scene.walk() {
+            assert!(item.filters.iter().all(|f| f.kind == "chroma/filter"), "{:?}", item.filters);
+        }
+    }
+    let kinds: Vec<_> = imported.sound_filters.iter().map(|f| f.kind.as_str()).collect();
+    assert_eq!(kinds, ["compressor/filter", "gate/filter"]);
+    let comp = &imported.sound_filters[0];
+    assert_eq!(comp.params["ratio"], json!(6.0));
+    assert!(imported.sources.iter().any(|s| s.id == comp.source), "{} is an imported source", comp.source);
+    assert_eq!(imported.sound_filters[1].params["bypass"], json!(true), "OBS had it switched off");
+
+    let toml = imported.to_config_toml().unwrap();
+    assert!(toml.contains("[[filters]]") && toml.contains("compressor/filter"), "{toml}");
+    let written: crate::config::Config = toml::from_str(&format!("{toml}\n[canvas]\nwidth = 1920\nheight = 1080\n"))
+        .expect("the fragment reads as config");
+    assert_eq!(written.filters.len(), 2);
+}

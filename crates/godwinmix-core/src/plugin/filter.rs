@@ -228,10 +228,14 @@ impl FilterSlot {
         self.filter.board()
     }
 
+    /// Change the keys `params` names and keep the rest, as `filter.set`
+    /// promises: a compressor told `ratio = 6` keeps its threshold.
     pub fn configure(&mut self, params: &Params) -> Result<Configure> {
-        let outcome = self.filter.configure(params)?;
+        let mut merged = self.spec.params.clone();
+        merged.extend(params.iter().map(|(k, v)| (k.clone(), v.clone())));
+        let outcome = self.filter.configure(&merged)?;
         if outcome == Configure::Applied {
-            self.spec.params = params.clone();
+            self.spec.params = merged;
         }
         Ok(outcome)
     }

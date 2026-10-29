@@ -1517,6 +1517,8 @@ struct StoredRuntime {
     sources: Option<Vec<SourceConfig>>,
     #[serde(default)]
     outputs: Option<Vec<OutputConfig>>,
+    #[serde(default)]
+    filters: Option<Vec<FilterConfig>>,
     /// What `gmx preset apply` chose for the surface. Absent means the config
     /// file's own `[ui]` section stands.
     #[serde(default)]
@@ -1694,6 +1696,13 @@ impl Config {
                     "using outputs managed at runtime"
                 );
                 cfg.outputs = recordings::at_boot(&cfg.outputs, outputs);
+            }
+            if let Some(filters) = stored.filters {
+                tracing::info!(
+                    path = %store.display(), count = filters.len(),
+                    "using filters managed at runtime"
+                );
+                cfg.filters = filters;
             }
             if let Some(ui) = stored.ui {
                 if !ui.is_empty() {
