@@ -68,9 +68,13 @@ pub struct PlayRequest {
     /// left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    /// Put it on air with the programme's transition once it is loaded.
+    /// Put it on air once it is loaded, as `program.take` would.
     #[serde(default, skip_serializing_if = "is_false")]
     pub take: bool,
+    /// The transition for that take: a name such as `"fade"` or a stinger's
+    /// object. A cut when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition: Option<crate::requests::Transition>,
 }
 
 /// `replay.set`: change the angle or the speed of a replay that is playing,

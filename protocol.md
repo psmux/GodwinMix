@@ -203,6 +203,16 @@ Keys accepted on every method, handled before a method runs.
 | `prompter.speed` | `POST /api/v1/prompter/speed` | operate |  | 1 | Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
 | `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
+| `replay.event.delete` | `POST /api/v1/replay/event/delete` | operate |  | 1 | Forget a replay event. The recording it pointed at is not touched. |
+| `replay.event.list` | `GET /api/v1/replay/event/list` | read |  | 1 | Every replay event, oldest first. |
+| `replay.event.rename` | `POST /api/v1/replay/event/rename` | operate |  | 1 | Give a replay event a name. |
+| `replay.get` | `GET /api/v1/replay` | read |  | 1 | Whether replay is on, each angle's buffer depth and size, and every event. |
+| `replay.mark` | `POST /api/v1/replay/mark` | operate |  | 1 | Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`. |
+| `replay.play` | `POST /api/v1/replay/play` | operate |  | 1 | Play an event, or the last seconds of an angle, on a replay source, added if it is not there. |
+| `replay.save` | `POST /api/v1/replay/save` | operate |  | 1 | Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again. |
+| `replay.set` | `POST /api/v1/replay/set` | operate |  | 1 | Change a playing replay's angle or speed, from the frame it is on. |
+| `replay.start` | `POST /api/v1/replay/start` | operate |  | 1 | Record these angles, each the last `seconds`. Called again, it changes them in place. |
+| `replay.stop` | `POST /api/v1/replay/stop` | operate | yes | 1 | Stop recording, free every buffer and forget every event. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
 | `scene.apply_graphic` | `POST /api/v1/scenes/apply_graphic` | operate |  | 1 | Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. |
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
@@ -3150,6 +3160,174 @@ MCP tool `rendition_presets` in the `search` profile: readOnlyHint true, destruc
 }
 ```
 
+#### `replay.event.delete`
+
+Forget a replay event. The recording it pointed at is not touched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EventIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/EventIdRequest"
+  }
+}
+```
+
+#### `replay.event.list`
+
+Every replay event, oldest first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/EventList"
+  }
+}
+```
+
+#### `replay.event.rename`
+
+Give a replay event a name.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EventRenameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayEvent"
+  }
+}
+```
+
+#### `replay.get`
+
+Whether replay is on, each angle's buffer depth and size, and every event.
+
+MCP tool `get_replay` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
+#### `replay.mark`
+
+Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.
+
+MCP tool `mark_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MarkRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayEvent"
+  }
+}
+```
+
+#### `replay.play`
+
+Play an event, or the last seconds of an angle, on a replay source, added if it is not there.
+
+MCP tool `play_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlayRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/PlayStatus"
+  }
+}
+```
+
+#### `replay.save`
+
+Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.
+
+MCP tool `save_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SaveRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/SaveStatus"
+  }
+}
+```
+
+#### `replay.set`
+
+Change a playing replay's angle or speed, from the frame it is on.
+
+MCP tool `set_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReplaySetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PlayStatus"
+  }
+}
+```
+
+#### `replay.start`
+
+Record these angles, each the last `seconds`. Called again, it changes them in place.
+
+MCP tool `start_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReplayConfig"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
+#### `replay.stop`
+
+Stop recording, free every buffer and forget every event.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
 #### `scene.add`
 
 Make an empty scene, or one built from a set of sources.
@@ -3336,7 +3514,7 @@ Group the changes that follow into one undo step, until the next mark. This is w
 ```json
 {
   "params": {
-    "$ref": "#/$defs/MarkRequest"
+    "$ref": "#/$defs/MarkRequest2"
   },
   "result": {
     "type": "object"

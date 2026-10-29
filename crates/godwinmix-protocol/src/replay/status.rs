@@ -67,3 +67,9 @@ pub struct SaveStatus {
     pub duration_ms: u64,
     pub bytes: u64,
 }
+
+/// `replay.event.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EventList {
+    pub events: Vec<ReplayEvent>,
+}

@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 pub mod agent;
 mod audio;
+mod replay;
 mod agent_setup;
 pub mod channel_destinations;
 mod channels;
@@ -102,6 +103,7 @@ pub fn registry() -> Registry<Call> {
     agent_setup::register(&mut reg);
     filters::register(&mut reg);
     audio::register(&mut reg);
+    replay::register(&mut reg);
     scenes::register(&mut reg);
     presence::register(&mut reg);
     prompter::register(&mut reg);

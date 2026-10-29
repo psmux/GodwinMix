@@ -22,6 +22,13 @@ impl MixerHandle {
         self.ask(Command::Replay(call, Some(tx)), rx).await
     }
 
+    /// The pipeline behind a source, for calling its kind off the mixer
+    /// thread. `None` when there is no such source.
+    pub async fn source_input(&self, source: &str) -> anyhow::Result<Option<Arc<crate::input::InputPipeline>>> {
+        let (tx, rx) = oneshot::channel();
+        self.ask(Command::SourceInput { source: source.into(), reply: tx }, rx).await
+    }
+
     /// The rings and events, for reading a clip off the mixer thread: a
     /// save writes from these without the mixer waiting on the disk.
     pub fn replay_shared(&self) -> Arc<Shared> {

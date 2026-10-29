@@ -149,6 +149,17 @@ export interface AlarmSettings {
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
+/** One angle's ring, as it stands. */
+export interface AngleStatus {
+  bytes: number;
+  dropped: number;
+  encoder: string;
+  gops: number;
+  held_secs: number;
+  id: string;
+  waiting?: string | null;
+}
+
 /** When a change to a key takes effect. */
 export type Applies = "live" | "next_source" | "restart";
 
@@ -1045,6 +1056,22 @@ export interface ErrorAction {
   panel?: string | null;
   piece?: string | null;
   value?: unknown;
+}
+
+/** `replay.event.delete`, and anything else that names one event. */
+export interface EventIdRequest {
+  id: string;
+}
+
+/** `replay.event.list`. */
+export interface EventList {
+  events: ReplayEvent[];
+}
+
+/** `replay.event.rename`. */
+export interface EventRenameRequest {
+  id: string;
+  name: string;
 }
 
 export interface ExportRequest {
@@ -2282,8 +2309,22 @@ export interface MachineStatus {
   uptime_secs?: number | null;
 }
 
-/** `scene.history.mark`. */
+/** Which point `replay.mark` sets. */
+export type MarkPoint = "in" | "out";
+
+/**
+ * `replay.mark`. With `point` it sets an in or an out point; with
+ * `seconds` alone it makes a whole event of the last that many seconds.
+ */
 export interface MarkRequest {
+  angle?: string | null;
+  name?: string | null;
+  point?: MarkPoint | null;
+  seconds?: number | null;
+}
+
+/** `scene.history.mark`. */
+export interface MarkRequest2 {
   label?: string | null;
 }
 
@@ -2862,6 +2903,30 @@ export interface PlayRequest {
 }
 
 /**
+ * `replay.play`: load an event, or the last seconds of an angle, into a
+ * replay source and play it from the start.
+ */
+export interface PlayRequest2 {
+  angle?: string | null;
+  event?: string | null;
+  seconds?: number | null;
+  source?: string | null;
+  speed?: number | null;
+  take?: boolean;
+  transition?: Transition | null;
+}
+
+/** What `replay.play` and `replay.set` answer with. */
+export interface PlayStatus {
+  angle: string;
+  duration_ms: number;
+  event?: string | null;
+  position_ms: number;
+  source: string;
+  speed: number;
+}
+
+/**
  * The links of an output served as HLS from the control port, each with
  * the output's viewer key on it. A channel's watch link is one too:
  * `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
@@ -3180,6 +3245,44 @@ export interface ReorderRequest {
   seq?: number | null;
 }
 
+/** The `[replay]` table. With no angles nothing is built. */
+export interface ReplayConfig {
+  angles?: string[];
+  bitrate_kbps?: number;
+  seconds?: number;
+}
+
+/**
+ * One event: a stretch of time between an in point and an out point, the
+ * same stretch on every angle.
+ */
+export interface ReplayEvent {
+  angle?: string | null;
+  id: string;
+  in_ms: number;
+  name: string;
+  out_ms?: number | null;
+}
+
+/**
+ * `replay.set`: change the angle or the speed of a replay that is playing,
+ * from the frame it is on.
+ */
+export interface ReplaySetRequest {
+  angle?: string | null;
+  source?: string | null;
+  speed?: number | null;
+}
+
+/** `replay.get`: everything about replay on this mixer. */
+export interface ReplayStatus {
+  angles: AngleStatus[];
+  config: ReplayConfig;
+  events: ReplayEvent[];
+  now_ms: number;
+  on: boolean;
+}
+
 /** What `project.import` answers with. */
 export interface Report {
   changes: Change[];
@@ -3258,6 +3361,25 @@ export interface Rtmps {
 export interface SaveRequest {
   name: string;
   out?: string | null;
+}
+
+/**
+ * `replay.save`: write an event, or the whole buffer of one angle, to an
+ * MP4 in the media folder without encoding it again.
+ */
+export interface SaveRequest2 {
+  angle?: string | null;
+  event?: string | null;
+  name?: string | null;
+}
+
+/** What `replay.save` answers with once the file is written. */
+export interface SaveStatus {
+  angle: string;
+  bytes: number;
+  duration_ms: number;
+  name: string;
+  path: string;
 }
 
 /** `headend.scan`. */
@@ -4659,6 +4781,16 @@ export interface MethodParams {
   "prompter.speed": SpeedRequest;
   "rendition.plan": PlanRequest;
   "rendition.presets": Record<string, never>;
+  "replay.event.delete": EventIdRequest;
+  "replay.event.list": Record<string, never>;
+  "replay.event.rename": EventRenameRequest;
+  "replay.get": Record<string, never>;
+  "replay.mark": MarkRequest;
+  "replay.play": PlayRequest2;
+  "replay.save": SaveRequest2;
+  "replay.set": ReplaySetRequest;
+  "replay.start": ReplayConfig;
+  "replay.stop": Record<string, never>;
   "scene.add": AddSceneRequest;
   "scene.apply_graphic": ApplyGraphicRequest;
   "scene.apply_layout": ApplyLayoutRequest;
@@ -4670,7 +4802,7 @@ export interface MethodParams {
   "scene.export": ExportRequest2;
   "scene.get": SceneRequest;
   "scene.graphic.list": Record<string, never>;
-  "scene.history.mark": MarkRequest;
+  "scene.history.mark": MarkRequest2;
   "scene.import": ImportRequest2;
   "scene.import.obs": ImportObsRequest;
   "scene.item.add": AddItemRequest;
@@ -4933,6 +5065,16 @@ export interface MethodResults {
   "prompter.speed": PrompterState;
   "rendition.plan": PlanView;
   "rendition.presets": PresetsResult;
+  "replay.event.delete": EventIdRequest;
+  "replay.event.list": EventList;
+  "replay.event.rename": ReplayEvent;
+  "replay.get": ReplayStatus;
+  "replay.mark": ReplayEvent;
+  "replay.play": PlayStatus;
+  "replay.save": SaveStatus;
+  "replay.set": PlayStatus;
+  "replay.start": ReplayStatus;
+  "replay.stop": ReplayStatus;
   "scene.add": SceneView;
   "scene.apply_graphic": Record<string, unknown>;
   "scene.apply_layout": Record<string, unknown>;
@@ -5264,6 +5406,16 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/speed" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
   { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/presets" } },
+  { name: "replay.event.delete", summary: "Forget a replay event. The recording it pointed at is not touched.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/event/delete" } },
+  { name: "replay.event.list", summary: "Every replay event, oldest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/replay/event/list" } },
+  { name: "replay.event.rename", summary: "Give a replay event a name.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/event/rename" } },
+  { name: "replay.get", summary: "Whether replay is on, each angle's buffer depth and size, and every event.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/replay" } },
+  { name: "replay.mark", summary: "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/mark" } },
+  { name: "replay.play", summary: "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/play" } },
+  { name: "replay.save", summary: "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/save" } },
+  { name: "replay.set", summary: "Change a playing replay's angle or speed, from the frame it is on.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/set" } },
+  { name: "replay.start", summary: "Record these angles, each the last `seconds`. Called again, it changes them in place.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/start" } },
+  { name: "replay.stop", summary: "Stop recording, free every buffer and forget every event.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/replay/stop" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
   { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_graphic" } },
   { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_layout" } },
@@ -6281,6 +6433,56 @@ export class GeneratedMethods {
     return this._call("rendition.presets", {}) as Promise<PresetsResult>;
   }
 
+  /** Forget a replay event. The recording it pointed at is not touched. */
+  replayEventDelete(params: EventIdRequest): Promise<EventIdRequest> {
+    return this._call("replay.event.delete", params as unknown as Record<string, unknown>) as Promise<EventIdRequest>;
+  }
+
+  /** Every replay event, oldest first. */
+  replayEventList(): Promise<EventList> {
+    return this._call("replay.event.list", {}) as Promise<EventList>;
+  }
+
+  /** Give a replay event a name. */
+  replayEventRename(params: EventRenameRequest): Promise<ReplayEvent> {
+    return this._call("replay.event.rename", params as unknown as Record<string, unknown>) as Promise<ReplayEvent>;
+  }
+
+  /** Whether replay is on, each angle's buffer depth and size, and every event. */
+  replayGet(): Promise<ReplayStatus> {
+    return this._call("replay.get", {}) as Promise<ReplayStatus>;
+  }
+
+  /** Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`. */
+  replayMark(params: MarkRequest = {}): Promise<ReplayEvent> {
+    return this._call("replay.mark", params as unknown as Record<string, unknown>) as Promise<ReplayEvent>;
+  }
+
+  /** Play an event, or the last seconds of an angle, on a replay source, added if it is not there. */
+  replayPlay(params: PlayRequest2 = {}): Promise<PlayStatus> {
+    return this._call("replay.play", params as unknown as Record<string, unknown>) as Promise<PlayStatus>;
+  }
+
+  /** Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again. */
+  replaySave(params: SaveRequest2 = {}): Promise<SaveStatus> {
+    return this._call("replay.save", params as unknown as Record<string, unknown>) as Promise<SaveStatus>;
+  }
+
+  /** Change a playing replay's angle or speed, from the frame it is on. */
+  replaySet(params: ReplaySetRequest = {}): Promise<PlayStatus> {
+    return this._call("replay.set", params as unknown as Record<string, unknown>) as Promise<PlayStatus>;
+  }
+
+  /** Record these angles, each the last `seconds`. Called again, it changes them in place. */
+  replayStart(params: ReplayConfig = {}): Promise<ReplayStatus> {
+    return this._call("replay.start", params as unknown as Record<string, unknown>) as Promise<ReplayStatus>;
+  }
+
+  /** Stop recording, free every buffer and forget every event. */
+  replayStop(): Promise<ReplayStatus> {
+    return this._call("replay.stop", {}) as Promise<ReplayStatus>;
+  }
+
   /** Make an empty scene, or one built from a set of sources. */
   sceneAdd(params: AddSceneRequest): Promise<SceneView> {
     return this._call("scene.add", params as unknown as Record<string, unknown>) as Promise<SceneView>;
@@ -6337,7 +6539,7 @@ export class GeneratedMethods {
   }
 
   /** Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. */
-  sceneHistoryMark(params: MarkRequest = {}): Promise<Record<string, unknown>> {
+  sceneHistoryMark(params: MarkRequest2 = {}): Promise<Record<string, unknown>> {
     return this._call("scene.history.mark", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 

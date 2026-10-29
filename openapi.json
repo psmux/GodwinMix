@@ -603,6 +603,58 @@
         ],
         "type": "string"
       },
+      "AngleStatus": {
+        "description": "One angle's ring, as it stands.",
+        "properties": {
+          "bytes": {
+            "description": "Bytes of encoded picture and sound held.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "dropped": {
+            "description": "Frames the angle's encoder could not keep up with and dropped. The\nsource and the programme lose none.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "encoder": {
+            "description": "The encoder this angle is written with, or `shared` when it reads the\nprogramme encoder's own output.",
+            "type": "string"
+          },
+          "gops": {
+            "description": "Whole groups of pictures held. The ring drops the oldest one at a time.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "held_secs": {
+            "description": "Seconds of picture held, from the oldest keyframe to the newest frame.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "The source id, or `programme`.",
+            "type": "string"
+          },
+          "waiting": {
+            "description": "Why this angle holds nothing, when it does not: the source is not\nthere, or has not sent a picture yet.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "held_secs",
+          "bytes",
+          "gops",
+          "encoder",
+          "dropped"
+        ],
+        "type": "object"
+      },
       "Applies": {
         "description": "When a change to a key takes effect.",
         "oneOf": [
@@ -4374,6 +4426,49 @@
         "required": [
           "kind",
           "label"
+        ],
+        "type": "object"
+      },
+      "EventIdRequest": {
+        "description": "`replay.event.delete`, and anything else that names one event.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "EventList": {
+        "description": "`replay.event.list`.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "type": "object"
+      },
+      "EventRenameRequest": {
+        "description": "`replay.event.rename`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
         ],
         "type": "object"
       },
@@ -9479,7 +9574,60 @@
         ],
         "type": "object"
       },
+      "MarkPoint": {
+        "description": "Which point `replay.mark` sets.",
+        "oneOf": [
+          {
+            "const": "in",
+            "description": "Open a new event here.",
+            "type": "string"
+          },
+          {
+            "const": "out",
+            "description": "Close the open event here.",
+            "type": "string"
+          }
+        ]
+      },
       "MarkRequest": {
+        "description": "`replay.mark`. With `point` it sets an in or an out point; with\n`seconds` alone it makes a whole event of the last that many seconds.",
+        "properties": {
+          "angle": {
+            "description": "The angle it was seen on, which playback starts from.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "A name for the event. Its id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarkPoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seconds": {
+            "description": "For an in point, how many seconds before now it goes. For a whole\nevent, how long it is. 0 is now.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MarkRequest2": {
         "description": "`scene.history.mark`.",
         "properties": {
           "label": {
@@ -11666,6 +11814,106 @@
         },
         "type": "object"
       },
+      "PlayRequest2": {
+        "description": "`replay.play`: load an event, or the last seconds of an angle, into a\nreplay source and play it from the start.",
+        "properties": {
+          "angle": {
+            "description": "The angle to show. The event's own angle, then the first angle.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event": {
+            "description": "The event to play. Without one, the last `seconds` of the angle.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seconds": {
+            "description": "How far back to start when no event is named. 10 when left out.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "The source to play it on, added if it is not there. `replay` when\nleft out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speed": {
+            "description": "1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "take": {
+            "description": "Put it on air once it is loaded, as `program.take` would.",
+            "type": "boolean"
+          },
+          "transition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The transition for that take: a name such as `\"fade\"` or a stinger's\nobject. A cut when left out."
+          }
+        },
+        "type": "object"
+      },
+      "PlayStatus": {
+        "description": "What `replay.play` and `replay.set` answer with.",
+        "properties": {
+          "angle": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "description": "How long it plays at this speed.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "event": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position_ms": {
+            "description": "Where it is, in milliseconds of playback.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The source it plays on.",
+            "type": "string"
+          },
+          "speed": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "angle",
+          "speed",
+          "duration_ms",
+          "position_ms"
+        ],
+        "type": "object"
+      },
       "Playback": {
         "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
         "properties": {
@@ -12826,6 +13074,136 @@
         ],
         "type": "object"
       },
+      "ReplayConfig": {
+        "description": "The `[replay]` table. With no angles nothing is built.",
+        "properties": {
+          "angles": {
+            "description": "The angles to record: source ids, and `programme` for the programme\nitself. Empty turns replay off.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "bitrate_kbps": {
+            "description": "The bitrate a source angle is encoded at, in kbit/s. 0 or left out\nis the programme's own bitrate.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "seconds": {
+            "description": "Seconds each angle keeps, 1 to 1800. 60 when left out.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ReplayEvent": {
+        "description": "One event: a stretch of time between an in point and an out point, the\nsame stretch on every angle.",
+        "properties": {
+          "angle": {
+            "description": "The angle it was marked on, which playback starts from.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "A slug the mixer gives it: `replay-1`, `replay-2`.",
+            "type": "string"
+          },
+          "in_ms": {
+            "description": "The in point, in milliseconds of the mixer's clock.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "What the desk shows. The id until it is renamed.",
+            "type": "string"
+          },
+          "out_ms": {
+            "description": "The out point. Absent while the event is still open (marked in and not\nout yet).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "in_ms"
+        ],
+        "type": "object"
+      },
+      "ReplaySetRequest": {
+        "description": "`replay.set`: change the angle or the speed of a replay that is playing,\nfrom the frame it is on.",
+        "properties": {
+          "angle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speed": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ReplayStatus": {
+        "description": "`replay.get`: everything about replay on this mixer.",
+        "properties": {
+          "angles": {
+            "items": {
+              "$ref": "#/components/schemas/AngleStatus"
+            },
+            "type": "array"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ReplayConfig"
+          },
+          "events": {
+            "description": "Every event, oldest first. An event whose stretch has left every ring\nis still listed until it is deleted, and plays nothing.",
+            "items": {
+              "$ref": "#/components/schemas/ReplayEvent"
+            },
+            "type": "array"
+          },
+          "now_ms": {
+            "description": "The mixer's clock now, in the same milliseconds as an event's points.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "on": {
+            "description": "Whether anything is being recorded.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "config",
+          "angles",
+          "events",
+          "now_ms"
+        ],
+        "type": "object"
+      },
       "Report": {
         "description": "What `project.import` answers with.",
         "properties": {
@@ -13113,6 +13491,67 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "SaveRequest2": {
+        "description": "`replay.save`: write an event, or the whole buffer of one angle, to an\nMP4 in the media folder without encoding it again.",
+        "properties": {
+          "angle": {
+            "description": "The angle to save. The event's own, then `programme` if it is\nrecorded, then the first angle.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event": {
+            "description": "The event to save. The whole buffer when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The file's name, without a folder. Made from the time when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SaveStatus": {
+        "description": "What `replay.save` answers with once the file is written.",
+        "properties": {
+          "angle": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "duration_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "The file, as the media library names it: `Replays/<name>.mp4`.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Its absolute path on the mixer's machine.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "angle",
+          "duration_ms",
+          "bytes"
         ],
         "type": "object"
       },
@@ -23727,6 +24166,368 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/replay": {
+      "get": {
+        "description": "JSON-RPC method `replay.get`. Needs the `read` scope.",
+        "operationId": "replay.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Whether replay is on, each angle's buffer depth and size, and every event.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/replay/event/delete": {
+      "post": {
+        "description": "JSON-RPC method `replay.event.delete`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.event.delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventIdRequest"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Forget a replay event. The recording it pointed at is not touched.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/event/list": {
+      "get": {
+        "description": "JSON-RPC method `replay.event.list`. Needs the `read` scope.",
+        "operationId": "replay.event.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every replay event, oldest first.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/replay/event/rename": {
+      "post": {
+        "description": "JSON-RPC method `replay.event.rename`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.event.rename",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRenameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayEvent"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Give a replay event a name.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/mark": {
+      "post": {
+        "description": "JSON-RPC method `replay.mark`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.mark",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayEvent"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/play": {
+      "post": {
+        "description": "JSON-RPC method `replay.play`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.play",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayRequest2"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/save": {
+      "post": {
+        "description": "JSON-RPC method `replay.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRequest2"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/set": {
+      "post": {
+        "description": "JSON-RPC method `replay.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaySetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a playing replay's angle or speed, from the frame it is on.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/start": {
+      "post": {
+        "description": "JSON-RPC method `replay.start`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayConfig"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Record these angles, each the last `seconds`. Called again, it changes them in place.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/stop": {
+      "post": {
+        "description": "JSON-RPC method `replay.stop`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.stop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop recording, free every buffer and forget every event.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/scenes": {
       "get": {
         "description": "JSON-RPC method `scene.list`. Needs the `read` scope.",
@@ -24083,7 +24884,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkRequest"
+                "$ref": "#/components/schemas/MarkRequest2"
               }
             }
           },

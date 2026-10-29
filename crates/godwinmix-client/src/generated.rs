@@ -298,6 +298,30 @@ pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
 pub const ALIGN_VALUES: &[&str] = &["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
 
+/// One angle's ring, as it stands.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AngleStatus {
+    /// Bytes of encoded picture and sound held.
+    pub bytes: u64,
+    /// Frames the angle's encoder could not keep up with and dropped. The
+    /// source and the programme lose none.
+    pub dropped: u64,
+    /// The encoder this angle is written with, or `shared` when it reads the
+    /// programme encoder's own output.
+    pub encoder: String,
+    /// Whole groups of pictures held. The ring drops the oldest one at a time.
+    pub gops: u32,
+    /// Seconds of picture held, from the oldest keyframe to the newest frame.
+    pub held_secs: f64,
+    /// The source id, or `programme`.
+    pub id: String,
+    /// Why this angle holds nothing, when it does not: the source is not
+    /// there, or has not sent a picture yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiting: Option<String>,
+}
+
 /// When a change to a key takes effect.
 pub type Applies = String;
 /// The values api_level 1 knows for [`Applies`].
@@ -1978,6 +2002,28 @@ pub struct ErrorAction {
     pub piece: Option<String>,
     /// `set-config`: the value to send.
     pub value: Value,
+}
+
+/// `replay.event.delete`, and anything else that names one event.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventIdRequest {
+    pub id: String,
+}
+
+/// `replay.event.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventList {
+    pub events: Vec<ReplayEvent>,
+}
+
+/// `replay.event.rename`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventRenameRequest {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -4235,10 +4281,34 @@ pub struct MachineStatus {
     pub uptime_secs: Option<u64>,
 }
 
-/// `scene.history.mark`.
+/// Which point `replay.mark` sets.
+pub type MarkPoint = String;
+/// The values api_level 1 knows for [`MarkPoint`].
+pub const MARK_POINT_VALUES: &[&str] = &["in", "out"];
+
+/// `replay.mark`. With `point` it sets an in or an out point; with
+/// `seconds` alone it makes a whole event of the last that many seconds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MarkRequest {
+    /// The angle it was seen on, which playback starts from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// A name for the event. Its id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point: Option<MarkPoint>,
+    /// For an in point, how many seconds before now it goes. For a whole
+    /// event, how long it is. 0 is now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<f64>,
+}
+
+/// `scene.history.mark`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarkRequest2 {
     /// What to call the group of changes that follows. Omit it to end the
     /// group, so the next change is its own undo step.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -5190,6 +5260,52 @@ pub struct PlayRequest {
     pub speed: Option<f64>,
 }
 
+/// `replay.play`: load an event, or the last seconds of an angle, into a
+/// replay source and play it from the start.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayRequest2 {
+    /// The angle to show. The event's own angle, then the first angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// The event to play. Without one, the last `seconds` of the angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// How far back to start when no event is named. 10 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<f64>,
+    /// The source to play it on, added if it is not there. `replay` when
+    /// left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// 1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    /// Put it on air once it is loaded, as `program.take` would.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub take: Option<bool>,
+    /// The transition for that take: a name such as `"fade"` or a stinger's
+    /// object. A cut when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<Transition>,
+}
+
+/// What `replay.play` and `replay.set` answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayStatus {
+    pub angle: String,
+    /// How long it plays at this speed.
+    pub duration_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// Where it is, in milliseconds of playback.
+    pub position_ms: u64,
+    /// The source it plays on.
+    pub source: String,
+    pub speed: f64,
+}
+
 /// The links of an output served as HLS from the control port, each with
 /// the output's viewer key on it. A channel's watch link is one too:
 /// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
@@ -5742,6 +5858,70 @@ pub struct ReorderRequest {
     pub seq: Option<u64>,
 }
 
+/// The `[replay]` table. With no angles nothing is built.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayConfig {
+    /// The angles to record: source ids, and `programme` for the programme
+    /// itself. Empty turns replay off.
+    pub angles: Vec<String>,
+    /// The bitrate a source angle is encoded at, in kbit/s. 0 or left out
+    /// is the programme's own bitrate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// Seconds each angle keeps, 1 to 1800. 60 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<u32>,
+}
+
+/// One event: a stretch of time between an in point and an out point, the
+/// same stretch on every angle.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayEvent {
+    /// The angle it was marked on, which playback starts from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// A slug the mixer gives it: `replay-1`, `replay-2`.
+    pub id: String,
+    /// The in point, in milliseconds of the mixer's clock.
+    pub in_ms: u64,
+    /// What the desk shows. The id until it is renamed.
+    pub name: String,
+    /// The out point. Absent while the event is still open (marked in and not
+    /// out yet).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_ms: Option<u64>,
+}
+
+/// `replay.set`: change the angle or the speed of a replay that is playing,
+/// from the frame it is on.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplaySetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+}
+
+/// `replay.get`: everything about replay on this mixer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayStatus {
+    pub angles: Vec<AngleStatus>,
+    pub config: ReplayConfig,
+    /// Every event, oldest first. An event whose stretch has left every ring
+    /// is still listed until it is deleted, and plays nothing.
+    pub events: Vec<ReplayEvent>,
+    /// The mixer's clock now, in the same milliseconds as an event's points.
+    pub now_ms: u64,
+    /// Whether anything is being recorded.
+    pub on: bool,
+}
+
 /// What `project.import` answers with.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5877,6 +6057,36 @@ pub struct SaveRequest {
     /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<String>,
+}
+
+/// `replay.save`: write an event, or the whole buffer of one angle, to an
+/// MP4 in the media folder without encoding it again.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveRequest2 {
+    /// The angle to save. The event's own, then `programme` if it is
+    /// recorded, then the first angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// The event to save. The whole buffer when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// The file's name, without a folder. Made from the time when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// What `replay.save` answers with once the file is written.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveStatus {
+    pub angle: String,
+    pub bytes: u64,
+    pub duration_ms: u64,
+    /// The file, as the media library names it: `Replays/<name>.mp4`.
+    pub name: String,
+    /// Its absolute path on the mixer's machine.
+    pub path: String,
 }
 
 /// `headend.scan`.
@@ -8153,7 +8363,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 270] = [
+pub const METHODS: [MethodInfo; 280] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8323,6 +8533,16 @@ pub const METHODS: [MethodInfo; 270] = [
     MethodInfo { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/speed")) },
     MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
     MethodInfo { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/presets")) },
+    MethodInfo { name: "replay.event.delete", summary: "Forget a replay event. The recording it pointed at is not touched.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/event/delete")) },
+    MethodInfo { name: "replay.event.list", summary: "Every replay event, oldest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/replay/event/list")) },
+    MethodInfo { name: "replay.event.rename", summary: "Give a replay event a name.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/event/rename")) },
+    MethodInfo { name: "replay.get", summary: "Whether replay is on, each angle's buffer depth and size, and every event.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/replay")) },
+    MethodInfo { name: "replay.mark", summary: "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/mark")) },
+    MethodInfo { name: "replay.play", summary: "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/play")) },
+    MethodInfo { name: "replay.save", summary: "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/save")) },
+    MethodInfo { name: "replay.set", summary: "Change a playing replay's angle or speed, from the frame it is on.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/set")) },
+    MethodInfo { name: "replay.start", summary: "Record these angles, each the last `seconds`. Called again, it changes them in place.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/start")) },
+    MethodInfo { name: "replay.stop", summary: "Stop recording, free every buffer and forget every event.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/replay/stop")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
     MethodInfo { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_graphic")) },
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
@@ -9625,6 +9845,56 @@ impl Client {
         self.call("rendition.presets", &serde_json::json!({})).await
     }
 
+    /// Forget a replay event. The recording it pointed at is not touched.
+    pub async fn replay_event_delete(&self, params: &EventIdRequest) -> Result<EventIdRequest> {
+        self.call("replay.event.delete", params).await
+    }
+
+    /// Every replay event, oldest first.
+    pub async fn replay_event_list(&self) -> Result<EventList> {
+        self.call("replay.event.list", &serde_json::json!({})).await
+    }
+
+    /// Give a replay event a name.
+    pub async fn replay_event_rename(&self, params: &EventRenameRequest) -> Result<ReplayEvent> {
+        self.call("replay.event.rename", params).await
+    }
+
+    /// Whether replay is on, each angle's buffer depth and size, and every event.
+    pub async fn replay_get(&self) -> Result<ReplayStatus> {
+        self.call("replay.get", &serde_json::json!({})).await
+    }
+
+    /// Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.
+    pub async fn replay_mark(&self, params: &MarkRequest) -> Result<ReplayEvent> {
+        self.call("replay.mark", params).await
+    }
+
+    /// Play an event, or the last seconds of an angle, on a replay source, added if it is not there.
+    pub async fn replay_play(&self, params: &PlayRequest2) -> Result<PlayStatus> {
+        self.call("replay.play", params).await
+    }
+
+    /// Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.
+    pub async fn replay_save(&self, params: &SaveRequest2) -> Result<SaveStatus> {
+        self.call("replay.save", params).await
+    }
+
+    /// Change a playing replay's angle or speed, from the frame it is on.
+    pub async fn replay_set(&self, params: &ReplaySetRequest) -> Result<PlayStatus> {
+        self.call("replay.set", params).await
+    }
+
+    /// Record these angles, each the last `seconds`. Called again, it changes them in place.
+    pub async fn replay_start(&self, params: &ReplayConfig) -> Result<ReplayStatus> {
+        self.call("replay.start", params).await
+    }
+
+    /// Stop recording, free every buffer and forget every event.
+    pub async fn replay_stop(&self) -> Result<ReplayStatus> {
+        self.call("replay.stop", &serde_json::json!({})).await
+    }
+
     /// Make an empty scene, or one built from a set of sources.
     pub async fn scene_add(&self, params: &AddSceneRequest) -> Result<SceneView> {
         self.call("scene.add", params).await
@@ -9681,7 +9951,7 @@ impl Client {
     }
 
     /// Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
-    pub async fn scene_history_mark(&self, params: &MarkRequest) -> Result<BTreeMap<String, Value>> {
+    pub async fn scene_history_mark(&self, params: &MarkRequest2) -> Result<BTreeMap<String, Value>> {
         self.call("scene.history.mark", params).await
     }
 
