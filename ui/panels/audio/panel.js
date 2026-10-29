@@ -3,6 +3,7 @@ import { el } from '../../shell/dom.js';
 import { audioFor, gainLabel, gainToPos } from '../../shell/fader.js';
 import { addView, dropViews, meterElement, takeMeters } from '../../shell/meter.js';
 import { errorToast } from '../../shell/toast.js';
+import { openChain } from './chain.js';
 
 class AudioPanel extends HTMLElement {
   static get panel() { return { id: 'core/audio', title: 'Audio', slots: ['main'], tag: 'gmx-audio' }; }
@@ -68,7 +69,9 @@ class AudioPanel extends HTMLElement {
     row.mute = el('button.btn.sm', { text: 'Mute', 'aria-label': `Mute ${source.name || source.id}`, onclick: () => {
       this.audio.setMuted(source.id, !row.muted).catch(e => errorToast(e, 'Mute'));
     } });
-    row.node = el('div.audio-channel', {}, [el('div.row', {}, [name, el('span.grow'), level, row.mute]), meter, fader]);
+    row.fx = el('button.btn.sm', { text: 'FX', title: 'Sound filters', 'aria-label': `Sound filters for ${source.name || source.id}`,
+      onclick: () => openChain(this.client, this.client.state.sources?.find(s => s.id === source.id) || source) });
+    row.node = el('div.audio-channel', {}, [el('div.row', {}, [name, el('span.grow'), level, row.fx, row.mute]), meter, fader]);
     return row;
   }
 }
