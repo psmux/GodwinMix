@@ -9,6 +9,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+mod requests;
+mod status;
+pub use requests::*;
+pub use status::*;
+
 /// The loudest a master or a send can be set to: the same ceiling a source's
 /// fader has.
 pub const MAX_LEVEL: f64 = 10.0;
@@ -125,128 +130,5 @@ impl BusConfig {
     }
 }
 
-/// The audio desk as `audio.bus.list` and the status snapshot report it.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct AudioStatus {
-    pub master: MasterConfig,
-    pub buses: Vec<BusStatus>,
-    /// The sources marked cue, in the order they were marked.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub cue: Vec<String>,
-}
-
-/// One bus and what is using it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BusStatus {
-    #[serde(flatten)]
-    pub config: BusConfig,
-    /// `sends`, `minus` or `cue`.
-    pub kind: String,
-    /// The outputs that take their sound from this bus.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub outputs: Vec<String>,
-    /// The device it is playing on, once it opened, or why it is not.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub device_state: Option<String>,
-    /// Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
-    pub listen: String,
-}
-
-/// `audio.master.set`. Only what is named moves.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-pub struct MasterSetRequest {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gain: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub muted: Option<bool>,
-}
-
-/// `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
-/// on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-pub struct BusSetRequest {
-    pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gain: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub muted: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub minus: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub device: Option<String>,
-}
-
-/// `audio.bus.remove`, and anything else that names one bus.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct BusIdRequest {
-    pub id: String,
-}
-
-/// `audio.send.set`: how much of one source goes to one bus.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SendSetRequest {
-    pub bus: String,
-    pub source: String,
-    /// 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
-    pub level: f64,
-}
-
-/// `audio.cue.set`: mark or clear one source for the cue bus.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct CueSetRequest {
-    pub source: String,
-    pub cue: bool,
-    /// Clear every other mark first, so only this source is heard: solo.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub solo: bool,
-}
-
-/// One sound card a bus can be played on.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct AudioDevice {
-    /// Its number in this list, which `device` also takes.
-    pub index: usize,
-    /// The id `device` takes, the most stable thing the platform says about it.
-    pub id: String,
-    pub name: String,
-    /// The platform's sound API, when it says: `osxaudio`, `wasapi2`,
-    /// `pulse`, `alsa`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub api: Option<String>,
-}
-
-/// `audio.device.list`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
-pub struct AudioDeviceList {
-    pub devices: Vec<AudioDevice>,
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_bus_written_by_hand_reads_back_the_same() {
-        let text = r#"
-            [master]
-            gain = 0.8
-
-            [[bus]]
-            id = "guest-return"
-            minus = "guest-1"
-
-            [[bus]]
-            id = "monitor"
-            sends = { cam1 = 0.5 }
-        "#;
-        let cfg: AudioConfig = toml::from_str(text).unwrap();
-        assert_eq!(cfg.master.gain, 0.8);
-        assert_eq!(cfg.buses[0].kind(), "minus");
-        assert_eq!(cfg.buses[1].kind(), "sends");
-        assert_eq!(cfg.buses[1].sends["cam1"], 0.5);
-        let again: AudioConfig = toml::from_str(&toml::to_string(&cfg).unwrap()).unwrap();
-        assert_eq!(cfg, again);
-    }
-}
+mod tests;

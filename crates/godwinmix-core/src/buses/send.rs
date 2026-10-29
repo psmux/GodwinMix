@@ -24,7 +24,6 @@
 //! out the same way when the last bus goes, so a programme with no bus is the
 //! pipeline it always was.
 
-use super::weight::{self, CueMarks, Programme, Shared};
 use crate::gstutil::{self, make};
 use crate::plugin::branch::ProgrammeBranch;
 use anyhow::{Context, Result};
@@ -32,8 +31,12 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::time::Duration;
 
+mod links;
+mod splice;
+use splice::drop_elements;
+
 /// How long to wait for a pad to go idle. The figure `plugin::filter` uses.
-const BLOCK_TIMEOUT: Duration = Duration::from_secs(5);
+pub(super) const BLOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// One source's way onto the buses.
 pub struct SendPoint {
@@ -114,68 +117,6 @@ impl SendPoint {
         Ok((to_programme, to_buses))
     }
 
-    /// Move the link above the mute onto the tee, at an idle point.
-    fn splice_in(&self) -> Result<()> {
-        let mute_in = self.amute.static_pad("sink").context("the mute has no sink pad")?;
-        let above = mute_in.peer().context("nothing is linked above the mute")?;
-        let tee_in = self.tee.static_pad("sink").context("a tee with no sink")?;
-        let (a, to_p) = (above.clone(), self.to_programme.clone());
-        gstutil::with_pad_blocked(&above, BLOCK_TIMEOUT, move || {
-            let _ = a.unlink(&mute_in);
-            let linked = a.link(&tee_in).map_err(|e| e.to_string()).and_then(|_| to_p.link(&mute_in).map_err(|e| e.to_string()));
-            if let Err(e) = linked {
-                tracing::error!(%e, "could not put a send point in; putting the mute back");
-                let _ = a.unlink(&tee_in);
-                let _ = to_p.unlink(&mute_in);
-                let _ = a.link(&mute_in);
-            }
-        })
-        .context("putting a send point in while blocked")?;
-        anyhow::ensure!(self.to_programme.is_linked(), "the send point did not go in; the source is as it was");
-        Ok(())
-    }
-
-    /// Put this source on `bus`.
-    pub fn join(&mut self, bus: &str, mix: &gst::Element, shared: Shared, cue: CueMarks) -> Result<()> {
-        if self.links.iter().any(|l| l.bus == bus) {
-            return Ok(());
-        }
-        let sink = mix.request_pad_simple("sink_%u").context("the bus mixer refused a pad")?;
-        sink.set_property("volume", 0.0f64);
-        sink.set_offset(self.apad.offset());
-        let pad = self.fan.request_pad_simple("src_%u").context("the send fan refused a pad")?;
-        let programme = Programme { source: self.source.clone(), amute: self.amute.clone(), apad: self.apad.clone() };
-        weight::follow(&pad, &sink, shared, cue, programme);
-        if let Err(e) = pad.link(&sink) {
-            self.fan.release_request_pad(&pad);
-            mix.release_request_pad(&sink);
-            return Err(anyhow::Error::from(e).context(format!("linking {} to bus {bus}", self.source)));
-        }
-        self.links.push(Link { bus: bus.to_string(), pad, sink, mix: mix.clone() });
-        Ok(())
-    }
-
-    /// Take this source off `bus`. Unlinked at an idle point before either pad
-    /// is released: a mixer pad released under a buffer answers FLUSHING, and
-    /// that must never reach the queue, whose upstream is the programme.
-    pub fn leave(&mut self, bus: &str) {
-        let Some(pos) = self.links.iter().position(|l| l.bus == bus) else { return };
-        let link = self.links.remove(pos);
-        let (pad, sink) = (link.pad.clone(), link.sink.clone());
-        if let Err(e) = gstutil::with_pad_blocked(&link.pad, BLOCK_TIMEOUT, move || {
-            let _ = pad.unlink(&sink);
-        }) {
-            tracing::warn!(source = %self.source, bus, ?e, "a bus link would not go idle; unlinking it anyway");
-            let _ = link.pad.unlink(&link.sink);
-        }
-        self.fan.release_request_pad(&link.pad);
-        link.mix.release_request_pad(&link.sink);
-    }
-
-    pub fn buses(&self) -> impl Iterator<Item = &str> {
-        self.links.iter().map(|l| l.bus.as_str())
-    }
-
     /// Take the tee out of the branch and everything behind it out of the
     /// pipeline, leaving the branch as it was before the first bus.
     pub fn remove(mut self) {
@@ -190,36 +131,4 @@ impl SendPoint {
         tracing::debug!(source = %self.source, "send point out");
     }
 
-    fn splice_out(&self) -> Result<()> {
-        let tee_in = self.tee.static_pad("sink").context("a tee with no sink")?;
-        let mute_in = self.amute.static_pad("sink").context("the mute has no sink pad")?;
-        let Some(above) = tee_in.peer() else { return Ok(()) };
-        let (a, to_p) = (above.clone(), self.to_programme.clone());
-        gstutil::with_pad_blocked(&above, BLOCK_TIMEOUT, move || {
-            let _ = a.unlink(&tee_in);
-            let _ = to_p.unlink(&mute_in);
-            if let Err(e) = a.link(&mute_in) {
-                tracing::error!(?e, "could not relink a source's mute after its send point");
-            }
-        })
-        .context("taking a send point out while blocked")
-    }
-
-    /// The tee, queue and fan, unlinked from everything, down and out.
-    fn drop_own(&self) {
-        if let Some(q) = self.queue.static_pad("sink") {
-            let _ = self.to_buses.unlink(&q);
-        }
-        self.tee.release_request_pad(&self.to_buses);
-        self.tee.release_request_pad(&self.to_programme);
-        drop_elements(&self.pipeline, &[&self.tee, &self.queue, &self.fan]);
-    }
-}
-
-fn drop_elements(pipeline: &gst::Pipeline, els: &[&gst::Element]) {
-    for el in els {
-        el.set_locked_state(true);
-        let _ = el.set_state(gst::State::Null);
-        let _ = pipeline.remove(*el);
-    }
 }

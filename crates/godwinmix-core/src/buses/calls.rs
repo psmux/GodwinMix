@@ -5,7 +5,9 @@ use super::check::{self, Refusal};
 use super::desk::{checked, mode_of, Desk};
 use super::AudioCall;
 use crate::plugin::branch::ProgrammeBranch;
-use godwinmix_protocol::buses::{AudioStatus, BusConfig, BusSetRequest, CueSetRequest, SendSetRequest};
+use godwinmix_protocol::buses::{AudioStatus, BusConfig, BusSetRequest};
+
+mod sends;
 
 /// What the mixer knows that the desk does not.
 pub struct Around<'a> {
@@ -15,11 +17,11 @@ pub struct Around<'a> {
 }
 
 impl Around<'_> {
-    fn has_source(&self, id: &str) -> bool {
+    pub(super) fn has_source(&self, id: &str) -> bool {
         self.branches.iter().any(|b| b.id == id)
     }
 
-    fn no_source(&self, id: &str) -> Refusal {
+    pub(super) fn no_source(&self, id: &str) -> Refusal {
         Refusal::NotFound { kind: "source", id: id.to_string(), known: self.branches.iter().map(|b| b.id.clone()).collect() }
     }
 }
@@ -118,55 +120,5 @@ impl Desk {
         self.tear_down(id);
         self.config.buses.retain(|b| b.id != id);
         Ok(())
-    }
-
-    fn send(&mut self, req: SendSetRequest, around: &Around<'_>) -> Result<(), Refusal> {
-        let Some(mut cfg) = self.config.buses.iter().find(|b| b.id == req.bus).cloned() else {
-            return Err(self.no_bus(&req.bus));
-        };
-        if !around.has_source(&req.source) {
-            return Err(around.no_source(&req.source));
-        }
-        let level = check::level("level", req.level)?;
-        if cfg.kind() != "sends" {
-            return Err(Refusal::Invalid {
-                field: "bus",
-                message: format!(
-                    "bus {} is a {} bus and follows the programme, so it has no sends. Send to a bus \
-                     with neither `minus` nor `cue`.",
-                    cfg.id,
-                    cfg.kind()
-                ),
-            });
-        }
-        if level == 0.0 {
-            cfg.sends.remove(&req.source);
-        } else {
-            cfg.sends.insert(req.source.clone(), level);
-        }
-        self.live(&cfg.id)?.shared.lock().sends = cfg.sends.clone();
-        self.store(cfg);
-        Ok(())
-    }
-
-    fn mark_cue(&mut self, req: CueSetRequest, around: &Around<'_>) -> Result<(), Refusal> {
-        if !around.has_source(&req.source) {
-            return Err(around.no_source(&req.source));
-        }
-        let mut marks = self.cue.lock();
-        if req.solo {
-            marks.clear();
-        }
-        marks.retain(|m| m != &req.source);
-        if req.cue {
-            marks.push(req.source);
-        }
-        Ok(())
-    }
-
-    fn store(&mut self, cfg: BusConfig) {
-        if let Some(slot) = self.config.buses.iter_mut().find(|b| b.id == cfg.id) {
-            *slot = cfg;
-        }
     }
 }
