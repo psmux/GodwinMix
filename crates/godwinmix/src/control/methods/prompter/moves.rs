@@ -64,7 +64,12 @@ fn register_transport(reg: &mut Registry<Call>) {
             handler(|call: Call, _| async move { body(call.app.prompter.pause()) }),
         )
         .result(schema_of::<PrompterState>)
-        .tool("prompter_pause", Tier::Search, "Stop the teleprompter where it is. prompter_play carries on from there."),
+        .tool(
+            "prompter_pause",
+            Tier::Search,
+            "Stop the teleprompter where it is, on every screen at once. prompter_play carries on \
+             from the same place at the same speed.",
+        ),
     );
 
     reg.register(

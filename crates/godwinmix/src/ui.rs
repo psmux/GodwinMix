@@ -1183,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_398_kb() {
+    fn the_page_a_volunteer_opens_stays_under_399_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1204,6 +1204,11 @@ mod tests {
         // closed show. What closing asks and does loads only when a show is
         // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
         // them for this.
+        //
+        // Raised to 399 kB for the Prompter panel: its entry, which only
+        // defines the element and fetches the panel when it is first shown,
+        // its line in View, and its card and icon on the phone's More screen.
+        // Measured at 407860 bytes.
         //
         // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
         // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
@@ -1249,8 +1254,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 398 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 398 kB budget",
+            bytes < 399 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 399 kB budget",
             eager.len()
         );
     }
@@ -1434,6 +1439,10 @@ mod tests {
         for entry in ["programme/page.js", "panels/programme/fullscreen.js", "panels/programme/displays.js"] {
             reachable.extend(closure_of(entry));
         }
+        // The prompter: /prompter/ loads page.js itself, and the Prompter
+        // panel's entry fetches the panel the first time it is shown.
+        reachable.extend(closure_of("prompter/page.js"));
+        reachable.extend(closure_of("panels/prompter/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));

@@ -22924,7 +22924,7 @@
       "summary": "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text."
     },
     {
-      "destructive": true,
+      "destructive": false,
       "idempotent": true,
       "mutating": true,
       "name": "prompter.script.remove",

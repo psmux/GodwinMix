@@ -118,7 +118,6 @@ fn register_scripts(reg: &mut Registry<Call>) {
             }),
         )
         .params(schema_of::<ScriptIdRequest>)
-        .result(schema_of::<ScriptChanged>)
-        .destructive(),
+        .result(schema_of::<ScriptChanged>),
     );
 }

@@ -3,6 +3,7 @@
 // the screens themselves are the page at /prompter/.
 
 import { el } from "../../shell/dom.js";
+import { registerAll } from "../../shell/commands.js";
 import { toast } from "../../shell/toast.js";
 import { editor } from "./editor.js";
 import { drive } from "./drive.js";
@@ -97,7 +98,19 @@ class View {
 
 const CSS_ID = "gmx-prompter-css";
 
+/** In the palette from the panel's first showing on, for a desk keyboard. */
+function commands() {
+  const call = (method, params) => window.gmxClient?.call(method, params || {});
+  registerAll([
+    { id: "prompter.open", title: "Open the prompter page", group: "Prompter", keywords: ["teleprompter", "autocue", "script"], run: () => window.open("/prompter/", "gmx-prompter") },
+    { id: "prompter.toggle", title: "Play or pause the prompter", group: "Prompter", keywords: ["teleprompter", "autocue"], run: () => call("prompter.get").then((s) => call(s.playing ? "prompter.pause" : "prompter.play")) },
+    { id: "prompter.next", title: "Prompter: next marker", group: "Prompter", keywords: ["teleprompter"], run: () => call("prompter.seek", { step: 1 }) },
+    { id: "prompter.previous", title: "Prompter: previous marker", group: "Prompter", keywords: ["teleprompter"], run: () => call("prompter.seek", { step: -1 }) },
+  ]);
+}
+
 export function mount(host) {
+  if (!document.getElementById(CSS_ID)) commands();
   if (!document.getElementById(CSS_ID)) {
     document.head.appendChild(el("link#" + CSS_ID, { rel: "stylesheet", href: new URL("./prompter.css", import.meta.url).href }));
   }

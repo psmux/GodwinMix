@@ -188,7 +188,7 @@ Keys accepted on every method, handled before a method runs.
 | `prompter.rows` | `POST /api/v1/prompter/rows` | read |  | 1 | The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. |
 | `prompter.script.get` | `GET /api/v1/prompter/script/get` | read |  | 1 | One prompter script with its text. |
 | `prompter.script.list` | `GET /api/v1/prompter/script/list` | read |  | 1 | Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. |
-| `prompter.script.remove` | `POST /api/v1/prompter/script/remove` | operate | yes | 1 | Forget a prompter script. When it is on the prompter the screens go empty. |
+| `prompter.script.remove` | `POST /api/v1/prompter/script/remove` | operate |  | 1 | Forget a prompter script. When it is on the prompter the screens go empty. |
 | `prompter.script.save` | `POST /api/v1/prompter/script/save` | operate |  | 1 | Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. |
 | `prompter.seek` | `POST /api/v1/prompter/seek` | operate |  | 1 | Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). |
 | `prompter.set` | `POST /api/v1/prompter/set` | operate |  | 1 | Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. |
