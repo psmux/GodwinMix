@@ -11,30 +11,9 @@
 //! recorded from two pipelines line up, and a mark made on the programme's
 //! clock finds the same moment in each.
 
+pub use super::frame::Frame;
 use gstreamer as gst;
 use std::collections::VecDeque;
-
-/// One encoded frame, picture or sound.
-#[derive(Clone)]
-pub struct Frame {
-    /// When it is shown, in clock nanoseconds.
-    pub at: u64,
-    /// When it is decoded, where that differs from `at`.
-    pub dts: Option<u64>,
-    pub duration: u64,
-    pub key: bool,
-    pub buffer: gst::Buffer,
-}
-
-impl Frame {
-    pub fn bytes(&self) -> u64 {
-        self.buffer.size() as u64
-    }
-
-    pub fn end(&self) -> u64 {
-        self.at + self.duration
-    }
-}
 
 /// A keyframe and everything up to the next one, with the caps it came with.
 pub struct Gop {

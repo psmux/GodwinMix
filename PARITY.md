@@ -34,8 +34,8 @@ Mark an item done only when it is merged with its tests and its how to page.
 |---|---|---|---|
 | Teleprompter: a page for a phone, tablet or a monitor behind glass, mirrored, several screens in step, speed from the desk, a pedal, a Stream Deck or an agent | none | built in, `prompter.*` methods and `/prompter/` | done in 0.3.20 |
 | Teleprompter that follows the speaker's voice | none | plugin | |
-| Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | |
-| Replay buffer: save the last minutes to a file | none | built in, the same ring | |
+| Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | on `feat/replay` |
+| Replay buffer: save the last minutes to a file | none | built in, the same ring | on `feat/replay` |
 | ISO recording of every input, separate audio tracks | only channel feeds | built in, the recording output with a source as its target | |
 | Guest invites with their own key, a return feed and talkback | one way WHIP by link, carrying the channel key | built in | |
 | Downstream keys or overlay channels that survive every take | a graphic has to be in each scene | built in | |

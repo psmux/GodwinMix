@@ -12,11 +12,10 @@
 //! is still on its way up. Taken off by unlinking before anything changes
 //! state.
 
-use super::ring::{Frame, Ring};
+use super::ring::Ring;
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use gstreamer_app as gst_app;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -53,7 +52,7 @@ impl Branch {
         count(&queue, "src", &counts, false);
         let mut chain = vec![queue];
         chain.extend(body);
-        chain.push(sink(ring, side, tag));
+        chain.push(super::sink::sink(ring, side, tag));
         pipeline.add_many(&chain).context("adding a replay angle")?;
         gst::Element::link_many(&chain).context("linking a replay angle")?;
         for el in chain.iter().rev() {
@@ -110,47 +109,4 @@ fn count(queue: &gst::Element, pad: &str, counts: &Arc<(AtomicU64, AtomicU64)>, 
         c.fetch_add(1, Ordering::Relaxed);
         gst::PadProbeReturn::Ok
     });
-}
-
-/// The appsink at the end: one sample, one push into the ring.
-fn sink(ring: &Arc<Mutex<Ring>>, side: Side, tag: &str) -> gst::Element {
-    let sink = gst_app::AppSink::builder().name(format!("{tag}-sink")).sync(false).build();
-    sink.set_property("async", false);
-    sink.set_property("enable-last-sample", false);
-    let ring = ring.clone();
-    sink.set_callbacks(
-        gst_app::AppSinkCallbacks::builder()
-            .new_sample(move |sink| {
-                let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                let base = sink.base_time().map(|t| t.nseconds()).unwrap_or(0);
-                if let Some((frame, caps)) = frame_of(&sample, base) {
-                    let mut ring = ring.lock();
-                    match side {
-                        Side::Video => ring.push_video(frame, &caps),
-                        Side::Audio => ring.push_audio(frame, &caps),
-                    }
-                }
-                Ok(gst::FlowSuccess::Ok)
-            })
-            .build(),
-    );
-    sink.upcast()
-}
-
-/// A sample as a ring frame, stamped in clock time: its running time plus the
-/// pipeline's base time, which is the same clock in every pipeline here.
-fn frame_of(sample: &gst::Sample, base: u64) -> Option<(Frame, gst::Caps)> {
-    let buffer = sample.buffer_owned()?;
-    let caps = sample.caps_owned()?;
-    let segment = sample.segment().and_then(|s| s.downcast_ref::<gst::ClockTime>().cloned());
-    let running = |t: Option<gst::ClockTime>| -> Option<u64> {
-        let t = t?;
-        let r = segment.as_ref().map_or(Some(t), |s| s.to_running_time(t))?;
-        Some(r.nseconds() + base)
-    };
-    let at = running(buffer.pts())?;
-    let dts = running(buffer.dts()).filter(|d| *d != at);
-    let duration = buffer.duration().map(|d| d.nseconds()).unwrap_or(0);
-    let key = !buffer.flags().contains(gst::BufferFlags::DELTA_UNIT);
-    Some((Frame { at, dts, duration, key, buffer }, caps))
 }

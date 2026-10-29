@@ -72,7 +72,7 @@ fn a_real_angle_holds_whole_seconds_of_its_source() {
     };
     drop(b);
     p.pipeline.set_state(gst::State::Null).unwrap();
-    assert!(held >= 2 * SEC - SEC / 15 && held <= 3 * SEC + SEC / 15, "two seconds and at most one GOP more: {held}");
+    assert!((2 * SEC - SEC / 15..=3 * SEC + SEC / 15).contains(&held), "two seconds and at most one GOP more: {held}");
     assert!((2..=3).contains(&gops), "a keyframe every second: {gops} GOPs");
     assert!(bytes > 0 && bytes < 3 * 2_000_000 / 8 * 2, "about the bitrate times the seconds: {bytes} bytes");
     assert!(audio > 50, "the sound is kept beside the picture: {audio} frames");

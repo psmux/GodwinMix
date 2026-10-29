@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+Instant replay, built in.
+
+* `replay.start` keeps the last `seconds` (60 by default, up to 30 minutes) of each angle you name, a source or the programme, in memory as the encoder wrote it: a ring of whole GOPs, so memory is the bitrate times the seconds, about 45 MB a minute at 6 Mbit/s. A source angle is encoded with the encoder the catalogue picked for the programme, VideoToolbox on a Mac, with a keyframe every second. The programme angle reads the programme encoder's own output and encodes nothing. Nothing is built until replay is on, and `replay.stop` leaves every pipeline as it was. `[replay]` in the config starts it with the mixer.
+* Each angle's encoder sits behind a leaky queue on the source's tee, so an encoder that cannot keep up drops its own frames and the source and the programme lose none.
+* `replay.mark` sets an in point (now, or some seconds back) and an out point, or makes an event of the last few seconds. Events are listed, renamed and deleted with `replay.event.*`.
+* `replay.play` plays an event, or the last seconds of an angle, on a source called `replay`, at 1×, 0.5×, 0.25× or anything down to 0.1×, and with `take` puts it on air with the transition named, a stinger among them. `replay.set` changes the angle or the speed from the frame on screen. Slow motion keeps the timestamps in step, so the programme sees a picture at its own rate; it is silent. The first frame shown is the in point's own, and `source.seek` moves to any frame.
+* `replay.save` writes an event, or a whole angle's buffer, to an MP4 under `Replays/` in the media folder without encoding it again, which is the replay buffer OBS has. It shows in the Media panel.
+* A Replay panel on the desk, loaded when first shown: the angles with how much each holds, mark in and out, the events, play or put on air at a speed, a change of angle while it plays, and save. I, O and P mark in, mark out and play the last event from anywhere on the desk. The Companion module has replay actions too.
+* The `esports` preset records the programme and its four players for a minute, with the Replay panel in its layout. It used to name a `replay` plugin that did not exist.
+* Agent tools behind `search_tools`: `get_replay`, `start_replay`, `mark_replay`, `play_replay`, `set_replay` and `save_replay`. See [Instant replay](docs/how-to/instant-replay.md) and [the reference](docs/reference/replay.md).
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

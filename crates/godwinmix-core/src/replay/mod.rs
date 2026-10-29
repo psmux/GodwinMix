@@ -21,12 +21,14 @@
 pub mod angle;
 pub mod branch;
 pub mod clip;
+mod frame;
 mod desk;
 pub mod marks;
 pub mod registry;
 pub mod ring;
 pub mod save;
 pub mod shared;
+mod sink;
 mod status;
 
 pub use desk::{Desk, SourceTaps, Taps};

@@ -46,7 +46,7 @@ impl Shared {
 
     /// The shared clock now, in nanoseconds.
     pub fn now(&self) -> u64 {
-        let clock = self.clock.read().clone().unwrap_or_else(|| gst::SystemClock::obtain());
+        let clock = self.clock.read().clone().unwrap_or_else(gst::SystemClock::obtain);
         clock.time().nseconds()
     }
 

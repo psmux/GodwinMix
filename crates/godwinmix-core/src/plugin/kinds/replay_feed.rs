@@ -1,23 +1,15 @@
 //! Playing a replay clip into the two appsrcs of a replay source.
 //!
-//! Every frame is the ring's own buffer with new times: its distance from the
-//! in point, stretched by the speed. At half speed a frame lasts two canvas
-//! frames and `videorate` in the normaliser shows it twice, so the programme
-//! sees a picture at its own rate with timestamps that keep counting the way a
-//! live source's do. The sound plays at real time only; slower, it is muted
-//! (`muted`), because stretched AAC is silence with clicks in it.
-//!
-//! Frames between the keyframe a clip starts from and the moment it is to
-//! show go out flagged `DECODE_ONLY`: the decoder decodes them and shows
-//! none, so a play or a seek lands on the exact frame asked for. A seek is
-//! the appsrcs' `seek-data`, which moves both cursors.
-//!
-//! The callbacks run on the appsrcs' streaming threads and on whatever thread
-//! seeks. Each takes the one lock for a few index moves and a buffer copy that
-//! shares its memory.
+//! Each frame is the ring's own buffer, retimed by `replay_cursor`. At half
+//! speed a frame lasts two canvas frames and the normaliser's `videorate`
+//! shows it twice, so the programme sees a picture at its own rate. Sound
+//! plays at real time only; slower, it is muted, as stretched AAC is silence
+//! with clicks in it. A seek is the appsrcs' `seek-data`, which moves both
+//! cursors. Each callback takes the one lock for a few index moves and a
+//! buffer copy that shares its memory.
 
+use super::replay_cursor::State;
 use crate::replay::clip::Clip;
-use crate::replay::ring::Frame;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
@@ -31,53 +23,9 @@ pub struct Feed {
     state: Mutex<State>,
 }
 
-struct State {
-    clip: Clip,
-    speed: f64,
-    /// Where showing starts, in clock nanoseconds of the clip.
-    show_from: u64,
-    video: usize,
-    audio: usize,
-    /// Set by a load or a change of angle, cleared by the seek that follows:
-    /// nothing is pushed in between, so no frame of the new clip goes out at
-    /// the old one's place.
-    held: bool,
-    /// When playback last started from a position, on the pipeline's clock:
-    /// what is on screen is that position plus the time since.
-    since: Option<(gst::Clock, u64, u64)>,
-}
-
-impl State {
-    fn out(&self, at: u64) -> u64 {
-        (at.saturating_sub(self.clip.from) as f64 / self.speed) as u64
-    }
-
-    fn seek(&mut self, position: u64) {
-        self.since = None;
-        self.show_from = self.clip.from + (position as f64 * self.speed) as u64;
-        self.video = self.clip.key_before(self.show_from);
-        self.audio = self.clip.audio_from(self.show_from);
-        self.held = false;
-    }
-
-    fn stamp(&self, f: &Frame, hidden: bool) -> gst::Buffer {
-        let mut b = f.buffer.copy();
-        let buf = b.make_mut();
-        buf.set_pts(gst::ClockTime::from_nseconds(self.out(f.at)));
-        buf.set_dts(f.dts.map(|d| gst::ClockTime::from_nseconds(self.out(d))));
-        buf.set_duration(gst::ClockTime::from_nseconds((f.duration as f64 / self.speed) as u64));
-        if hidden {
-            buf.set_flags(gst::BufferFlags::DECODE_ONLY);
-        }
-        b
-    }
-}
-
 impl Feed {
     pub fn new(clip: Clip, speed: f64) -> Arc<Self> {
-        let mut state = State { clip, speed, show_from: 0, video: 0, audio: 0, held: false, since: None };
-        state.seek(0);
-        Arc::new(Self { state: Mutex::new(state) })
+        Arc::new(Self { state: Mutex::new(State::new(clip, speed)) })
     }
 
     /// How long the clip plays at its speed, in nanoseconds.
