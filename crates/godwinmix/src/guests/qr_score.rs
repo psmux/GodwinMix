@@ -5,6 +5,8 @@ use super::qr_grid::Grid;
 
 impl Grid {
     /// Runs, blocks and balance. Any mask decodes; this only picks a cleaner one.
+    /// Indexed both ways at once, rows and columns, as qr-grid.js does.
+    #[allow(clippy::needless_range_loop)]
     pub fn penalty(&self) -> usize {
         let (n, d) = (self.size, &self.dark);
         let mut score = 0;

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+Guest invites, the way vMix Call and Wirecast Rendezvous have them.
+
+* `guest.invite.create` makes a link with a key of its own for one guest, with a name for the screen and an expiry (a day unless you say, thirty days at most), and answers the link and a QR code of it. The key publishes only that guest's camera, as the source `guest-<id>`, and plays only their return. It is never the channel key and never a control token. `guest.invite.list`, `guest.invite.link` and `guest.invite.revoke` go with it, and invites are kept in `godwinmix.guests.json` beside the config, owner readable only, so the same link works after a restart.
+* The guest opens the link on a phone or a laptop, allows the camera, and presses Join the show. Their camera goes straight into the show over WebRTC, decoded in the show's own process, so a guest needs neither the ingest plugin nor a channel. A reload or a change of network takes over the old session at once.
+* Under their own picture the guest sees and hears their return: the programme picture, as it is already encoded, with the sound of a mix minus bus made for them, so they hear everyone on air but themselves and never their own echo. The source, the bus and the return are made when the guest first joins and removed when the invite goes, and none of them is saved in the runtime store.
+* Revoking ends the guest's camera and return at once, well inside a second, and the link lets nobody in again. An invite that runs out does the same.
+* Talkback: hold Talk on a guest's card, or Talk to everyone, and the operator's browser microphone goes into that return only. `guest.talkback.set` does the same from anywhere, and can make any input the talkback source. The talkback source is kept muted on the programme, and stays muted if somebody unmutes it.
+* A Guests panel (View > Guests, or More on a phone): invite, copy the link, show the code, each guest's state (invited, joining, live, gone) and picture, Take, Mute, Talk and Revoke. It loads when first shown.
+* Up to eight guests at once. COST_LINE See [Invite a guest](docs/how-to/invite-a-guest.md) and [the reference](docs/reference/guest-invites.md).
+* MCP tools `create_guest_invite` and `list_guests`, behind `search_tools`.
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

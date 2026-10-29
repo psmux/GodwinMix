@@ -2,7 +2,6 @@
 //! source reaches the return only while it is held, and never the programme.
 
 use super::buses::rig;
-use super::*;
 use crate::buses::{AudioCall, TalkCall};
 use godwinmix_protocol::buses::BusConfig;
 
