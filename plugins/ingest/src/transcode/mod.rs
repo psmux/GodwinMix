@@ -45,6 +45,8 @@ mod tests_fit;
 mod tests_picture;
 #[cfg(test)]
 mod tests_cuda_deint;
+#[cfg(test)]
+mod tests_deint_measure;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
