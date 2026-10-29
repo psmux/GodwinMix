@@ -2159,8 +2159,18 @@ export interface KeyColorRequest {
   y?: number | null;
 }
 
+/** The keys on air, bottom first. */
+export interface KeyListing {
+  keys: KeyRecord[];
+}
+
 /** How a publisher gives its key. */
 export type KeyMode = "query" | "stream";
+
+export interface KeyRecord {
+  id: string;
+  name: string;
+}
 
 /**
  * What `channel.key.reveal` answers: the key itself, and nothing a list
@@ -2168,6 +2178,13 @@ export type KeyMode = "query" | "stream";
  */
 export interface KeyRevealed {
   secret: string;
+}
+
+/** `program.key.set`. */
+export interface KeySetRequest {
+  on: boolean;
+  scene: string;
+  transition?: Transition | null;
 }
 
 /** A custom ladder. */
@@ -4639,6 +4656,8 @@ export interface MethodParams {
   "program.get": Record<string, never>;
   "program.golive": GoLiveRequest;
   "program.history": HistoryRequest;
+  "program.key.list": Record<string, never>;
+  "program.key.set": KeySetRequest;
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
   "program.thumbnail": ThumbnailRequest;
@@ -4913,6 +4932,8 @@ export interface MethodResults {
   "program.get": ProgramState;
   "program.golive": GoLiveResult;
   "program.history": TakeRecord[];
+  "program.key.list": KeyListing;
+  "program.key.set": KeyListing;
   "program.revert": ProgramState;
   "program.take": ProgramState;
   "program.thumbnail": Record<string, unknown>;
@@ -5244,6 +5265,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program" } },
   { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/golive" } },
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
+  { name: "program.key.list", summary: "The downstream keys on air, bottom first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/key/list" } },
+  { name: "program.key.set", summary: "Put a scene on air as a downstream key, above whatever is taken, or take it off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/key/set" } },
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
   { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/thumbnail" } },
@@ -6179,6 +6202,16 @@ export class GeneratedMethods {
   /** The last hundred takes, newest first, with the token that asked for each. */
   programHistory(params: HistoryRequest = {}): Promise<TakeRecord[]> {
     return this._call("program.history", params as unknown as Record<string, unknown>) as Promise<TakeRecord[]>;
+  }
+
+  /** The downstream keys on air, bottom first. */
+  programKeyList(): Promise<KeyListing> {
+    return this._call("program.key.list", {}) as Promise<KeyListing>;
+  }
+
+  /** Put a scene on air as a downstream key, above whatever is taken, or take it off. */
+  programKeySet(params: KeySetRequest): Promise<KeyListing> {
+    return this._call("program.key.set", params as unknown as Record<string, unknown>) as Promise<KeyListing>;
   }
 
   /** Take back to the shot before this one. */

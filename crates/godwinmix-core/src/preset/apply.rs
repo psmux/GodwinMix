@@ -103,6 +103,7 @@ fn write_scenes(
             transitions: Vec::new(),
             assets: Default::default(),
             sources: Default::default(),
+            keys: Vec::new(),
         },
     };
     for scene in scenes {

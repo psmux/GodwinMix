@@ -9106,6 +9106,21 @@
       ],
       "type": "object"
     },
+    "KeyListing": {
+      "description": "The keys on air, bottom first.",
+      "properties": {
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/KeyRecord"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    },
     "KeyMode": {
       "description": "How a publisher gives its key.",
       "oneOf": [
@@ -9121,6 +9136,21 @@
         }
       ]
     },
+    "KeyRecord": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
     "KeyRevealed": {
       "description": "What `channel.key.reveal` answers: the key itself, and nothing a list\nwould carry.",
       "properties": {
@@ -9130,6 +9160,36 @@
       },
       "required": [
         "secret"
+      ],
+      "type": "object"
+    },
+    "KeySetRequest": {
+      "additionalProperties": false,
+      "description": "`program.key.set`.",
+      "properties": {
+        "on": {
+          "description": "True to put it on air, false to take it off.",
+          "type": "boolean"
+        },
+        "scene": {
+          "description": "The scene to put on air as a key, or take off, by name or by id.",
+          "type": "string"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the key comes and goes: a name or {type, duration_ms, params}, as\nin `program.take`. A fade of 300 ms when absent; `\"cut\"` for none."
+        }
+      },
+      "required": [
+        "scene",
+        "on"
       ],
       "type": "object"
     },
@@ -23148,6 +23208,53 @@
       "scope": "read",
       "since": "1",
       "summary": "The last hundred takes, newest first, with the token that asked for each."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "program.key.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/program/key/list"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The downstream keys on air, bottom first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_downstream_key"
+      },
+      "mutating": true,
+      "name": "program.key.set",
+      "params": {
+        "$ref": "#/$defs/KeySetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/program/key/set"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyListing"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Put a scene on air as a downstream key, above whatever is taken, or take it off."
     },
     {
       "destructive": false,

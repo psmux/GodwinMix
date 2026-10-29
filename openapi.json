@@ -9011,6 +9011,21 @@
         ],
         "type": "object"
       },
+      "KeyListing": {
+        "description": "The keys on air, bottom first.",
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeyRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
       "KeyMode": {
         "description": "How a publisher gives its key.",
         "oneOf": [
@@ -9026,6 +9041,21 @@
           }
         ]
       },
+      "KeyRecord": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "KeyRevealed": {
         "description": "What `channel.key.reveal` answers: the key itself, and nothing a list\nwould carry.",
         "properties": {
@@ -9035,6 +9065,36 @@
         },
         "required": [
           "secret"
+        ],
+        "type": "object"
+      },
+      "KeySetRequest": {
+        "additionalProperties": false,
+        "description": "`program.key.set`.",
+        "properties": {
+          "on": {
+            "description": "True to put it on air, false to take it off.",
+            "type": "boolean"
+          },
+          "scene": {
+            "description": "The scene to put on air as a key, or take off, by name or by id.",
+            "type": "string"
+          },
+          "transition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the key comes and goes: a name or {type, duration_ms, params}, as\nin `program.take`. A fade of 300 ms when absent; `\"cut\"` for none."
+          }
+        },
+        "required": [
+          "scene",
+          "on"
         ],
         "type": "object"
       },
@@ -22995,6 +23055,72 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/program/key/list": {
+      "get": {
+        "description": "JSON-RPC method `program.key.list`. Needs the `read` scope.",
+        "operationId": "program.key.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The downstream keys on air, bottom first.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/program/key/set": {
+      "post": {
+        "description": "JSON-RPC method `program.key.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "program.key.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeySetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a scene on air as a downstream key, above whatever is taken, or take it off.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/program/revert": {

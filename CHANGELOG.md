@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Downstream keys: a scene put up with `program.key.set` (or Put up as a key, on a scene's right click menu) is drawn above whatever is on air, a scene or one source, through every take and cut, until it is taken down. A logo, a lower third or a ticker no longer has to be copied into every scene. It fades in and out in 300 ms unless told otherwise, it is not a take for the safety rules or the history, tally counts the cameras in it, and a restart brings it back up. `program.key.list` says what is up, and agents have `set_downstream_key`. See [Keep a graphic up with a downstream key](docs/how-to/keep-a-graphic-up-with-a-downstream-key.md).
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

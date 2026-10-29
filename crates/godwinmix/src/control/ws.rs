@@ -671,9 +671,19 @@ impl Connection {
     /// `program` instead, and empty when nothing is on air. Without this the
     /// programme half of tally only ever lit the one source a scene of one
     /// item reports, so a camera in a two box was told it was off.
+    ///
+    /// A downstream key's sources are on air too, over a scene or a source.
     fn program_sources(&self) -> Vec<String> {
-        let Some(scene) = self.program_scene.as_deref() else { return Vec::new() };
-        self.ctx.app.scenes.sources_in(scene)
+        let mut out = match self.program_scene.as_deref() {
+            Some(scene) => self.ctx.app.scenes.sources_in(scene),
+            None => Vec::new(),
+        };
+        for source in self.ctx.app.scenes.key_sources() {
+            if !out.contains(&source) {
+                out.push(source);
+            }
+        }
+        out
     }
 
     fn preview_sources(&self) -> Vec<String> {

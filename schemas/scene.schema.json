@@ -700,6 +700,13 @@
     "id": {
       "$ref": "#/$defs/Id"
     },
+    "keys": {
+      "description": "Downstream keys on air: scenes drawn above whatever is taken, in this\norder, until they are switched off. A lower third, a logo or a ticker\nstays up through every take. Kept here so a restart keeps them up.",
+      "items": {
+        "$ref": "#/$defs/Id"
+      },
+      "type": "array"
+    },
     "name": {
       "type": "string"
     },
