@@ -422,6 +422,9 @@ pub fn make(type_id: &str) -> Result<Box<dyn Filter>> {
         t if super::filters::matte::MANIFEST.is(t) => {
             Ok(Box::new(super::filters::matte::Cutout::default()))
         }
+        t if super::filters::audio::make_filter(t).is_some() => {
+            Ok(super::filters::audio::make_filter(t).expect("checked above"))
+        }
         other => anyhow::bail!(
             "no filter type `{other}` in this build. It has: {}",
             available().join(", ")
@@ -441,11 +444,10 @@ pub fn described() -> Vec<super::KindInfo> {
 /// The filters compiled into this build. The cutout is behind the `matte`
 /// feature, which the desktop and server builds turn on.
 fn built_in() -> Vec<&'static Manifest> {
-    // Only pushed to with `matte` on; the crate checked alone has it off.
-    #[cfg_attr(not(feature = "matte"), allow(unused_mut))]
     let mut out = vec![&super::filters::chroma::MANIFEST];
     #[cfg(feature = "matte")]
     out.push(&super::filters::matte::MANIFEST);
+    out.extend(super::filters::audio::built_in());
     out
 }
 
