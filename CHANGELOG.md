@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Signed viewer links: `hls.sign {output, ttl_secs, ip}` (the agent tool `sign_viewer_link`) makes a watch link to one HLS output that stops working after a time, an hour unless asked otherwise and a month at most, and with `ip` opens from one address only. The link carries its own expiry and signature, an HMAC under the output's viewer key, so nothing is stored and changing the viewer key ends every signed link at once. A link that has run out is a 401 that says so and names `hls.sign`. See [Send a link that runs out](docs/how-to/serve-hls.md#send-a-link-that-runs-out).
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

@@ -6885,6 +6885,31 @@ pub type ShowWork = String;
 /// The values api_level 1 knows for [`ShowWork`].
 pub const SHOW_WORK_VALUES: &[&str] = &["mix", "transcode", "copy"];
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignRequest {
+    /// An address the link opens from and from nowhere else, for a link meant
+    /// for one viewer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip: Option<String>,
+    /// The HLS output, by id.
+    pub output: String,
+    /// How long the link works, in seconds: 3600 when left out, at most
+    /// 2592000 (thirty days).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignedLink {
+    /// When it stops working, in Unix seconds.
+    pub expires: u64,
+    /// The multivariant playlist's path with the signed query on it. Put the
+    /// page's origin in front of it for a link.
+    pub master_url_path: String,
+}
+
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8153,7 +8178,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 270] = [
+pub const METHODS: [MethodInfo; 271] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8245,6 +8270,7 @@ pub const METHODS: [MethodInfo; 270] = [
     MethodInfo { name: "headend.profile.save", summary: "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/profile/save")) },
     MethodInfo { name: "headend.scan", summary: "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/headend/scan")) },
     MethodInfo { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/headend/status")) },
+    MethodInfo { name: "hls.sign", summary: "A viewer link to one HLS output that stops working after a time, and can be held to one address.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/hls/sign")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
@@ -9233,6 +9259,11 @@ impl Client {
     /// Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.
     pub async fn headend_status(&self) -> Result<HeadendStatus> {
         self.call("headend.status", &serde_json::json!({})).await
+    }
+
+    /// A viewer link to one HLS output that stops working after a time, and can be held to one address.
+    pub async fn hls_sign(&self, params: &SignRequest) -> Result<SignedLink> {
+        self.call("hls.sign", params).await
     }
 
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.

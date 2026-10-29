@@ -41,6 +41,7 @@ mod media_refs_live;
 mod media_refs_map;
 mod paths;
 mod nodes;
+mod hls_sign;
 mod outputs;
 mod output_stop;
 mod preview;
@@ -89,6 +90,7 @@ pub fn registry() -> Registry<Call> {
     program::register(&mut reg);
     sources::register(&mut reg);
     outputs::register(&mut reg);
+    hls_sign::register(&mut reg);
     output_stop::register(&mut reg);
     channel_destinations::register(&mut reg);
     media::register(&mut reg);

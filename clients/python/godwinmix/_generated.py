@@ -4318,6 +4318,20 @@ class ShowStatsRequest(TypedDict, total=False):
     ids: Optional[List[str]]
     # Left out: every show.
 
+class SignRequest(TypedDict, total=False):
+    ip: Optional[str]
+    # An address the link opens from and from nowhere else, for a link meant for one viewer.
+    output: str
+    # The HLS output, by id.
+    ttl_secs: Optional[int]
+    # How long the link works, in seconds: 3600 when left out, at most 2592000 (thirty days).
+
+class SignedLink(TypedDict, total=False):
+    expires: int
+    # When it stops working, in Unix seconds.
+    master_url_path: str
+    # The multivariant playlist's path with the signed query on it. Put the page's origin in front of it for a link.
+
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
 
@@ -5367,6 +5381,7 @@ METHODS = (
     {"name": "headend.profile.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/profile/save"), "summary": 'Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.'},
     {"name": "headend.scan", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/headend/scan"), "summary": "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add."},
     {"name": "headend.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/status"), "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."},
+    {"name": "hls.sign", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/hls/sign"), "summary": 'A viewer link to one HLS output that stops working after a time, and can be held to one address.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
@@ -6991,6 +7006,22 @@ class GeneratedMethods:
         """Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."""
         params: Dict[str, Any] = {}
         return await self._call("headend.status", params)
+
+    async def hls_sign(
+        self,
+        output: str,
+        *,
+        ip: Optional[str] = None,
+        ttl_secs: Optional[int] = None,
+    ) -> SignedLink:
+        """A viewer link to one HLS output that stops working after a time, and can be held to one address."""
+        params: Dict[str, Any] = {}
+        params["output"] = output
+        if ip is not None:
+            params["ip"] = ip
+        if ttl_secs is not None:
+            params["ttl_secs"] = ttl_secs
+        return await self._call("hls.sign", params)
 
     async def log_gst(
         self,

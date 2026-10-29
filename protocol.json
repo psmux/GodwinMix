@@ -15631,6 +15631,54 @@
         }
       ]
     },
+    "SignRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "ip": {
+          "description": "An address the link opens from and from nowhere else, for a link meant\nfor one viewer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "The HLS output, by id.",
+          "type": "string"
+        },
+        "ttl_secs": {
+          "description": "How long the link works, in seconds: 3600 when left out, at most\n2592000 (thirty days).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "output"
+      ],
+      "type": "object"
+    },
+    "SignedLink": {
+      "properties": {
+        "expires": {
+          "description": "When it stops working, in Unix seconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "master_url_path": {
+          "description": "The multivariant playlist's path with the signed query on it. Put the\npage's origin in front of it for a link.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "master_url_path",
+        "expires"
+      ],
+      "type": "object"
+    },
     "Snapshot": {
       "description": "`event/snapshot`: the full state, and where in the stream it sits.",
       "properties": {
@@ -21829,6 +21877,32 @@
       "scope": "read",
       "since": "1",
       "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "sign_viewer_link"
+      },
+      "mutating": true,
+      "name": "hls.sign",
+      "params": {
+        "$ref": "#/$defs/SignRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/hls/sign"
+      },
+      "result": {
+        "$ref": "#/$defs/SignedLink"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "A viewer link to one HLS output that stops working after a time, and can be held to one address."
     },
     {
       "destructive": false,

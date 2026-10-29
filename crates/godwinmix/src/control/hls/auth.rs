@@ -12,8 +12,8 @@ use std::net::SocketAddr;
 
 /// A request that was let in.
 pub struct Viewer {
-    /// `key`, `token` and `v` exactly as they came, for every URI a
-    /// playlist hands this player.
+    /// `key`, `token`, `v` and a signed link's `exp`, `sig` and `ip`, exactly
+    /// as they came, for every URI a playlist hands this player.
     pub query: String,
     /// Who this is, for the viewer count.
     pub who: String,
@@ -61,12 +61,22 @@ pub fn admit(door: &impl Door, stream: &Stream, req: &Request) -> Result<Viewer,
     let pairs = pairs(req);
     let key = value(&pairs, "key");
     let peer = req.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| c.0.ip());
-    if !key.is_some_and(|k| stream.admits(k)) && !stream.params.access.lets_in(peer) {
-        check_token(door, stream, req, key.is_some()).map_err(|r| if stream.params.access == Access::Open { not_local(stream, peer) } else { r })?;
+    let tried = value(&pairs, "exp").zip(value(&pairs, "sig"));
+    let signed = tried.is_some_and(|(exp, sig)| stream.admits_signed(exp, sig, value(&pairs, "ip"), peer));
+    if !signed && !key.is_some_and(|k| stream.admits(k)) && !stream.params.access.lets_in(peer) {
+        check_token(door, stream, req, key.is_some()).map_err(|r| {
+            if tried.is_some() && key.is_none() {
+                run_out(stream)
+            } else if stream.params.access == Access::Open {
+                not_local(stream, peer)
+            } else {
+                r
+            }
+        })?;
     }
     let query = pairs
         .iter()
-        .filter(|(k, _)| matches!(*k, "show" | "key" | "token" | "v"))
+        .filter(|(k, _)| matches!(*k, "show" | "key" | "token" | "v" | "exp" | "sig" | "ip"))
         .map(|(k, v)| format!("{k}={v}"))
         .collect::<Vec<_>>()
         .join("&");
@@ -113,6 +123,16 @@ fn check_token(door: &impl Door, stream: &Stream, req: &Request, had_key: bool) 
         )));
     }
     Ok(())
+}
+
+/// A signed link that has run out, or was made for another output or address.
+fn run_out(stream: &Stream) -> Box<Response> {
+    let message = format!(
+        "This signed link to `{}` has run out, or was made for another output or another address. Ask whoever \
+         sent it for a new one; hls.sign makes one.",
+        stream.id
+    );
+    Box::new(refuse(StatusCode::UNAUTHORIZED, message, json!({ "output": stream.id, "needs": "signed link" })))
 }
 
 /// An open output asked for from outside loopback and the private networks,
