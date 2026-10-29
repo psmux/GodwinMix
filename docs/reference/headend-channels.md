@@ -90,14 +90,19 @@ through.
 | `fit` | `pad` (the default), `crop`, `stretch` | `pad` lays the whole picture in with bars, `crop` fills the frame and cuts what overhangs, `stretch` fills it and changes the picture's shape. `pad` and `crop` go by the picture's shape as shown, not its stored size: 704x480 shown at 16:9 fills a 16:9 frame, and a 4:3 picture is laid in 960 wide in a 1280x720 frame |
 | `aspect` | `auto` (the default), `16:9`, `4:3` | the shape the source is shown at. `auto` is what the stream says (MPEG-2's aspect code, H.264's VUI); the others override it for a broadcaster that flags its picture wrong. A source whose shape changes mid stream, adverts between 4:3 and 16:9, is fitted again at the change |
 | `deinterlace` | `off`, `on`, `auto` | `auto` makes progressive every picture the decoder marks as interlaced and passes the rest; `on` does every picture; `off` takes both fields as one frame, which combs on movement. Off when left out of a rendition; `auto` in every built in profile |
-| `deinterlace_method` | `yadif` (the default), `greedyh`, `linear` | how the missing lines are made. It runs on the CPU whichever: GStreamer has no GPU deinterlace and its NVDEC decoders always weave, so on an NVIDIA card the picture goes down for it in I420 and back up, and the scale and the encode stay on the card. The renditions of one source that deinterlace the same way share one deinterlace |
+| `deinterlace_method` | `yadif` (the default), `greedyh`, `linear` | how the missing lines are made. On an NVIDIA card it runs on the card, with a kernel of GodwinMix's own: `yadif` and `greedyh` keep still detail woven and rebuild the lines only where the two fields comb, `linear` rebuilds every line. Without a card, or with `GMX_CUDA_DEINTERLACE=off`, it is GStreamer's `deinterlace` on the CPU with the method named. The renditions of one source that deinterlace the same way share one deinterlace |
 | `match_source` | `{max_height, bitrate_kbps?}` | a source taller than `height` is made at its own height up to `max_height`, the frame's shape kept, at `bitrate_kbps` at `max_height` (else the rendition's bitrate grown by the area); a source no taller at `width` x `height`. `max_height` is even, 144 to 4320, and taller than `height` |
 | `encoder` | `gpu`, `cpu` | see below |
 
-Measured on an RTX 4060 Ti with a current desktop CPU, a deinterlace costs
-about 9% of one core for each 1080i channel and about 5% for each 480i
-one, with the GPU's own use of it a few percent; a progressive picture
-passes for nothing to speak of. Linear is far cheaper and softer.
+Measured on an RTX 4060 Ti with 40 s of a 1080i and of a 480i broadcast,
+played at their own speed through a channel's scale to 1280x720: on the
+card a 1080i channel's deinterlace and scale take 0.08 of one core, where
+taking the picture down for YADIF on the CPU took 0.37, and a 480i one
+0.05 against 0.11. Scored with VMAF against ffmpeg's bwdif, the card's
+pictures came within 0.15 of YADIF's (93.7 against 93.8 for 1080i, 83.0
+for both at 480i). A progressive picture passes for nothing to speak of.
+`dev/build-deinterlace-ptx.sh` rebuilds the kernel; the measuring run is
+`measure_deinterlace` in `plugins/ingest/src/transcode/`.
 
 ### A ladder
 

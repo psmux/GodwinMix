@@ -45,7 +45,7 @@ starts no thread and touches no GStreamer element.
 | `video.aspect` | `auto`, `16:9`, `4:3` | `auto`: the shape the stream says. The others override it for a source flagged wrong |
 | `video.pad_color` | `#rrggbb` | black. Only black is drawn today: neither scaler has a border colour, so another colour plans as a scale of its own and comes out black |
 | `video.deinterlace` | `off`, `on`, `auto` | `off`: an interlaced picture is scaled as the frame it is, both fields woven. `auto` deinterlaces what the decoder marks as interlaced, `on` every picture |
-| `video.deinterlace_method` | `yadif`, `greedyh`, `linear` | `yadif`. On the CPU whichever: on an NVIDIA card the picture goes down for it and back up, and the scale and the encode stay on the card |
+| `video.deinterlace_method` | `yadif`, `greedyh`, `linear` | `yadif`. On an NVIDIA card the card does it, `linear` there rebuilding every line and the other two only where the fields comb; on the CPU otherwise, or with `GMX_CUDA_DEINTERLACE=off` |
 | `video.match_source` | `{max_height, bitrate_kbps?}` | none. A source taller than `height` is made at its own height up to `max_height`, the frame's shape kept, at `bitrate_kbps` there (else the asked bitrate grown by the area) |
 | `video.preset` | the encoder's own word, `p1` on NVENC, `veryfast` on x264 | the catalogue's |
 | `video.bframes` | count | the catalogue's (none, for live) |

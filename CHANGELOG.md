@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Deinterlacing on an NVIDIA card stays on the card. GStreamer has no CUDA deinterlacer, so until now each interlaced picture went down to system memory for YADIF on the CPU and came back up. On a headend of fifty broadcast channels that was about nine cores of YADIF and five more of copies. A kernel of GodwinMix's own now does it in CUDA memory, loaded as PTX by the driver, so it needs no NVRTC and works on every card from Maxwell on. Measured on a 1080i channel it takes 0.08 of a core against 0.37, and scores within 0.15 VMAF of YADIF. `GMX_CUDA_DEINTERLACE=off` puts it back on the CPU.
+
 ## 0.3.20 (2026-10-29)
 
 Sound filters, built in.

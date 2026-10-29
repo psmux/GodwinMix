@@ -80,7 +80,7 @@ pub unsafe fn kernel(api: &Api) -> Result<Ptr, String> {
     if code != 0 {
         return Err(format!("the driver would not load the deinterlace kernel (CUDA error {code})"));
     }
-    if (api.function)(&mut f, module, b"gmx_deinterlace\0".as_ptr()) != 0 {
+    if (api.function)(&mut f, module, c"gmx_deinterlace".as_ptr().cast()) != 0 {
         return Err("the deinterlace kernel has no gmx_deinterlace".into());
     }
     map.insert(id, f as usize);

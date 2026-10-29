@@ -23,9 +23,10 @@ of fifty channels at 720p asks for:
 * `fit: pad` keeps the whole picture and adds black bars. `crop` fills the
   frame and cuts what overhangs; `stretch` changes the picture's shape.
 * `deinterlace: off` scales an interlaced picture as the frame it is, both
-  fields woven together. `on` and `auto` deinterlace on the CPU, since no
-  CUDA deinterlacer is installed, and that takes the channel off the GPU for
-  its scale.
+  fields woven together. `on` and `auto` deinterlace on the card, with a
+  kernel of GodwinMix's own, since GStreamer has no CUDA deinterlacer. Set
+  `GMX_CUDA_DEINTERLACE=off` in the station's environment to do it on the
+  CPU as it was before.
 * `preset` is the encoder's own word. On NVENC `p1` is the fastest, and the
   one a card carrying fifty channels needs: at the catalogue's `p4` an RTX
   3060 class card runs out of encoder well before that.
