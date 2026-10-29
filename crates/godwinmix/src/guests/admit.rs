@@ -34,7 +34,9 @@ impl Guests {
 
     pub(super) fn key_matches(&self, id: &str, key: &str) -> Result<super::store::Record, Refused> {
         let Some(r) = self.invites.lock().get(id).cloned() else {
-            return Err(refuse(404, "there is no invite by that name on this mixer. It may have been revoked; ask whoever invited you for a new link."));
+            // 403 rather than 404: the publisher page tries a 404 again, as a
+            // mixer that is restarting answers one, and a revoked guest must stop.
+            return Err(refuse(403, "there is no invite by that name on this mixer. It may have been revoked; ask whoever invited you for a new link."));
         };
         if key.is_empty() || !constant_time_eq(key.as_bytes(), r.key.as_bytes()) {
             return Err(refuse(403, "that is not this invite's key. Open the whole link you were sent, or ask for a new one."));

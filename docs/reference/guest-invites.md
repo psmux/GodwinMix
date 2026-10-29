@@ -98,7 +98,8 @@ whenever any of it changes, to clients that subscribed to `guest.*`.
 The guest's camera session and their return end at once, and the source,
 the bus and the return output are removed, in well under a second. A scene
 that placed the source no longer shows it. The link lets nobody in
-again: the page says the invite is gone.
+again. The guest's browser notices its connection has gone within about ten
+seconds, tries once more, is refused, and the page says the invite is gone.
 
 ### `guest.talkback.set`
 
@@ -134,8 +135,7 @@ Under a station the routes are relayed to the show `?show=` names, and the
 
 | Refusal | Status |
 |---|---|
-| No invite by that id | 404 |
-| The wrong key, or an invite that has run out | 403 |
+| No invite by that id, the wrong key, or an invite that has run out | 403, so the page stops trying |
 | Not SDP, or no `Content-Type: application/sdp` | 400 or 415 |
 | Neither H.264 nor VP8 in the offer | 415 |
 | Eight guests already joining or live | 503 |

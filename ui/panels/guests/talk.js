@@ -85,9 +85,10 @@ export class Talkback {
     await this.present();
   }
 
-  /** Wait for the mixer to have the microphone as a source. */
+  /** Wait for the mixer to have the microphone as a source: up to fifteen
+   * seconds, since the first press also makes the source and connects. */
   async present() {
-    for (let i = 0; i < 50 && !this.state.present; i += 1) {
+    for (let i = 0; i < 150 && !this.state.present; i += 1) {
       await new Promise((r) => setTimeout(r, 100));
       if (i % 5 === 4) this.paint((await this.client.call("guest.invite.list", {}).catch(() => null))?.talkback);
     }

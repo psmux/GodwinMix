@@ -111,7 +111,7 @@ async fn a_guest_joins_with_their_own_key_hears_a_return_and_is_gone_within_a_se
     assert!(!core.ok("source.list", json!({})).await.to_string().contains("guest-ana-lopez"), "the source went");
     assert!(!has(&core.ok("audio.bus.list", json!({})).await, "buses", "guest-ana-lopez"), "the bus went");
     let (again, _, _) = post(&format!("{base}/guest/{id}/whip"), &key, guest.offer()).await;
-    assert_eq!(again, 404, "a revoked key lets nobody in");
+    assert_eq!(again, 403, "a revoked key lets nobody in, and the page stops trying");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
