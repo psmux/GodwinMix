@@ -2236,6 +2236,12 @@ export interface Listener {
   transport: string;
 }
 
+/** `prompter.load`: put a script on the prompter, paused at the top. */
+export interface LoadRequest {
+  id: string;
+  play?: boolean;
+}
+
 /** `log.gst`. */
 export interface LogGstRequest {
   categories: string;
@@ -2256,6 +2262,14 @@ export interface LogSetRequest {
   target?: string | null;
 }
 
+/** `prompter.set`: change how the text looks. Only what is named changes. */
+export interface LookRequest {
+  cue?: number | null;
+  line_chars?: number | null;
+  margin?: number | null;
+  mirror?: boolean | null;
+}
+
 /** `machine.status`'s answer: the box, not one process. */
 export interface MachineStatus {
   cores: number;
@@ -2271,6 +2285,12 @@ export interface MachineStatus {
 /** `scene.history.mark`. */
 export interface MarkRequest {
   label?: string | null;
+}
+
+/** A place in a script a person can jump to: a line that starts with `#`. */
+export interface Marker {
+  name: string;
+  row: number;
 }
 
 /** A master fader and mute. */
@@ -2836,6 +2856,11 @@ export interface PlanView {
   totals: PlanTotals;
 }
 
+/** `prompter.play`. */
+export interface PlayRequest {
+  speed?: number | null;
+}
+
 /**
  * The links of an output served as HLS from the control port, each with
  * the output's viewer key on it. A channel's watch link is one too:
@@ -3030,6 +3055,25 @@ export type ProgrammeExt = boolean | {
   width?: number | null;
 };
 
+/** `prompter.get`, and the payload of `event/prompter.changed`. */
+export interface PrompterState {
+  at_ms: number;
+  cue: number;
+  line_chars: number;
+  margin: number;
+  markers: Marker[];
+  mirror: boolean;
+  now_ms: number;
+  playing: boolean;
+  position: number;
+  revision: number;
+  rows: number;
+  script?: string | null;
+  speed: number;
+  title?: string | null;
+  updated_ms: number;
+}
+
 /** Where an encoder is pointed for one protocol. */
 export interface PublishAddress {
   example: string;
@@ -3182,6 +3226,21 @@ export interface Resync {
 /** How the programme goes back to a source that came back. */
 export type ReturnMode = "auto" | "manual";
 
+/** One row of a script. */
+export interface Row {
+  line: number;
+  marker?: boolean;
+  text: string;
+}
+
+/** `prompter.rows`: the script on the prompter, broken into rows. */
+export interface RowsAnswer {
+  line_chars: number;
+  rows: Row[];
+  script?: string | null;
+  updated_ms: number;
+}
+
 /** The RTMP port every channel shares. */
 export interface RtmpInfo {
   listening: boolean;
@@ -3292,6 +3351,49 @@ export interface SceneView {
  */
 export type Scope = "plugin" | "read" | "operate" | "admin";
 
+/** One script, as `prompter.script.get` and `prompter.script.save` answer. */
+export interface Script {
+  id: string;
+  text: string;
+  title: string;
+  updated_ms: number;
+}
+
+/** `event/prompter.script.changed`. */
+export interface ScriptChanged {
+  id: string;
+  removed: boolean;
+  updated_ms: number;
+}
+
+/** `prompter.script.get` and `prompter.script.remove`. */
+export interface ScriptIdRequest {
+  id: string;
+}
+
+/** `prompter.script.list`. */
+export interface ScriptList {
+  on?: string | null;
+  scripts: ScriptSummary[];
+}
+
+/** `prompter.script.save`: make a script, or replace one with the same id. */
+export interface ScriptSaveRequest {
+  id?: string | null;
+  text: string;
+  title: string;
+}
+
+/** One script in `prompter.script.list`, without its text. */
+export interface ScriptSummary {
+  bytes: number;
+  id: string;
+  lines: number;
+  markers: string[];
+  title: string;
+  updated_ms: number;
+}
+
 /** `plugin.search`. */
 export interface SearchRequest {
   term?: string;
@@ -3319,6 +3421,15 @@ export interface SearchResults {
 export interface SeekParams {
   id: string;
   position_ms: number;
+}
+
+/** `prompter.seek`: exactly one of these. */
+export interface SeekRequest {
+  by?: number | null;
+  fraction?: number | null;
+  marker?: string | null;
+  row?: number | null;
+  step?: number | null;
 }
 
 /** `audio.send.set`: how much of one source goes to one bus. */
@@ -3790,6 +3901,19 @@ export interface SourceStatus {
   uri: string;
   video_idle_ms?: number | null;
   [key: string]: unknown;
+}
+
+/**
+ * `prompter.speed`: one of `speed` or `by`.
+ *
+ * Shaped for something that follows the speaker as well as for a person: a
+ * plugin listening to the voice sends `speed` as often as it likes, and the
+ * screens follow without a jump, since the position carries on from where it
+ * was at the moment of the change.
+ */
+export interface SpeedRequest {
+  by?: number | null;
+  speed?: number | null;
 }
 
 export interface StatsListing {
@@ -4521,6 +4645,18 @@ export interface MethodParams {
   "program.transitions": Record<string, never>;
   "project.export": ExportRequest;
   "project.import": ImportRequest;
+  "prompter.get": Record<string, never>;
+  "prompter.load": LoadRequest;
+  "prompter.pause": Record<string, never>;
+  "prompter.play": PlayRequest;
+  "prompter.rows": Record<string, never>;
+  "prompter.script.get": ScriptIdRequest;
+  "prompter.script.list": Record<string, never>;
+  "prompter.script.remove": ScriptIdRequest;
+  "prompter.script.save": ScriptSaveRequest;
+  "prompter.seek": SeekRequest;
+  "prompter.set": LookRequest;
+  "prompter.speed": SpeedRequest;
   "rendition.plan": PlanRequest;
   "rendition.presets": Record<string, never>;
   "scene.add": AddSceneRequest;
@@ -4783,6 +4919,18 @@ export interface MethodResults {
   "program.transitions": TransitionCatalogue;
   "project.export": Record<string, unknown>;
   "project.import": Report;
+  "prompter.get": PrompterState;
+  "prompter.load": PrompterState;
+  "prompter.pause": PrompterState;
+  "prompter.play": PrompterState;
+  "prompter.rows": RowsAnswer;
+  "prompter.script.get": Script;
+  "prompter.script.list": ScriptList;
+  "prompter.script.remove": ScriptChanged;
+  "prompter.script.save": Script;
+  "prompter.seek": PrompterState;
+  "prompter.set": PrompterState;
+  "prompter.speed": PrompterState;
   "rendition.plan": PlanView;
   "rendition.presets": PresetsResult;
   "scene.add": SceneView;
@@ -4929,6 +5077,8 @@ export interface EventPayloads {
   "feed.failed": FeedFailedEvent;
   "feed.recovered": FeedRecoveredEvent;
   "presence.changed": PresenceList;
+  "prompter.changed": PrompterState;
+  "prompter.script.changed": ScriptChanged;
   "health": HealthEvent;
 }
 
@@ -5100,6 +5250,18 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/program/transitions" } },
   { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/project/export" } },
   { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/project/import" } },
+  { name: "prompter.get", summary: "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter" } },
+  { name: "prompter.load", summary: "Put a script on the prompter, at the top and paused unless play is true.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/load" } },
+  { name: "prompter.pause", summary: "Stop the prompter where it is.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/pause" } },
+  { name: "prompter.play", summary: "Start the prompter scrolling, at speed when given. From the end it starts again at the top.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/play" } },
+  { name: "prompter.rows", summary: "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/rows" } },
+  { name: "prompter.script.get", summary: "One prompter script with its text.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter/script/get" } },
+  { name: "prompter.script.list", summary: "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter/script/list" } },
+  { name: "prompter.script.remove", summary: "Forget a prompter script. When it is on the prompter the screens go empty.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/script/remove" } },
+  { name: "prompter.script.save", summary: "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/script/save" } },
+  { name: "prompter.seek", summary: "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/seek" } },
+  { name: "prompter.set", summary: "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/set" } },
+  { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/speed" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
   { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/presets" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
@@ -5256,6 +5418,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "feed.failed",
   "feed.recovered",
   "presence.changed",
+  "prompter.changed",
+  "prompter.script.changed",
   "health",
 ];
 
@@ -6045,6 +6209,66 @@ export class GeneratedMethods {
   /** Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. */
   projectImport(params: ImportRequest): Promise<Report> {
     return this._call("project.import", params as unknown as Record<string, unknown>) as Promise<Report>;
+  }
+
+  /** The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look. */
+  prompterGet(): Promise<PrompterState> {
+    return this._call("prompter.get", {}) as Promise<PrompterState>;
+  }
+
+  /** Put a script on the prompter, at the top and paused unless play is true. */
+  prompterLoad(params: LoadRequest): Promise<PrompterState> {
+    return this._call("prompter.load", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Stop the prompter where it is. */
+  prompterPause(): Promise<PrompterState> {
+    return this._call("prompter.pause", {}) as Promise<PrompterState>;
+  }
+
+  /** Start the prompter scrolling, at speed when given. From the end it starts again at the top. */
+  prompterPlay(params: PlayRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.play", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. */
+  prompterRows(): Promise<RowsAnswer> {
+    return this._call("prompter.rows", {}) as Promise<RowsAnswer>;
+  }
+
+  /** One prompter script with its text. */
+  prompterScriptGet(params: ScriptIdRequest): Promise<Script> {
+    return this._call("prompter.script.get", params as unknown as Record<string, unknown>) as Promise<Script>;
+  }
+
+  /** Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. */
+  prompterScriptList(): Promise<ScriptList> {
+    return this._call("prompter.script.list", {}) as Promise<ScriptList>;
+  }
+
+  /** Forget a prompter script. When it is on the prompter the screens go empty. */
+  prompterScriptRemove(params: ScriptIdRequest): Promise<ScriptChanged> {
+    return this._call("prompter.script.remove", params as unknown as Record<string, unknown>) as Promise<ScriptChanged>;
+  }
+
+  /** Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. */
+  prompterScriptSave(params: ScriptSaveRequest): Promise<Script> {
+    return this._call("prompter.script.save", params as unknown as Record<string, unknown>) as Promise<Script>;
+  }
+
+  /** Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). */
+  prompterSeek(params: SeekRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.seek", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. */
+  prompterSet(params: LookRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.set", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. */
+  prompterSpeed(params: SpeedRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.speed", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
   }
 
   /** What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. */

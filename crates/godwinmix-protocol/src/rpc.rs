@@ -282,6 +282,8 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             payload(json!({ "id": id, "binding": binding, "failures": failures })),
         ),
         Event::SetupChanged { setup } => ("setup.changed", payload(json!({ "setup": setup }))),
+        Event::PrompterChanged { state } => ("prompter.changed", payload(json!(state))),
+        Event::PrompterScriptChanged { changed } => ("prompter.script.changed", payload(json!(changed))),
         Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } | Event::BusAudioLevel { .. } => return None,
     })
 }

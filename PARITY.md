@@ -32,7 +32,7 @@ Mark an item done only when it is merged with its tests and its how to page.
 
 | Item | Today | Where it goes | State |
 |---|---|---|---|
-| Teleprompter: a page for a phone, tablet or a monitor behind glass, mirrored, several screens in step, speed from the desk, a pedal, a Stream Deck or an agent | none | built in, `prompter.*` methods and `/prompter/` | |
+| Teleprompter: a page for a phone, tablet or a monitor behind glass, mirrored, several screens in step, speed from the desk, a pedal, a Stream Deck or an agent | none | built in, `prompter.*` methods and `/prompter/` | on `feat/teleprompter` |
 | Teleprompter that follows the speaker's voice | none | plugin | |
 | Instant replay and slow motion, several angles | none; the `esports` preset names a `replay` plugin that does not exist | built in ring of encoded frames, replay as a source | |
 | Replay buffer: save the last minutes to a file | none | built in, the same ring | |

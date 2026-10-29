@@ -189,6 +189,18 @@ Keys accepted on every method, handled before a method runs.
 | `program.transitions` | `POST /api/v1/program/transitions` | read |  | 1 | Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be. |
 | `project.export` | `POST /api/v1/project/export` | admin |  | 1 | This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. |
 | `project.import` | `POST /api/v1/project/import` | admin | yes | 1 | Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. |
+| `prompter.get` | `GET /api/v1/prompter` | read |  | 1 | The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look. |
+| `prompter.load` | `POST /api/v1/prompter/load` | operate |  | 1 | Put a script on the prompter, at the top and paused unless play is true. |
+| `prompter.pause` | `POST /api/v1/prompter/pause` | operate |  | 1 | Stop the prompter where it is. |
+| `prompter.play` | `POST /api/v1/prompter/play` | operate |  | 1 | Start the prompter scrolling, at speed when given. From the end it starts again at the top. |
+| `prompter.rows` | `POST /api/v1/prompter/rows` | read |  | 1 | The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. |
+| `prompter.script.get` | `GET /api/v1/prompter/script/get` | read |  | 1 | One prompter script with its text. |
+| `prompter.script.list` | `GET /api/v1/prompter/script/list` | read |  | 1 | Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. |
+| `prompter.script.remove` | `POST /api/v1/prompter/script/remove` | operate |  | 1 | Forget a prompter script. When it is on the prompter the screens go empty. |
+| `prompter.script.save` | `POST /api/v1/prompter/script/save` | operate |  | 1 | Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. |
+| `prompter.seek` | `POST /api/v1/prompter/seek` | operate |  | 1 | Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). |
+| `prompter.set` | `POST /api/v1/prompter/set` | operate |  | 1 | Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. |
+| `prompter.speed` | `POST /api/v1/prompter/speed` | operate |  | 1 | Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
 | `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
@@ -2898,6 +2910,210 @@ MCP tool `import_project` in the `search` profile: readOnlyHint false, destructi
 }
 ```
 
+#### `prompter.get`
+
+The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.
+
+MCP tool `prompter_state` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.load`
+
+Put a script on the prompter, at the top and paused unless play is true.
+
+MCP tool `load_prompter_script` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LoadRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.pause`
+
+Stop the prompter where it is.
+
+MCP tool `prompter_pause` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.play`
+
+Start the prompter scrolling, at speed when given. From the end it starts again at the top.
+
+MCP tool `prompter_play` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlayRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.rows`
+
+The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/RowsAnswer"
+  }
+}
+```
+
+#### `prompter.script.get`
+
+One prompter script with its text.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Script"
+  }
+}
+```
+
+#### `prompter.script.list`
+
+Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.
+
+MCP tool `list_prompter_scripts` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ScriptList"
+  }
+}
+```
+
+#### `prompter.script.remove`
+
+Forget a prompter script. When it is on the prompter the screens go empty.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ScriptChanged"
+  }
+}
+```
+
+#### `prompter.script.save`
+
+Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.
+
+MCP tool `save_prompter_script` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptSaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Script"
+  }
+}
+```
+
+#### `prompter.seek`
+
+Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).
+
+MCP tool `prompter_seek` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SeekRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.set`
+
+Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LookRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.speed`
+
+Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.
+
+MCP tool `prompter_speed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SpeedRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
 #### `rendition.plan`
 
 What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
@@ -4632,6 +4848,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/feed.failed` |  |  | A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air. |
 | `event/feed.recovered` |  |  | A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one. |
 | `event/presence.changed` |  |  | Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has. |
+| `event/prompter.changed` |  |  | The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed. |
+| `event/prompter.script.changed` |  |  | A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces

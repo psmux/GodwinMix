@@ -142,6 +142,12 @@
           "check": "panel"
         },
         {
+          "command": "view.panel",
+          "arg": "core/prompter",
+          "title": "Prompter",
+          "check": "panel"
+        },
+        {
           "plugins": true
         },
         {

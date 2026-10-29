@@ -54,6 +54,7 @@ Start here if you have never run it.
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
+* [Use the teleprompter](how-to/use-the-teleprompter.md): scripts on the desk, any number of screens in step, a mirror for the glass, keys and pedals
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
   Bitfocus Companion and Elgato Stream Deck
@@ -225,6 +226,7 @@ Start here if you have never run it.
 * [Media library folders and tags](reference/media-library.md)
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
+* [The prompter](reference/prompter.md): `prompter.*`, rows, the shared position, its events and `/prompter/`
 * [Recording outputs](reference/recording.md)
 * [Setup on first use](reference/setup.md)
 * [Show health: alarms, thresholds and thumbnails](reference/show-health.md)

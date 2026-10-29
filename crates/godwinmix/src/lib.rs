@@ -27,6 +27,7 @@ pub mod control;
 pub mod ctl;
 pub mod devices;
 pub mod feeds;
+pub mod prompter;
 pub mod headend;
 mod job;
 pub mod machine;
