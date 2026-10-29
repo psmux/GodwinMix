@@ -68,6 +68,7 @@ pub mod registry;
 pub mod request;
 pub mod ring;
 pub mod rungs;
+pub mod signed;
 pub mod stream;
 pub mod track;
 pub mod ts;

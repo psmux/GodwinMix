@@ -12,9 +12,11 @@ import { failureOf } from "../outputs/failure.js";
  * The output that sends the programme into one of this mixer's channels.
  * It never leaves the machine, so it is not a destination. Testers of 0.3.7
  * switched a channel's only destination off and the pill still said
- * "1 destination live": it was counting this.
+ * "1 destination live": it was counting this. A guest's return
+ * (`guest-<id>-return`) is the same: it goes back to the guest, not out to
+ * an audience, so it is not a destination and not something to stop.
  */
-export const feedsAChannel = (o) => /^to-channel-/.test(String((o && o.id) || ""));
+export const feedsAChannel = (o) => /^to-channel-|^guest-.+-return$/.test(String((o && o.id) || ""));
 
 /**
  * @param {object[]} outputs  the status's outputs

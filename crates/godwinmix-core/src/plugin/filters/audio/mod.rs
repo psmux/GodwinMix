@@ -1,5 +1,5 @@
 //! The sound filters: gain, equaliser, gate, expander, compressor, limiter,
-//! delay and noise suppression, each a tier 0 filter of its own.
+//! delay, noise suppression and loudness, each a tier 0 filter of its own.
 //!
 //! Every one runs in the same probe (`run`), on the streaming thread that
 //! carries the samples, with no copy, no thread and no element of its own,
@@ -24,8 +24,9 @@ mod dynamics;
 mod eq;
 mod gain;
 mod gate;
+mod loudness;
 pub mod run;
-mod values;
+pub(crate) mod values;
 
 use crate::caps::CanvasCaps;
 use crate::config::Params;
@@ -64,13 +65,14 @@ pub const EXPANDER: Manifest = manifest("expander", "Push quiet background sound
 pub const COMPRESSOR: Manifest = manifest("compressor", "Even out loud and quiet speech", 0);
 pub const LIMITER: Manifest = manifest("limiter", "Keep the sound under a ceiling, whatever comes in", 0);
 pub const DELAY: Manifest = manifest("delay", "Hold the sound back to meet a late picture", 0);
+pub const LOUDNESS: Manifest = manifest("loudness", "Ride the level towards a loudness target, in LUFS", 0);
 #[cfg(feature = "denoise")]
 pub const DENOISE: Manifest = manifest("denoise", "Take fans, hum and traffic out from under a voice", 10);
 
 /// Every sound filter in this build.
 pub fn built_in() -> Vec<&'static Manifest> {
     #[cfg_attr(not(feature = "denoise"), allow(unused_mut))]
-    let mut out = vec![&GAIN, &EQ, &GATE, &EXPANDER, &COMPRESSOR, &LIMITER, &DELAY];
+    let mut out = vec![&GAIN, &EQ, &GATE, &EXPANDER, &COMPRESSOR, &LIMITER, &DELAY, &LOUDNESS];
     #[cfg(feature = "denoise")]
     out.push(&DENOISE);
     out
@@ -85,6 +87,7 @@ fn stage(type_id: &str) -> Option<(&'static Manifest, Box<dyn Dsp>)> {
         t if COMPRESSOR.is(t) => (&COMPRESSOR, Box::new(dynamics::Dynamics::new(Mode::Compress))),
         t if LIMITER.is(t) => (&LIMITER, Box::new(dynamics::Dynamics::new(Mode::Limit))),
         t if DELAY.is(t) => (&DELAY, Box::<delay::Delay>::default()),
+        t if LOUDNESS.is(t) => (&LOUDNESS, Box::<loudness::Loudness>::default()),
         #[cfg(feature = "denoise")]
         t if DENOISE.is(t) => (&DENOISE, Box::<denoise::Denoise>::default()),
         _ => return None,
@@ -102,7 +105,7 @@ pub fn make_filter(type_id: &str) -> Option<Box<dyn Filter>> {
 pub fn is_audio(type_id: &str) -> bool {
     let plugin = type_id.split('/').next().unwrap_or("");
     type_id.ends_with("/filter")
-        && matches!(plugin, "gain" | "eq" | "gate" | "expander" | "compressor" | "limiter" | "delay" | "denoise")
+        && matches!(plugin, "gain" | "eq" | "gate" | "expander" | "compressor" | "limiter" | "delay" | "denoise" | "loudness")
 }
 
 /// A bad param names the filter, the field and what it accepts.

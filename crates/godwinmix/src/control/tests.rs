@@ -268,6 +268,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "fx.remove",
             // A graphic deleted takes its files with it, like a clip.
             "gallery.remove",
+            // A guest is cut off on air, and the link they hold stops working:
+            // a new invite is a new link.
+            "guest.invite.revoke",
             // A headend channel removed takes its show with it, as
             // show.remove does, and a removed profile is gone.
             "headend.channel.remove",
@@ -283,6 +286,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "preset.apply",
             // It can replace every source, output, channel and scene at once.
             "project.import",
+            // Every angle's buffer is freed and every marked event forgotten:
+            // the replays of the last minutes are gone.
+            "replay.stop",
             // A scene and an item are documents: deleting one cannot be undone
             // by repeating the call, so both are confirmed like the rest.
             "scene.item.filter.remove",
@@ -301,6 +307,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
          audio.bus.remove (a guest's return goes quiet and its sends are forgotten), \
+         replay.stop (the buffered replays and their events are gone), \
          plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
          preset.apply (it rewrites the operator's configuration file), core.restart \
          (the programme goes off air until the mixer is back), the two scene \

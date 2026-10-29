@@ -55,7 +55,7 @@ fn canvas() -> CanvasCaps {
     CanvasCaps::new(&godwinmix_core::config::Canvas {
         width: 320,
         height: 180,
-        fps: 30,
+        fps: godwinmix_core::config::FrameRate::whole(30),
         sample_rate: 48_000,
         channels: 2,
     })

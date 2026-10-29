@@ -25,6 +25,8 @@ mod clients;
 pub mod compose;
 pub mod conflict;
 mod drafts;
+mod keys;
+pub use keys::KeyOnAir;
 mod stale;
 pub mod find;
 pub mod graphics;
@@ -104,7 +106,7 @@ impl SceneServer {
     /// Load the collection beside a runtime store, or start an empty one.
     pub fn open(runtime_store: Option<PathBuf>, canvas: CanvasCaps) -> Result<Arc<SceneServer>> {
         let document_canvas =
-            Canvas { width: canvas.width as u32, height: canvas.height as u32, fps: canvas.fps.numer().max(1) as u32 };
+            Canvas { width: canvas.width as u32, height: canvas.height as u32, fps: canvas.fps_rounded().max(1) as u32 };
         let path = runtime_store.as_deref().map(store::path_beside);
         let doc = match &path {
             Some(p) => store::load(p, document_canvas)?,
@@ -190,11 +192,14 @@ impl SceneServer {
 
     // -- applying to the compositor ------------------------------------
 
-    /// The placements the mixer should draw for this scene.
+    /// The placements the mixer should draw for this scene, with the
+    /// downstream keys on air above it (see `keys.rs`).
     pub fn placements(&self, which: &str) -> Result<(String, Vec<Placement>)> {
         let inner = self.inner.lock();
         let scene = find::scene(&inner.doc, which)?;
-        Ok((scene.name.clone(), compose::placements(&inner.doc, scene, &inner.canvas)))
+        let mut placements = compose::placements(&inner.doc, scene, &inner.canvas);
+        placements.extend(inner.key_placements(Some(scene.id)));
+        Ok((scene.name.clone(), placements))
     }
 
     /// A transition the collection stores under a name.
@@ -535,6 +540,8 @@ fn sources_of(item: &crate::scene::document::Item) -> Vec<String> {
     out
 }
 
+#[cfg(test)]
+mod keys_tests;
 #[cfg(test)]
 mod clients_tests;
 #[cfg(test)]

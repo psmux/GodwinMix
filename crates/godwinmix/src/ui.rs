@@ -104,10 +104,27 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
     ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
     ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
+    // Guests: the entry loads with the page, the rest when the panel is first shown.
+    ("panels/guests/entry.js", include_str!("../../../ui/panels/guests/entry.js")),
+    ("panels/guests/panel.js", include_str!("../../../ui/panels/guests/panel.js")),
+    ("panels/guests/card.js", include_str!("../../../ui/panels/guests/card.js")),
+    ("panels/guests/share.js", include_str!("../../../ui/panels/guests/share.js")),
+    ("panels/guests/talk.js", include_str!("../../../ui/panels/guests/talk.js")),
+    ("panels/guests/guests.css", include_str!("../../../ui/panels/guests/guests.css")),
+    // Instant replay: the entry loads with the page, the panel when first
+    // shown or when I, O or P is first pressed.
+    ("panels/replay/entry.js", include_str!("../../../ui/panels/replay/entry.js")),
+    ("panels/replay/panel.js", include_str!("../../../ui/panels/replay/panel.js")),
+    ("panels/replay/setup.js", include_str!("../../../ui/panels/replay/setup.js")),
+    ("panels/replay/angles.js", include_str!("../../../ui/panels/replay/angles.js")),
+    ("panels/replay/events.js", include_str!("../../../ui/panels/replay/events.js")),
+    ("panels/replay/controls.js", include_str!("../../../ui/panels/replay/controls.js")),
+    ("panels/replay/replay.css", include_str!("../../../ui/panels/replay/replay.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
     ("join/wiring.js", include_str!("../../../ui/join/wiring.js")),
+    ("join/return.js", include_str!("../../../ui/join/return.js")),
     ("kits/canvas/draw.js", include_str!("../../../ui/kits/canvas/draw.js")),
     ("kits/canvas/geometry.js", include_str!("../../../ui/kits/canvas/geometry.js")),
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),
@@ -173,6 +190,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/composer.js", include_str!("../../../ui/panels/composer/composer.js")),
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
     ("panels/composer/cutout.js", include_str!("../../../ui/panels/composer/cutout.js")),
+    ("panels/composer/colour.js", include_str!("../../../ui/panels/composer/colour.js")),
     ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/others.js", include_str!("../../../ui/panels/composer/others.js")),
@@ -1190,7 +1208,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_399_kb() {
+    fn the_page_a_volunteer_opens_stays_under_401_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1212,10 +1230,22 @@ mod tests {
         // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
         // them for this.
         //
+        // Raised to 400 kB for the Guests panel: its entry, which only
+        // defines the element and fetches the panel when it is first shown,
+        // its line in View, and its card and icon on the phone's More screen,
+        // as the Prompter's were. Measured at 408860 bytes, about 850 of them for
+        // this; the panel, the link dialog and talkback load when opened.
+        //
         // Raised to 399 kB for the Prompter panel: its entry, which only
         // defines the element and fetches the panel when it is first shown,
         // its line in View, and its card and icon on the phone's More screen.
         // Measured at 407860 bytes.
+        //
+        // Raised to 400 kB for the Replay panel: its entry, which defines the
+        // element and the three commands the I, O and P keys run and fetches
+        // everything else when first shown or pressed, the three keys in the
+        // map and its line in View. It has no card on the phone. Measured at
+        // 409302 bytes, 1270 of them for this.
         //
         // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
         // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
@@ -1260,9 +1290,12 @@ mod tests {
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
+        // Raised to 401 kB when the Guests and Replay panel entries landed
+        // together: each alone raised it to 400 and fitted, and together they
+        // came to 409872 bytes. Both panels load when first shown.
         assert!(
-            bytes < 399 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 399 kB budget",
+            bytes < 401 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 401 kB budget",
             eager.len()
         );
     }
@@ -1286,7 +1319,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_508_kb() {
+    fn the_page_with_the_composer_open_stays_under_510_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1309,7 +1342,11 @@ mod tests {
         // panel's lazy desk hooks and its FX button, which landed together;
         // each alone fitted, and the composer's files did not grow. The FX
         // dialog and the desk load when first used. Measured at 519182 bytes.
-        assert!(bytes < 508 * 1024, "the page with the composer open is {bytes} bytes, over the 508 kB budget");
+        // Raised to 509 kB with the page's own budget, for the Replay panel's
+        // entry and keys; the composer's files did not grow. Measured at
+        // 520194 bytes. Raised to 510 kB with the page's, for the Guests and
+        // Replay entries landing together: measured at 521433 bytes.
+        assert!(bytes < 510 * 1024, "the page with the composer open is {bytes} bytes, over the 510 kB budget");
     }
 
     #[test]
@@ -1329,6 +1366,8 @@ mod tests {
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("panels/media/panel.js"));
+        // The Replay panel, which its entry fetches when first shown.
+        reachable.extend(closure_of("panels/replay/panel.js"));
         // The Media panel's dialogs: tags, Move to, a name, removing a folder.
         reachable.extend(closure_of("panels/media/edit.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
@@ -1353,6 +1392,7 @@ mod tests {
         reachable.extend(closure_of("panels/scenes/green-screen.js"));
         reachable.extend(closure_of("panels/composer/key.js"));
         reachable.extend(closure_of("panels/composer/cutout.js"));
+        reachable.extend(closure_of("panels/composer/colour.js"));
         // Help > Connect an AI agent, on its first press.
         reachable.extend(closure_of("shell/agents.js"));
         // Help > Open on another device, on its first press.
@@ -1454,6 +1494,8 @@ mod tests {
         // panel's entry fetches the panel the first time it is shown.
         reachable.extend(closure_of("prompter/page.js"));
         reachable.extend(closure_of("panels/prompter/panel.js"));
+        // Guests: the entry imports the panel when it is first shown.
+        reachable.extend(closure_of("panels/guests/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));

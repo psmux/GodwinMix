@@ -21,11 +21,13 @@ pub mod encode;
 mod outlets;
 pub mod send;
 mod status;
+mod talk;
 pub mod weight;
 
 pub use check::Refusal;
 pub use calls::Around;
 pub use desk::Desk;
+pub use talk::TalkCall;
 
 use godwinmix_protocol::buses::{BusConfig, BusSetRequest, CueSetRequest, MasterSetRequest, SendSetRequest};
 
@@ -41,6 +43,14 @@ pub enum AudioCall {
     Cue(CueSetRequest),
     /// A sound card was looked for off the mixer thread. Never from the API.
     DeviceFound(DeviceFound),
+    /// A bus for a guest's return, built like `Add` and never saved. Never
+    /// from the API: the guests module adds and removes these.
+    AddGuest(BusConfig),
+    /// Hold a talkback source on some buses, or let it go. Never saved.
+    Talk(TalkCall),
+    /// Mark a source as a talkback source, kept muted on the programme, or
+    /// unmark it.
+    Talker { source: String, on: bool },
 }
 
 /// What looking for a sound card came back with.

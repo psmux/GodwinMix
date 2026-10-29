@@ -342,7 +342,7 @@ impl ExecSpec {
             "--height".into(),
             canvas.height.to_string(),
             "--fps".into(),
-            canvas.fps.numer().to_string(),
+            canvas.fps_rounded().to_string(),
         ];
         argv.extend(browser.args.iter().cloned());
         Ok(Some(Self { argv, env: browser.env.clone(), pipe_stdin: false, cwd: None }))
@@ -3272,7 +3272,7 @@ mod tests {
             argv: vec![
                 "godwinmix-browser".into(),
                 "--fps".into(),
-                canvas.fps.numer().to_string(),
+                canvas.fps_rounded().to_string(),
             ],
             env: browser.env.clone(),
         };

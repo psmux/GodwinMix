@@ -18,12 +18,16 @@ Windows, a virtual device such as BlackHole on macOS.
 
 This is the part that catches everybody.
 
-* **macOS** asks for Screen Recording permission the first time, and it asks
-  the program that started the mixer, which may be your terminal or the Tauri
-  app. Until somebody answers, the picture is black and there is no error
-  anywhere. Grant it in System Settings, Privacy and Security, Screen
-  Recording, then restart the mixer. The permission does not take effect until
-  the program restarts.
+* **macOS** needs Screen Recording permission for the program that started
+  the mixer. In the desktop app that is GodwinMix, and the app asks for you:
+  a few seconds after a screen source is added, a window says what is needed
+  and has an **Open System Settings** button that goes straight to Screen &
+  System Audio Recording. Switch GodwinMix on there. macOS applies it when
+  GodwinMix starts again, so once the switch is on the app offers to restart.
+  The camera and the microphone are handled the same way when macOS has been
+  told no before. A mixer started from a terminal asks nothing: grant the
+  terminal in System Settings, Privacy and Security, Screen Recording, then
+  start the mixer again.
 * **Linux on Wayland** will not let any program read the screen without the
   person at the keyboard agreeing, through `xdg-desktop-portal`. See
   [Wayland, honestly](#wayland-honestly) below.

@@ -21,6 +21,7 @@ const PATHS = {
   black: '<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>',
   install: '<rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M12 7v7M9 11l3 3 3-3"/>',
   prompter: '<rect x="3" y="3.5" width="18" height="17" rx="2.6"/><path d="M7 8.5h10M7 12h10M7 15.5h6"/>',
+  guests: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
   device: '<rect x="7" y="2.5" width="10" height="19" rx="2.6"/><path d="M11 18.5h2"/>',
 };
 

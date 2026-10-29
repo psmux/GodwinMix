@@ -302,14 +302,17 @@ http://localhost:8080/join/#whip=/whip/browser/laptop&key=<the channel's key>&ti
 ```
 
 The phone code is the same page with `channel=` in place of `whip=`, so each
-phone picks its own stream name. That is how remote guests will join, once
-invites exist. They do not yet:
-today the link carries the channel's own key, so give it only to someone you
-would give the key to. [The publisher page](../reference/publisher-page.md)
-lists what the link takes.
+phone picks its own stream name. Both carry the channel's own key, so give
+them only to someone you would give the key to. For somebody outside the
+room, send a guest invite instead
+([Invite a guest](invite-a-guest.md)): its link has a key of its own that
+publishes only that guest and plays them the show without their own voice.
+[The publisher page](../reference/publisher-page.md) lists what each link
+takes.
 
 ## Where to go next
 
+* [Invite a guest](invite-a-guest.md), for somebody joining from elsewhere
 * [Use a webcam](use-a-webcam.md), for a camera plugged into the mixer itself
 * [Feed a channel and send it on](channels.md)
 * [Serve the mixer over https](serve-https.md)

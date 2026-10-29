@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GodwinMix",
-  "version": "0.3.20",
+  "version": "0.3.21",
   "identifier": "mix.godwin.desktop",
   "build": {
     "frontendDist": "shell"
@@ -52,7 +52,8 @@
       "onnxruntime": "onnxruntime"
     },
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": "-"
     },
     "windows": {
       "wix": {

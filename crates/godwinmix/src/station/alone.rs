@@ -44,7 +44,7 @@ impl Own {
             max_idempotency_key_bytes: 255,
             event_queue: 256,
         };
-        let canvas = CanvasInfo { width: cfg.canvas.width, height: cfg.canvas.height, fps: cfg.canvas.fps };
+        let canvas = crate::control::canvas_info(&cfg.canvas);
         Own { config, canvas, limits, rehearsal }
     }
 }

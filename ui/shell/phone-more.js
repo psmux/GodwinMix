@@ -16,6 +16,7 @@ const ABOUT = {
   "core/alerts": ["alerts", "What the mixer has to tell you"],
   "core/channels": ["channels", "Streams to a platform, by channel"],
   "core/prompter": ["prompter", "Scripts for the teleprompter, and its speed"],
+  "core/guests": ["guests", "Remote guests, and talkback"],
 };
 
 /** The deck showing More, so the Install app row comes and goes with the offer. */

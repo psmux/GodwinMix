@@ -17,7 +17,7 @@ use std::time::Duration;
 
 pub(super) fn config() -> Config {
     let mut cfg: Config = toml::from_str("").unwrap();
-    cfg.canvas = crate::config::Canvas { width: 320, height: 180, fps: 30, sample_rate: 48000, channels: 2 };
+    cfg.canvas = crate::config::Canvas { width: 320, height: 180, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 };
     cfg.multiview.enabled = false;
     // x264, so the test means the same on a machine with no GPU.
     cfg.hardware.encode = Accel::Software;

@@ -8,7 +8,7 @@ import { Session, backoff, isFinal } from "../join/session.js";
 import { audioConstraints, videoConstraints, remembered, remember, secureProblem, mediaErrorText } from "../join/devices.js";
 import { levelOf } from "../join/meter.js";
 import { summarise, statsText } from "../join/stats.js";
-import { parseLink } from "../join/page.js";
+import { parseLink, guestUrls } from "../join/page.js";
 import { fillSelect, paintState, buildForm } from "../join/form.js";
 import { SHAPES, shapeOfCanvas, startShape, deviceTurn, screenTurn, correction, placement, holdHint } from "../join/shape.js";
 import { browserChannelTests } from "./browser-channel.js";
@@ -174,8 +174,15 @@ export async function browserDeviceTests(test, eq, ok) {
   });
 
   test("the /join/ link carries the address, the key and the title in its fragment", () => {
-    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "", shape: "" });
-    eq(parseLink(""), { url: "", key: "", title: "", channel: "", shape: "" });
+    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "", shape: "", guest: "", show: "" });
+    eq(parseLink(""), { url: "", key: "", title: "", channel: "", shape: "", guest: "", show: "" });
+  });
+
+  test("a guest's link names the invite and the show, and both addresses carry the show", () => {
+    const link = parseLink("#guest=ana-lopez&key=k&title=Ana%20Lopez&show=second-room");
+    eq([link.guest, link.key, link.title, link.show], ["ana-lopez", "k", "Ana Lopez", "second-room"]);
+    eq(guestUrls("ana-lopez", "second-room"), { whip: "/guest/ana-lopez/whip?show=second-room", whep: "/guest/ana-lopez/whep?show=second-room" });
+    eq(guestUrls("ana", ""), { whip: "/guest/ana/whip", whep: "/guest/ana/whep" });
   });
 
   test("a phone starts on its own pick against the same mixer, else the mixer's shape", () => {

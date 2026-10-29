@@ -1009,7 +1009,7 @@ mod tests {
         cfg.canvas = crate::config::Canvas {
             width: 320,
             height: 180,
-            fps: 15,
+            fps: crate::config::FrameRate::whole(15),
             sample_rate: 48000,
             channels: 2,
         };
@@ -1063,7 +1063,7 @@ mod tests {
         cfg.canvas = crate::config::Canvas {
             width: 320,
             height: 180,
-            fps: 15,
+            fps: crate::config::FrameRate::whole(15),
             sample_rate: 48000,
             channels: 2,
         };

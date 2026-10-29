@@ -133,7 +133,7 @@ pub(super) fn programme_info(cfg: &crate::config::Config) -> StreamInfo {
             codec: VideoCodec::Other,
             width: cfg.canvas.width.max(2) as u32,
             height: cfg.canvas.height.max(2) as u32,
-            fps: godwinmix_protocol::rendition::Fps::whole(cfg.canvas.fps.max(1) as u32),
+            fps: godwinmix_protocol::rendition::Fps { num: cfg.canvas.fps.numer() as u32, den: cfg.canvas.fps.denom() as u32 },
             bitrate_kbps: 0,
             keyframe_ms: 0,
         }),

@@ -14,7 +14,7 @@ kind = "preset"
 id = "esports"
 
 [provides.preset]
-plugins = ["ndi@^1", "browser@^1", "rtmp@^1", "screen@^1", "replay@^1"]
+plugins = ["ndi@^1", "browser@^1", "rtmp@^1", "screen@^1"]
 config = "config/godwinmix.toml"
 layout = "config/layout.json"
 surface = "web"

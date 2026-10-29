@@ -128,10 +128,12 @@ static REGISTRY: &[Provide] = &[
     kinds::browser::PROVIDE,
     kinds::layered::PROVIDE,
     kinds::testsrc::PROVIDE,
+    kinds::replay::PROVIDE,
     kinds::text::PROVIDE,
     kinds::ticker::PROVIDE,
     kinds::template::PROVIDE,
     kinds::html::PROVIDE,
+    crate::guest::source::PROVIDE,
 ];
 
 /// The provide named by `type`, if this core has one.

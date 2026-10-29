@@ -17,7 +17,14 @@ impl Mixer {
     /// One `audio.*` call. Saved and broadcast when it changed something.
     pub(super) fn audio_call(&mut self, call: AudioCall, reply: Option<AudioReply>) {
         let changes = !matches!(call, AudioCall::List);
-        let saves = !matches!(call, AudioCall::List | AudioCall::Cue(_) | AudioCall::DeviceFound(_));
+        let saves = !matches!(
+            call,
+            AudioCall::List | AudioCall::Cue(_) | AudioCall::DeviceFound(_) | AudioCall::Talk(_) | AudioCall::Talker { .. }
+        );
+        let silence = match &call {
+            AudioCall::Talker { source, on: true } => Some(source.clone()),
+            _ => None,
+        };
         // A bus nothing else reads loses its listeners before its tee goes.
         if let AudioCall::Remove(id) = &call {
             if !self.outputs_by_bus().iter().any(|(_, b)| b == id) {
@@ -32,8 +39,11 @@ impl Mixer {
             self.desk.call(call, &around)
         };
         if outcome.is_ok() {
+            if let Some(slot) = silence.and_then(|id| self.sources.iter().find(|s| s.input.id == id)) {
+                slot.set_muted(true);
+            }
             if saves {
-                self.cfg.audio = self.desk.config.clone();
+                self.cfg.audio = self.desk.saved();
                 self.persist_runtime();
             }
             if changes {

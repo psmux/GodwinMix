@@ -30,7 +30,7 @@ async fn a_clip_moves_at_the_mosaic_rate_in_its_tile_and_the_preview() {
         return;
     };
     let mut cfg: crate::config::Config = toml::from_str("").unwrap();
-    cfg.canvas = crate::config::Canvas { width: 640, height: 360, fps: 30, sample_rate: 48000, channels: 2 };
+    cfg.canvas = crate::config::Canvas { width: 640, height: 360, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 };
     cfg.multiview = MultiviewConfig { width: 640, height: 360, fps: FPS, linger_secs: 0, ..Default::default() };
     let mut clip = crate::config::SourceConfig::bare(CLIP, &crate::input::file_uri(&path));
     clip.params.insert("at_end".into(), toml::Value::String("repeat".into()));

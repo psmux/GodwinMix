@@ -53,6 +53,12 @@ impl Biquad {
         Biquad { c: coeffs(band, rate), z: vec![[0.0; 2]; channels] }
     }
 
+    /// A section from its coefficients, already divided by a0.
+    pub fn from_coeffs(b: [f64; 3], a: [f64; 2], channels: usize) -> Biquad {
+        let c = Coeffs { b0: b[0] as f32, b1: b[1] as f32, b2: b[2] as f32, a1: a[0] as f32, a2: a[1] as f32 };
+        Biquad { c, z: vec![[0.0; 2]; channels] }
+    }
+
     pub fn process(&mut self, samples: &mut [f32], channels: usize) {
         let c = self.c;
         for frame in samples.chunks_exact_mut(channels) {

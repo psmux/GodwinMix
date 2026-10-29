@@ -57,6 +57,18 @@ impl Stream {
         !a.is_empty() && a.len() == b.len() && a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
     }
 
+    /// Whether a signed link (see `signed.rs`) lets `peer` in now.
+    pub fn admits_signed(&self, exp: &str, sig: &str, ip: Option<&str>, peer: Option<std::net::IpAddr>) -> bool {
+        super::signed::verify(&self.viewer_key, &self.id, exp, sig, ip, peer, super::signed::now_secs())
+    }
+
+    /// The multivariant playlist's path with a signed link on it, good for
+    /// `ttl_secs` and, with `ip`, from that address only, and when it runs out.
+    pub fn signed_url_path(&self, ttl_secs: u64, ip: Option<&str>) -> (String, u64) {
+        let (query, exp) = super::signed::query(&self.viewer_key, &self.id, ttl_secs, ip);
+        (format!("/hls/{}/master.m3u8?{query}", self.id), exp)
+    }
+
     /// The multivariant playlist's path with the viewer key on it: what a
     /// page turns into a link on whatever host it was opened on.
     pub fn master_url_path(&self) -> String {

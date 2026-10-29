@@ -1,0 +1,14 @@
+/* The Replay panel. Theme values only. */
+
+.replay-panel { min-width: 0; }
+.replay-panel [hidden] { display: none; }
+.replay-controls, .replay-setup { padding: var(--pad); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.replay-seconds { width: 5em; }
+.replay-speed { min-width: 3.5em; text-align: right; }
+.replay-angle { gap: var(--gap); }
+.replay-angle.on .replay-angle-name { color: var(--accent); font-weight: 600; }
+.replay-angle-name { min-width: 6em; }
+.replay-depth { height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden; }
+.replay-depth > span { display: block; height: 100%; background: var(--accent); }
+.replay-event.open .replay-name { border-style: dashed; }
+.replay-name { max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

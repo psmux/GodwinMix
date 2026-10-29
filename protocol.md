@@ -113,6 +113,11 @@ Keys accepted on every method, handled before a method runs.
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `gpu.rebalance` | `POST /api/v1/gpu/rebalance` | admin |  | 1 | Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it. |
 | `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `guest.invite.create` | `POST /api/v1/guest/invite/create` | admin |  | 1 | Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise. |
+| `guest.invite.link` | `POST /api/v1/guest/invite/link` | admin |  | 1 | An invite's link and QR code again, to copy or show. |
+| `guest.invite.list` | `GET /api/v1/guest/invite/list` | read |  | 1 | Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback. |
+| `guest.invite.revoke` | `POST /api/v1/guest/invite/revoke` | admin | yes | 1 | Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again. |
+| `guest.talkback.set` | `POST /api/v1/guest/talkback/set` | operate |  | 1 | Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with. |
 | `headend.channel.add` | `POST /api/v1/headend/channel/add` | admin |  | 1 | Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. |
 | `headend.channel.bulk` | `POST /api/v1/headend/channel/bulk` | admin |  | 1 | The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. |
 | `headend.channel.follow` | `POST /api/v1/headend/channel/follow` | admin |  | 1 | Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. |
@@ -125,6 +130,7 @@ Keys accepted on every method, handled before a method runs.
 | `headend.profile.save` | `POST /api/v1/headend/profile/save` | admin |  | 1 | Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change. |
 | `headend.scan` | `POST /api/v1/headend/scan` | admin |  | 1 | Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add. |
 | `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
+| `hls.sign` | `POST /api/v1/hls/sign` | operate |  | 1 | A viewer link to one HLS output that stops working after a time, and can be held to one address. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
@@ -183,6 +189,8 @@ Keys accepted on every method, handled before a method runs.
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
+| `program.key.list` | `GET /api/v1/program/key/list` | read |  | 1 | The downstream keys on air, bottom first. |
+| `program.key.set` | `POST /api/v1/program/key/set` | operate |  | 1 | Put a scene on air as a downstream key, above whatever is taken, or take it off. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
 | `program.thumbnail` | `GET /api/v1/program/thumbnail` | read |  | 1 | What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks. |
@@ -203,6 +211,16 @@ Keys accepted on every method, handled before a method runs.
 | `prompter.speed` | `POST /api/v1/prompter/speed` | operate |  | 1 | Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
 | `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
+| `replay.event.delete` | `POST /api/v1/replay/event/delete` | operate |  | 1 | Forget a replay event. The recording it pointed at is not touched. |
+| `replay.event.list` | `GET /api/v1/replay/event/list` | read |  | 1 | Every replay event, oldest first. |
+| `replay.event.rename` | `POST /api/v1/replay/event/rename` | operate |  | 1 | Give a replay event a name. |
+| `replay.get` | `GET /api/v1/replay` | read |  | 1 | Whether replay is on, each angle's buffer depth and size, and every event. |
+| `replay.mark` | `POST /api/v1/replay/mark` | operate |  | 1 | Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`. |
+| `replay.play` | `POST /api/v1/replay/play` | operate |  | 1 | Play an event, or the last seconds of an angle, on a replay source, added if it is not there. |
+| `replay.save` | `POST /api/v1/replay/save` | operate |  | 1 | Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again. |
+| `replay.set` | `POST /api/v1/replay/set` | operate |  | 1 | Change a playing replay's angle or speed, from the frame it is on. |
+| `replay.start` | `POST /api/v1/replay/start` | operate |  | 1 | Record these angles, each the last `seconds`. Called again, it changes them in place. |
+| `replay.stop` | `POST /api/v1/replay/stop` | operate | yes | 1 | Stop recording, free every buffer and forget every event. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
 | `scene.apply_graphic` | `POST /api/v1/scenes/apply_graphic` | operate |  | 1 | Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. |
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
@@ -1639,6 +1657,87 @@ MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHi
 }
 ```
 
+#### `guest.invite.create`
+
+Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.
+
+MCP tool `create_guest_invite` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteCreateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteCreated"
+  }
+}
+```
+
+#### `guest.invite.link`
+
+An invite's link and QR code again, to copy or show.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteLink"
+  }
+}
+```
+
+#### `guest.invite.list`
+
+Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.
+
+MCP tool `list_guests` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/GuestList"
+  }
+}
+```
+
+#### `guest.invite.revoke`
+
+Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteRevoked"
+  }
+}
+```
+
+#### `guest.talkback.set`
+
+Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TalkbackRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GuestList"
+  }
+}
+```
+
 #### `headend.channel.add`
 
 Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
@@ -1845,6 +1944,23 @@ MCP tool `headend_status` in the `search` profile: readOnlyHint true, destructiv
   },
   "result": {
     "$ref": "#/$defs/HeadendStatus"
+  }
+}
+```
+
+#### `hls.sign`
+
+A viewer link to one HLS output that stops working after a time, and can be held to one address.
+
+MCP tool `sign_viewer_link` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SignRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedLink"
   }
 }
 ```
@@ -2806,6 +2922,40 @@ MCP tool `program_history` in the `search` profile: readOnlyHint true, destructi
 }
 ```
 
+#### `program.key.list`
+
+The downstream keys on air, bottom first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyListing"
+  }
+}
+```
+
+#### `program.key.set`
+
+Put a scene on air as a downstream key, above whatever is taken, or take it off.
+
+MCP tool `set_downstream_key` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/KeySetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyListing"
+  }
+}
+```
+
 #### `program.revert`
 
 Take back to the shot before this one.
@@ -3150,6 +3300,174 @@ MCP tool `rendition_presets` in the `search` profile: readOnlyHint true, destruc
 }
 ```
 
+#### `replay.event.delete`
+
+Forget a replay event. The recording it pointed at is not touched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EventIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/EventIdRequest"
+  }
+}
+```
+
+#### `replay.event.list`
+
+Every replay event, oldest first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/EventList"
+  }
+}
+```
+
+#### `replay.event.rename`
+
+Give a replay event a name.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EventRenameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayEvent"
+  }
+}
+```
+
+#### `replay.get`
+
+Whether replay is on, each angle's buffer depth and size, and every event.
+
+MCP tool `get_replay` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
+#### `replay.mark`
+
+Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.
+
+MCP tool `mark_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MarkRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayEvent"
+  }
+}
+```
+
+#### `replay.play`
+
+Play an event, or the last seconds of an angle, on a replay source, added if it is not there.
+
+MCP tool `play_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlayRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/PlayStatus"
+  }
+}
+```
+
+#### `replay.save`
+
+Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.
+
+MCP tool `save_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SaveRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/SaveStatus"
+  }
+}
+```
+
+#### `replay.set`
+
+Change a playing replay's angle or speed, from the frame it is on.
+
+MCP tool `set_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReplaySetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PlayStatus"
+  }
+}
+```
+
+#### `replay.start`
+
+Record these angles, each the last `seconds`. Called again, it changes them in place.
+
+MCP tool `start_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReplayConfig"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
+#### `replay.stop`
+
+Stop recording, free every buffer and forget every event.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
 #### `scene.add`
 
 Make an empty scene, or one built from a set of sources.
@@ -3336,7 +3654,7 @@ Group the changes that follow into one undo step, until the next mark. This is w
 ```json
 {
   "params": {
-    "$ref": "#/$defs/MarkRequest"
+    "$ref": "#/$defs/MarkRequest2"
   },
   "result": {
     "type": "object"
@@ -4850,6 +5168,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/presence.changed` |  |  | Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has. |
 | `event/prompter.changed` |  |  | The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed. |
 | `event/prompter.script.changed` |  |  | A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter. |
+| `event/guest.changed` |  |  | An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces

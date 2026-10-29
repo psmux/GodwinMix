@@ -200,7 +200,11 @@ it happens every time, delete that file and read `mixer.log`.
 `~/Library/Logs/mix.godwin.desktop/mixer.log`.
 
 **No camera in the list.** macOS asks for camera and microphone permission per
-app, and it asks the first time something tries to open one. System Settings,
+app, and it asks the first time something tries to open one. If it was told
+no before, it never asks again; the app notices, says so, and has a button
+that opens the right page of System Settings. The screen is the same, with a
+restart offered once the switch is on, since macOS applies that one only when
+GodwinMix starts again. System Settings,
 Privacy and Security, Camera. The app that has to be allowed is GodwinMix,
 even though it is a plugin process two levels below the window doing the
 capture: the permission belongs to the app at the top of the tree.

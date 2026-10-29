@@ -1,0 +1,30 @@
+/* The Guests panel. Theme values only. On a phone the cards stack, the
+   picture goes above the buttons, and every button is a thumb's size. */
+
+.guests-panel { min-width: 0; }
+.guests-invite input { min-width: 0; }
+.guests-rows { gap: var(--gap); }
+.guests-card { display: grid; grid-template-columns: 128px 1fr; gap: var(--gap); padding: var(--pad); border: 1px solid var(--line); border-radius: var(--radius-sm); min-width: 0; }
+.guests-picture { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
+.guests-still { width: 100%; height: 100%; object-fit: contain; display: block; }
+.guests-still:not([src]) { visibility: hidden; }
+.guests-blank { position: absolute; inset: 0; display: grid; place-items: center; }
+.guests-blank[hidden] { display: none; }
+.guests-about { min-width: 0; gap: 4px; }
+.guests-buttons { flex-wrap: wrap; gap: 6px; }
+.guests-state { padding: 1px 8px; border-radius: 999px; background: var(--panel2); }
+.guests-state[data-state="live"] { background: var(--live); color: var(--on-accent); }
+.guests-state[data-state="joining"] { background: var(--accent); color: var(--on-accent); }
+.guests-state[data-state="gone"] { color: var(--bad); }
+.guests-talk.talking, .guests-talk[aria-pressed="true"] { background: var(--live); color: var(--on-accent); border-color: var(--live); }
+.guests-talk { touch-action: none; user-select: none; -webkit-user-select: none; }
+.guests-qr { width: 240px; max-width: 70vw; align-self: center; background: #fff; }
+.guests-qr svg { display: block; width: 100%; height: auto; }
+.guests-link { width: 100%; box-sizing: border-box; }
+.guests-note { color: var(--bad); }
+
+@media (max-width: 600px), (pointer: coarse) {
+  .guests-card { grid-template-columns: 1fr; }
+  .guests-buttons .btn, .guests-invite .btn, .guests-all .btn { min-height: 44px; padding: 0 14px; }
+  .guests-name { min-height: 44px; font-size: 16px; }
+}

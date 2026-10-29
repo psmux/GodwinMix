@@ -55,6 +55,8 @@ Start here if you have never run it.
 * [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
 * [Use the teleprompter](how-to/use-the-teleprompter.md): scripts on the desk, any number of screens in step, a mirror for the glass, keys and pedals
+* [Invite a guest](how-to/invite-a-guest.md): a link with a key of its own, a return without their own voice, and talkback
+* [Instant replay and the replay buffer](how-to/instant-replay.md): mark in and out, play back slow on any angle, save the last minutes to a file
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
   Bitfocus Companion and Elgato Stream Deck
@@ -102,7 +104,9 @@ Start here if you have never run it.
 * [Show live data on air: RSS, JSON, a sheet or a websocket](how-to/show-live-data.md)
 * [Put a presenter on a green screen into a designed studio](how-to/green-screen-presenter.md)
 * [Key out a green or blue screen on any item](how-to/chroma-key.md)
+* [Keep a graphic up with a downstream key](how-to/keep-a-graphic-up-with-a-downstream-key.md)
 * [Clean up a microphone with sound filters](how-to/clean-up-a-microphone.md)
+* [Correct a camera's colour](how-to/correct-a-cameras-colour.md)
 * [Replace the background behind a person, with or without a green screen](how-to/replace-the-background.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
 * [Keep the show on air when a feed drops](how-to/keep-the-show-on-air-when-a-feed-drops.md): a backup source that takes over by itself and hands back when the feed is steady
@@ -227,6 +231,8 @@ Start here if you have never run it.
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
 * [The prompter](reference/prompter.md): `prompter.*`, rows, the shared position, its events and `/prompter/`
+* [Guest invites](reference/guest-invites.md): `guest.*`, `/guest/<id>/whip` and `/whep`, what is made for a guest, and what one costs
+* [Replay](reference/replay.md): `[replay]`, the rings, `replay.*`, the replay source, the keys and what an angle costs
 * [Recording outputs](reference/recording.md)
 * [Setup on first use](reference/setup.md)
 * [Show health: alarms, thresholds and thumbnails](reference/show-health.md)

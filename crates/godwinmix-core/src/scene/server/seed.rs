@@ -41,7 +41,7 @@ mod tests {
     use std::sync::Arc;
 
     fn caps() -> CanvasCaps {
-        CanvasCaps::new(&crate::config::Canvas { width: 1280, height: 720, fps: 30, sample_rate: 48000, channels: 2 })
+        CanvasCaps::new(&crate::config::Canvas { width: 1280, height: 720, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 })
     }
 
     fn sources() -> Vec<String> {

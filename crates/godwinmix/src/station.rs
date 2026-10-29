@@ -32,6 +32,7 @@ pub(crate) mod ingest;
 pub mod packager;
 pub mod list;
 pub mod methods;
+mod metrics;
 mod programme;
 mod project;
 pub mod relay;

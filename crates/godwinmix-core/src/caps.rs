@@ -35,7 +35,7 @@ impl CanvasCaps {
         Self {
             width: c.width,
             height: c.height,
-            fps: gst::Fraction::new(c.fps, 1),
+            fps: gst::Fraction::new(c.fps.numer(), c.fps.denom()),
             sample_rate: c.sample_rate,
             channels: c.channels,
         }
@@ -87,9 +87,16 @@ impl CanvasCaps {
             .build()
     }
 
+    /// The frame rate to the nearest whole frame, for what counts in frames:
+    /// a keyframe interval, a page's paint rate, a scene document's canvas.
+    /// 29.97 is 30 here; the caps keep the true fraction.
+    pub fn fps_rounded(&self) -> i32 {
+        let d = self.fps.denom().max(1);
+        (self.fps.numer() + d / 2) / d
+    }
+
     /// Duration of a single video frame. Used for scheduling takes on frame
     /// boundaries and for sizing jitter buffers.
-    #[allow(dead_code)]
     pub fn frame_duration(&self) -> gst::ClockTime {
         let n = self.fps.numer() as u64;
         let d = self.fps.denom() as u64;

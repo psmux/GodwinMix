@@ -165,6 +165,24 @@ class AlarmSettings(TypedDict, total=False):
     # The peak level under which sound counts as quiet.
     silence_ms: Optional[int]
 
+class AngleStatus(TypedDict, total=False):
+    """One angle's ring, as it stands."""
+
+    bytes: int
+    # Bytes of encoded picture and sound held.
+    dropped: int
+    # Frames the angle's encoder could not keep up with and dropped. The source and the programme lose none.
+    encoder: str
+    # The encoder this angle is written with, or `shared` when it reads the programme encoder's own output.
+    gops: int
+    # Whole groups of pictures held. The ring drops the oldest one at a time.
+    held_secs: float
+    # Seconds of picture held, from the oldest keyframe to the newest frame.
+    id: str
+    # The source id, or `programme`.
+    waiting: Optional[str]
+    # Why this angle holds nothing, when it does not: the source is not there, or has not sent a picture yet.
+
 class ApplyDraftRequest(TypedDict, total=False):
     """`scene.edit.apply`."""
 
@@ -511,6 +529,9 @@ class CanvasInfo(TypedDict, total=False):
     """The canvas every source is scaled onto and every output leaves by."""
 
     fps: int
+    # Frames a second to the nearest whole frame: 30 for 29.97.
+    fps_fraction: Optional[List[int]]
+    # The exact rate as numerator and denominator, when it is not whole: `[30000, 1001]` for 29.97. Absent for a whole rate.
     height: int
     width: int
 
@@ -1208,6 +1229,22 @@ class ErrorAction(TypedDict, total=False):
     # `setup`: the piece to set up, `web` or a plugin's name.
     value: Any
     # `set-config`: the value to send.
+
+class EventIdRequest(TypedDict, total=False):
+    """`replay.event.delete`, and anything else that names one event."""
+
+    id: str
+
+class EventList(TypedDict, total=False):
+    """`replay.event.list`."""
+
+    events: List[ReplayEvent]
+
+class EventRenameRequest(TypedDict, total=False):
+    """`replay.event.rename`."""
+
+    id: str
+    name: str
 
 class ExportRequest(TypedDict, total=False):
     include_media: bool
@@ -2097,6 +2134,14 @@ class GroupSourcesRequest(TypedDict, total=False):
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
 
+class GuestList(TypedDict, total=False):
+    """What `guest.invite.list` answers, and the payload of `event/guest.changed`."""
+
+    guests: List[Invite]
+    max_guests: int
+    # The most guests this show takes at once.
+    talkback: TalkbackState
+
 class HeadendChannel(TypedDict, total=False):
     """One channel."""
 
@@ -2403,6 +2448,70 @@ class InstanceRecord(TypedDict, total=False):
     rss_bytes: Optional[int]
     state: str
 
+class Invite(TypedDict, total=False):
+    """One invite, without its key."""
+
+    bus: str
+    # The mix minus bus the guest hears, `guest-<id>`: the programme without the guest, with talkback added while it is held.
+    created: str
+    # When it was made, RFC 3339.
+    expires: str
+    # When it stops letting the guest in, RFC 3339. The guest is let go then.
+    id: str
+    # A slug, made from the name unless one was given.
+    name: str
+    # What the guest is called on screen and in the desk.
+    source: str
+    # The mixer source the guest's camera is, `guest-<id>`. It exists from the guest's first offer until the invite goes.
+    state: GuestState
+    talkback: bool
+    # Whether talkback is held into this guest's return now.
+
+class InviteCreateRequest(TypedDict, total=False):
+    """`guest.invite.create`."""
+
+    base: Optional[str]
+    # The address the link starts with, such as `https://studio.example.com`, for a mixer reached through a name or a tunnel. Left out, the first https address of this machine that is not loopback.
+    expires_in_secs: Optional[int]
+    # How long the invite lasts, in seconds. One day when left out; at most thirty days.
+    id: Optional[str]
+    # A slug for the invite. Made from the name when left out.
+    name: str
+    # The guest's name, as it should appear on screen. 1 to 64 characters.
+
+class InviteCreated(TypedDict, total=False):
+    """What `guest.invite.create` answers."""
+
+    id: str
+    invite: Invite
+    link: str
+    # The `/join/` page with the guest's id and key in the fragment, which a browser never sends to a server.
+    note: Optional[str]
+    # Set when no guest on another device could open the link as it stands, with what to change.
+    qr_svg: str
+    # The link as a QR code, an SVG document a page can show as it is.
+
+class InviteIdRequest(TypedDict, total=False):
+    """`guest.invite.revoke` and `guest.invite.link`."""
+
+    id: str
+
+class InviteLink(TypedDict, total=False):
+    """The link to send a guest, and the same as a QR code."""
+
+    id: str
+    link: str
+    # The `/join/` page with the guest's id and key in the fragment, which a browser never sends to a server.
+    note: Optional[str]
+    # Set when no guest on another device could open the link as it stands, with what to change.
+    qr_svg: str
+    # The link as a QR code, an SVG document a page can show as it is.
+
+class InviteRevoked(TypedDict, total=False):
+    """What `guest.invite.revoke` answers."""
+
+    revoked: Invite
+
 class ItemFilterRequest(TypedDict, total=False):
     """`scene.item.filter.set` and `remove`."""
 
@@ -2505,10 +2614,29 @@ class KeyColorRequest(TypedDict, total=False):
     y: Optional[float]
     # 0 to 1 down the source's picture.
 
+class KeyListing(TypedDict, total=False):
+    """The keys on air, bottom first."""
+
+    keys: List[KeyRecord]
+
+class KeyRecord(TypedDict, total=False):
+    id: str
+    name: str
+
 class KeyRevealed(TypedDict, total=False):
     """What `channel.key.reveal` answers: the key itself, and nothing a list would carry."""
 
     secret: str
+
+class KeySetRequest(TypedDict, total=False):
+    """`program.key.set`."""
+
+    on: bool
+    # True to put it on air, false to take it off.
+    scene: str
+    # The scene to put on air as a key, or take off, by name or by id.
+    transition: Union[Transition, None]
+    # How the key comes and goes: a name or {type, duration_ms, params}, as in `program.take`. A fade of 300 ms when absent; `"cut"` for none.
 
 class LadderRef(TypedDict, total=False):
     """A custom ladder."""
@@ -2646,6 +2774,17 @@ class MachineStatus(TypedDict, total=False):
     # Since the machine booted.
 
 class MarkRequest(TypedDict, total=False):
+    """`replay.mark`. With `point` it sets an in or an out point; with `seconds` alone it makes a whole event of the last that many seconds."""
+
+    angle: Optional[str]
+    # The angle it was seen on, which playback starts from.
+    name: Optional[str]
+    # A name for the event. Its id when left out.
+    point: Union[MarkPoint, None]
+    seconds: Optional[float]
+    # For an in point, how many seconds before now it goes. For a whole event, how long it is. 0 is now.
+
+class MarkRequest2(TypedDict, total=False):
     """`scene.history.mark`."""
 
     label: Optional[str]
@@ -3222,6 +3361,37 @@ class PlayRequest(TypedDict, total=False):
     speed: Optional[float]
     # Rows a second to play at. Left out keeps the speed it has.
 
+class PlayRequest2(TypedDict, total=False):
+    """`replay.play`: load an event, or the last seconds of an angle, into a replay source and play it from the start."""
+
+    angle: Optional[str]
+    # The angle to show. The event's own angle, then the first angle.
+    event: Optional[str]
+    # The event to play. Without one, the last `seconds` of the angle.
+    seconds: Optional[float]
+    # How far back to start when no event is named. 10 when left out.
+    source: Optional[str]
+    # The source to play it on, added if it is not there. `replay` when left out.
+    speed: Optional[float]
+    # 1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.
+    take: bool
+    # Put it on air once it is loaded, as `program.take` would.
+    transition: Union[Transition, None]
+    # The transition for that take: a name such as `"fade"` or a stinger's object. A cut when left out.
+
+class PlayStatus(TypedDict, total=False):
+    """What `replay.play` and `replay.set` answer with."""
+
+    angle: str
+    duration_ms: int
+    # How long it plays at this speed.
+    event: Optional[str]
+    position_ms: int
+    # Where it is, in milliseconds of playback.
+    source: str
+    # The source it plays on.
+    speed: float
+
 class Playback(TypedDict, total=False):
     """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
@@ -3599,6 +3769,49 @@ class ReorderRequest(TypedDict, total=False):
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch.
 
+class ReplayConfig(TypedDict, total=False):
+    """The `[replay]` table. With no angles nothing is built."""
+
+    angles: List[str]
+    # The angles to record: source ids, and `programme` for the programme itself. Empty turns replay off.
+    bitrate_kbps: int
+    # The bitrate a source angle is encoded at, in kbit/s. 0 or left out is the programme's own bitrate.
+    seconds: int
+    # Seconds each angle keeps, 1 to 1800. 60 when left out.
+
+class ReplayEvent(TypedDict, total=False):
+    """One event: a stretch of time between an in point and an out point, the same stretch on every angle."""
+
+    angle: Optional[str]
+    # The angle it was marked on, which playback starts from.
+    id: str
+    # A slug the mixer gives it: `replay-1`, `replay-2`.
+    in_ms: int
+    # The in point, in milliseconds of the mixer's clock.
+    name: str
+    # What the desk shows. The id until it is renamed.
+    out_ms: Optional[int]
+    # The out point. Absent while the event is still open (marked in and not out yet).
+
+class ReplaySetRequest(TypedDict, total=False):
+    """`replay.set`: change the angle or the speed of a replay that is playing, from the frame it is on."""
+
+    angle: Optional[str]
+    source: Optional[str]
+    speed: Optional[float]
+
+class ReplayStatus(TypedDict, total=False):
+    """`replay.get`: everything about replay on this mixer."""
+
+    angles: List[AngleStatus]
+    config: ReplayConfig
+    events: List[ReplayEvent]
+    # Every event, oldest first. An event whose stretch has left every ring is still listed until it is deleted, and plays nothing.
+    now_ms: int
+    # The mixer's clock now, in the same milliseconds as an event's points.
+    on: bool
+    # Whether anything is being recorded.
+
 class Report(TypedDict, total=False):
     """What `project.import` answers with."""
 
@@ -3691,6 +3904,27 @@ class SaveRequest(TypedDict, total=False):
     # The new preset's name. A slug: lower case letters, digits and hyphens.
     out: Optional[str]
     # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
+class SaveRequest2(TypedDict, total=False):
+    """`replay.save`: write an event, or the whole buffer of one angle, to an MP4 in the media folder without encoding it again."""
+
+    angle: Optional[str]
+    # The angle to save. The event's own, then `programme` if it is recorded, then the first angle.
+    event: Optional[str]
+    # The event to save. The whole buffer when left out.
+    name: Optional[str]
+    # The file's name, without a folder. Made from the time when left out.
+
+class SaveStatus(TypedDict, total=False):
+    """What `replay.save` answers with once the file is written."""
+
+    angle: str
+    bytes: int
+    duration_ms: int
+    name: str
+    # The file, as the media library names it: `Replays/<name>.mp4`.
+    path: str
+    # Its absolute path on the mixer's machine.
 
 class ScanRequest(TypedDict, total=False):
     """`headend.scan`."""
@@ -4318,6 +4552,20 @@ class ShowStatsRequest(TypedDict, total=False):
     ids: Optional[List[str]]
     # Left out: every show.
 
+class SignRequest(TypedDict, total=False):
+    ip: Optional[str]
+    # An address the link opens from and from nowhere else, for a link meant for one viewer.
+    output: str
+    # The HLS output, by id.
+    ttl_secs: Optional[int]
+    # How long the link works, in seconds: 3600 when left out, at most 2592000 (thirty days).
+
+class SignedLink(TypedDict, total=False):
+    expires: int
+    # When it stops working, in Unix seconds.
+    master_url_path: str
+    # The multivariant playlist's path with the signed query on it. Put the page's origin in front of it for a link.
+
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
 
@@ -4486,6 +4734,26 @@ class TakeRequest(TypedDict, total=False):
     # Id of the source to put on air.
     transition: Union[Transition, None]
     # "fade", or {type, duration_ms, params}. Absent is a cut.
+
+class TalkbackRequest(TypedDict, total=False):
+    """`guest.talkback.set`."""
+
+    guest: Optional[str]
+    # The guest to talk to. Left out, every guest that is live or joining.
+    on: bool
+    # Hold talkback (true) or let it go (false).
+    source: Optional[str]
+    # Another input to talk with, such as a microphone on the mixer. It is muted on the programme from then on, for as long as it is the talkback source. Left out, the source stays what it was.
+
+class TalkbackState(TypedDict, total=False):
+    """Talkback as it stands."""
+
+    held: List[str]
+    # The guests it is held into now.
+    present: bool
+    # Whether that source is in the mixer now.
+    source: str
+    # The source that talks: `guest-talkback` (the operator's browser microphone, published to `/guest/talkback/whip`) unless another input was chosen. It is kept muted on the programme.
 
 class Tally(TypedDict, total=False):
     """`event/tally`."""
@@ -5187,6 +5455,9 @@ GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 't
 # Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA device index (0 is the first card), or `"auto"`, the card with the least work when the channel starts. All three steps stay on that one card, so a picture never crosses from one card's memory to another's.
 GpuPick = Union[int, GpuWord]
 
+# Where a guest is.
+GuestState = Literal['invited', 'joining', 'live', 'gone']
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
@@ -5195,6 +5466,9 @@ Id = str
 
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
+
+# Which point `replay.mark` sets.
+MarkPoint = Literal['in', 'out']
 
 # Why a source is not running.
 MissingWhy = Literal['failed', 'not_started', 'removed', 'unknown']
@@ -5355,6 +5629,11 @@ METHODS = (
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "gpu.rebalance", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gpu/rebalance"), "summary": 'Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.'},
     {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
+    {"name": "guest.invite.create", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/invite/create"), "summary": "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."},
+    {"name": "guest.invite.link", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/invite/link"), "summary": "An invite's link and QR code again, to copy or show."},
+    {"name": "guest.invite.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/guest/invite/list"), "summary": "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."},
+    {"name": "guest.invite.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/guest/invite/revoke"), "summary": "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."},
+    {"name": "guest.talkback.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/talkback/set"), "summary": 'Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.'},
     {"name": "headend.channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/add"), "summary": "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."},
     {"name": "headend.channel.bulk", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/bulk"), "summary": 'The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.'},
     {"name": "headend.channel.follow", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/follow"), "summary": 'Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.'},
@@ -5367,6 +5646,7 @@ METHODS = (
     {"name": "headend.profile.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/profile/save"), "summary": 'Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.'},
     {"name": "headend.scan", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/headend/scan"), "summary": "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add."},
     {"name": "headend.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/status"), "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."},
+    {"name": "hls.sign", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/hls/sign"), "summary": 'A viewer link to one HLS output that stops working after a time, and can be held to one address.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
@@ -5425,6 +5705,8 @@ METHODS = (
     {"name": "program.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program"), "summary": 'What is on air, the programme running time, and what revert would go back to.'},
     {"name": "program.golive", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/golive"), "summary": 'One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.'},
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
+    {"name": "program.key.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/key/list"), "summary": 'The downstream keys on air, bottom first.'},
+    {"name": "program.key.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/key/set"), "summary": 'Put a scene on air as a downstream key, above whatever is taken, or take it off.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
     {"name": "program.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/thumbnail"), "summary": 'What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.'},
@@ -5445,6 +5727,16 @@ METHODS = (
     {"name": "prompter.speed", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/speed"), "summary": 'Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.'},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
     {"name": "rendition.presets", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/presets"), "summary": 'Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.'},
+    {"name": "replay.event.delete", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/event/delete"), "summary": 'Forget a replay event. The recording it pointed at is not touched.'},
+    {"name": "replay.event.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/replay/event/list"), "summary": 'Every replay event, oldest first.'},
+    {"name": "replay.event.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/event/rename"), "summary": 'Give a replay event a name.'},
+    {"name": "replay.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/replay"), "summary": "Whether replay is on, each angle's buffer depth and size, and every event."},
+    {"name": "replay.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/mark"), "summary": 'Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.'},
+    {"name": "replay.play", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/play"), "summary": 'Play an event, or the last seconds of an angle, on a replay source, added if it is not there.'},
+    {"name": "replay.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/save"), "summary": 'Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.'},
+    {"name": "replay.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/set"), "summary": "Change a playing replay's angle or speed, from the frame it is on."},
+    {"name": "replay.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/start"), "summary": 'Record these angles, each the last `seconds`. Called again, it changes them in place.'},
+    {"name": "replay.stop", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/replay/stop"), "summary": 'Stop recording, free every buffer and forget every event.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
     {"name": "scene.apply_graphic", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_graphic"), "summary": 'Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.'},
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
@@ -5588,6 +5880,7 @@ EVENT_NAMES = (
     "presence.changed",
     "prompter.changed",
     "prompter.script.changed",
+    "guest.changed",
     "health",
 )
 
@@ -6840,6 +7133,66 @@ class GeneratedMethods:
             params["since_ms"] = since_ms
         return await self._call("gpu.status", params)
 
+    async def guest_invite_create(
+        self,
+        name: str,
+        *,
+        base: Optional[str] = None,
+        expires_in_secs: Optional[int] = None,
+        id: Optional[str] = None,
+    ) -> InviteCreated:
+        """Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if base is not None:
+            params["base"] = base
+        if expires_in_secs is not None:
+            params["expires_in_secs"] = expires_in_secs
+        if id is not None:
+            params["id"] = id
+        return await self._call("guest.invite.create", params)
+
+    async def guest_invite_link(
+        self,
+        id: str,
+    ) -> InviteLink:
+        """An invite's link and QR code again, to copy or show."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("guest.invite.link", params)
+
+    async def guest_invite_list(
+        self,
+    ) -> GuestList:
+        """Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."""
+        params: Dict[str, Any] = {}
+        return await self._call("guest.invite.list", params)
+
+    async def guest_invite_revoke(
+        self,
+        id: str,
+    ) -> InviteRevoked:
+        """Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("guest.invite.revoke", params)
+
+    async def guest_talkback_set(
+        self,
+        on: bool,
+        *,
+        guest: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> GuestList:
+        """Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with."""
+        params: Dict[str, Any] = {}
+        params["on"] = on
+        if guest is not None:
+            params["guest"] = guest
+        if source is not None:
+            params["source"] = source
+        return await self._call("guest.talkback.set", params)
+
     async def headend_channel_add(
         self,
         channels: List[HeadendChannel],
@@ -6991,6 +7344,22 @@ class GeneratedMethods:
         """Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."""
         params: Dict[str, Any] = {}
         return await self._call("headend.status", params)
+
+    async def hls_sign(
+        self,
+        output: str,
+        *,
+        ip: Optional[str] = None,
+        ttl_secs: Optional[int] = None,
+    ) -> SignedLink:
+        """A viewer link to one HLS output that stops working after a time, and can be held to one address."""
+        params: Dict[str, Any] = {}
+        params["output"] = output
+        if ip is not None:
+            params["ip"] = ip
+        if ttl_secs is not None:
+            params["ttl_secs"] = ttl_secs
+        return await self._call("hls.sign", params)
 
     async def log_gst(
         self,
@@ -7651,6 +8020,28 @@ class GeneratedMethods:
             params["limit"] = limit
         return await self._call("program.history", params)
 
+    async def program_key_list(
+        self,
+    ) -> KeyListing:
+        """The downstream keys on air, bottom first."""
+        params: Dict[str, Any] = {}
+        return await self._call("program.key.list", params)
+
+    async def program_key_set(
+        self,
+        on: bool,
+        scene: str,
+        *,
+        transition: Optional[Union[Transition, None]] = None,
+    ) -> KeyListing:
+        """Put a scene on air as a downstream key, above whatever is taken, or take it off."""
+        params: Dict[str, Any] = {}
+        params["on"] = on
+        params["scene"] = scene
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("program.key.set", params)
+
     async def program_revert(
         self,
     ) -> ProgramState:
@@ -7894,6 +8285,147 @@ class GeneratedMethods:
         """Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why."""
         params: Dict[str, Any] = {}
         return await self._call("rendition.presets", params)
+
+    async def replay_event_delete(
+        self,
+        id: str,
+    ) -> EventIdRequest:
+        """Forget a replay event. The recording it pointed at is not touched."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("replay.event.delete", params)
+
+    async def replay_event_list(
+        self,
+    ) -> EventList:
+        """Every replay event, oldest first."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.event.list", params)
+
+    async def replay_event_rename(
+        self,
+        id: str,
+        name: str,
+    ) -> ReplayEvent:
+        """Give a replay event a name."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["name"] = name
+        return await self._call("replay.event.rename", params)
+
+    async def replay_get(
+        self,
+    ) -> ReplayStatus:
+        """Whether replay is on, each angle's buffer depth and size, and every event."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.get", params)
+
+    async def replay_mark(
+        self,
+        *,
+        angle: Optional[str] = None,
+        name: Optional[str] = None,
+        point: Optional[Union[MarkPoint, None]] = None,
+        seconds: Optional[float] = None,
+    ) -> ReplayEvent:
+        """Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if name is not None:
+            params["name"] = name
+        if point is not None:
+            params["point"] = point
+        if seconds is not None:
+            params["seconds"] = seconds
+        return await self._call("replay.mark", params)
+
+    async def replay_play(
+        self,
+        *,
+        angle: Optional[str] = None,
+        event: Optional[str] = None,
+        seconds: Optional[float] = None,
+        source: Optional[str] = None,
+        speed: Optional[float] = None,
+        take: Optional[bool] = None,
+        transition: Optional[Union[Transition, None]] = None,
+    ) -> PlayStatus:
+        """Play an event, or the last seconds of an angle, on a replay source, added if it is not there."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if event is not None:
+            params["event"] = event
+        if seconds is not None:
+            params["seconds"] = seconds
+        if source is not None:
+            params["source"] = source
+        if speed is not None:
+            params["speed"] = speed
+        if take is not None:
+            params["take"] = take
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("replay.play", params)
+
+    async def replay_save(
+        self,
+        *,
+        angle: Optional[str] = None,
+        event: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> SaveStatus:
+        """Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if event is not None:
+            params["event"] = event
+        if name is not None:
+            params["name"] = name
+        return await self._call("replay.save", params)
+
+    async def replay_set(
+        self,
+        *,
+        angle: Optional[str] = None,
+        source: Optional[str] = None,
+        speed: Optional[float] = None,
+    ) -> PlayStatus:
+        """Change a playing replay's angle or speed, from the frame it is on."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if source is not None:
+            params["source"] = source
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("replay.set", params)
+
+    async def replay_start(
+        self,
+        *,
+        angles: Optional[List[str]] = None,
+        bitrate_kbps: Optional[int] = None,
+        seconds: Optional[int] = None,
+    ) -> ReplayStatus:
+        """Record these angles, each the last `seconds`. Called again, it changes them in place."""
+        params: Dict[str, Any] = {}
+        if angles is not None:
+            params["angles"] = angles
+        if bitrate_kbps is not None:
+            params["bitrate_kbps"] = bitrate_kbps
+        if seconds is not None:
+            params["seconds"] = seconds
+        return await self._call("replay.start", params)
+
+    async def replay_stop(
+        self,
+    ) -> ReplayStatus:
+        """Stop recording, free every buffer and forget every event."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.stop", params)
 
     async def scene_add(
         self,

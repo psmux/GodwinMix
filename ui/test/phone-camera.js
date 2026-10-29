@@ -47,10 +47,10 @@ export async function phoneCameraTests(test, eq, ok) {
   test("the phone link names the channel, not a stream, and carries the key in the fragment", () => {
     const link = phoneLink("https://192.168.1.20:8080/", "browser", "k3y");
     eq(link, "https://192.168.1.20:8080/join/#channel=browser&key=k3y");
-    eq(parseLink(new URL(link).hash), { url: "", key: "k3y", title: "", channel: "browser", shape: "" });
+    eq(parseLink(new URL(link).hash), { url: "", key: "k3y", title: "", channel: "browser", shape: "", guest: "", show: "" });
     eq(whipUrl("browser", "anas-phone"), "/whip/browser/anas-phone");
     eq(phoneLink("https://192.168.1.20:8080/", "browser", "k3y", "portrait"), "https://192.168.1.20:8080/join/#channel=browser&key=k3y&shape=portrait");
-    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "", shape: "" });
+    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "", shape: "", guest: "", show: "" });
   });
 
   test("the code uses the mixer's LAN https address, never localhost", () => {

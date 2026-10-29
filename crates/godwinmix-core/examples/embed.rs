@@ -52,7 +52,7 @@ pub async fn run() -> Result<MixerStatus> {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
     cfg.canvas.width = 1280;
     cfg.canvas.height = 720;
-    cfg.canvas.fps = 30;
+    cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(30);
 
     let (mut mix, handle, cmd_rx, mut bus_rx) = Mixer::build(cfg).context("building the mixer")?;
     mix.start().context("starting the mixer")?;

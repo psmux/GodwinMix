@@ -597,6 +597,58 @@
       ],
       "type": "string"
     },
+    "AngleStatus": {
+      "description": "One angle's ring, as it stands.",
+      "properties": {
+        "bytes": {
+          "description": "Bytes of encoded picture and sound held.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped": {
+          "description": "Frames the angle's encoder could not keep up with and dropped. The\nsource and the programme lose none.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encoder": {
+          "description": "The encoder this angle is written with, or `shared` when it reads the\nprogramme encoder's own output.",
+          "type": "string"
+        },
+        "gops": {
+          "description": "Whole groups of pictures held. The ring drops the oldest one at a time.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "held_secs": {
+          "description": "Seconds of picture held, from the oldest keyframe to the newest frame.",
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "description": "The source id, or `programme`.",
+          "type": "string"
+        },
+        "waiting": {
+          "description": "Why this angle holds nothing, when it does not: the source is not\nthere, or has not sent a picture yet.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "held_secs",
+        "bytes",
+        "gops",
+        "encoder",
+        "dropped"
+      ],
+      "type": "object"
+    },
     "Applies": {
       "description": "When a change to a key takes effect.",
       "oneOf": [
@@ -1853,8 +1905,22 @@
       "description": "The canvas every source is scaled onto and every output leaves by.",
       "properties": {
         "fps": {
+          "description": "Frames a second to the nearest whole frame: 30 for 29.97.",
           "format": "int32",
           "type": "integer"
+        },
+        "fps_fraction": {
+          "description": "The exact rate as numerator and denominator, when it is not whole:\n`[30000, 1001]` for 29.97. Absent for a whole rate.",
+          "items": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "height": {
           "format": "int32",
@@ -4368,6 +4434,49 @@
       "required": [
         "kind",
         "label"
+      ],
+      "type": "object"
+    },
+    "EventIdRequest": {
+      "description": "`replay.event.delete`, and anything else that names one event.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "EventList": {
+      "description": "`replay.event.list`.",
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/ReplayEvent"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "events"
+      ],
+      "type": "object"
+    },
+    "EventRenameRequest": {
+      "description": "`replay.event.rename`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
       ],
       "type": "object"
     },
@@ -7675,6 +7784,57 @@
       ],
       "type": "object"
     },
+    "GuestList": {
+      "description": "What `guest.invite.list` answers, and the payload of `event/guest.changed`.",
+      "properties": {
+        "guests": {
+          "items": {
+            "$ref": "#/$defs/Invite"
+          },
+          "type": "array"
+        },
+        "max_guests": {
+          "description": "The most guests this show takes at once.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "talkback": {
+          "$ref": "#/$defs/TalkbackState"
+        }
+      },
+      "required": [
+        "guests",
+        "talkback",
+        "max_guests"
+      ],
+      "type": "object"
+    },
+    "GuestState": {
+      "description": "Where a guest is.",
+      "oneOf": [
+        {
+          "const": "invited",
+          "description": "The invite exists and nobody has opened it yet.",
+          "type": "string"
+        },
+        {
+          "const": "joining",
+          "description": "The guest's browser has offered and the connection is being made.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "The guest's picture and sound are arriving.",
+          "type": "string"
+        },
+        {
+          "const": "gone",
+          "description": "The guest was live and has left, or lost the network. The invite still\nworks, and the same link brings them back.",
+          "type": "string"
+        }
+      ]
+    },
     "HeadendChannel": {
       "additionalProperties": false,
       "description": "One channel.",
@@ -8728,6 +8888,175 @@
       ],
       "type": "object"
     },
+    "Invite": {
+      "description": "One invite, without its key.",
+      "properties": {
+        "bus": {
+          "description": "The mix minus bus the guest hears, `guest-<id>`: the programme\nwithout the guest, with talkback added while it is held.",
+          "type": "string"
+        },
+        "created": {
+          "description": "When it was made, RFC 3339.",
+          "type": "string"
+        },
+        "expires": {
+          "description": "When it stops letting the guest in, RFC 3339. The guest is let go then.",
+          "type": "string"
+        },
+        "id": {
+          "description": "A slug, made from the name unless one was given.",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the guest is called on screen and in the desk.",
+          "type": "string"
+        },
+        "source": {
+          "description": "The mixer source the guest's camera is, `guest-<id>`. It exists from\nthe guest's first offer until the invite goes.",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/GuestState"
+        },
+        "talkback": {
+          "description": "Whether talkback is held into this guest's return now.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "created",
+        "expires",
+        "state",
+        "source",
+        "bus",
+        "talkback"
+      ],
+      "type": "object"
+    },
+    "InviteCreateRequest": {
+      "description": "`guest.invite.create`.",
+      "properties": {
+        "base": {
+          "description": "The address the link starts with, such as `https://studio.example.com`,\nfor a mixer reached through a name or a tunnel. Left out, the first\nhttps address of this machine that is not loopback.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expires_in_secs": {
+          "description": "How long the invite lasts, in seconds. One day when left out; at most\nthirty days.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "A slug for the invite. Made from the name when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The guest's name, as it should appear on screen. 1 to 64 characters.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "InviteCreated": {
+      "description": "What `guest.invite.create` answers.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "invite": {
+          "$ref": "#/$defs/Invite"
+        },
+        "link": {
+          "description": "The `/join/` page with the guest's id and key in the fragment, which a\nbrowser never sends to a server.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Set when no guest on another device could open the link as it stands,\nwith what to change.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "qr_svg": {
+          "description": "The link as a QR code, an SVG document a page can show as it is.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "invite",
+        "id",
+        "link",
+        "qr_svg"
+      ],
+      "type": "object"
+    },
+    "InviteIdRequest": {
+      "description": "`guest.invite.revoke` and `guest.invite.link`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "InviteLink": {
+      "description": "The link to send a guest, and the same as a QR code.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "link": {
+          "description": "The `/join/` page with the guest's id and key in the fragment, which a\nbrowser never sends to a server.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Set when no guest on another device could open the link as it stands,\nwith what to change.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "qr_svg": {
+          "description": "The link as a QR code, an SVG document a page can show as it is.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "link",
+        "qr_svg"
+      ],
+      "type": "object"
+    },
+    "InviteRevoked": {
+      "description": "What `guest.invite.revoke` answers.",
+      "properties": {
+        "revoked": {
+          "$ref": "#/$defs/Invite"
+        }
+      },
+      "required": [
+        "revoked"
+      ],
+      "type": "object"
+    },
     "ItemEdge": {
       "enum": [
         "left",
@@ -9106,6 +9435,21 @@
       ],
       "type": "object"
     },
+    "KeyListing": {
+      "description": "The keys on air, bottom first.",
+      "properties": {
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/KeyRecord"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    },
     "KeyMode": {
       "description": "How a publisher gives its key.",
       "oneOf": [
@@ -9121,6 +9465,21 @@
         }
       ]
     },
+    "KeyRecord": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
     "KeyRevealed": {
       "description": "What `channel.key.reveal` answers: the key itself, and nothing a list\nwould carry.",
       "properties": {
@@ -9130,6 +9489,36 @@
       },
       "required": [
         "secret"
+      ],
+      "type": "object"
+    },
+    "KeySetRequest": {
+      "additionalProperties": false,
+      "description": "`program.key.set`.",
+      "properties": {
+        "on": {
+          "description": "True to put it on air, false to take it off.",
+          "type": "boolean"
+        },
+        "scene": {
+          "description": "The scene to put on air as a key, or take off, by name or by id.",
+          "type": "string"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the key comes and goes: a name or {type, duration_ms, params}, as\nin `program.take`. A fade of 300 ms when absent; `\"cut\"` for none."
+        }
+      },
+      "required": [
+        "scene",
+        "on"
       ],
       "type": "object"
     },
@@ -9574,7 +9963,60 @@
       ],
       "type": "object"
     },
+    "MarkPoint": {
+      "description": "Which point `replay.mark` sets.",
+      "oneOf": [
+        {
+          "const": "in",
+          "description": "Open a new event here.",
+          "type": "string"
+        },
+        {
+          "const": "out",
+          "description": "Close the open event here.",
+          "type": "string"
+        }
+      ]
+    },
     "MarkRequest": {
+      "description": "`replay.mark`. With `point` it sets an in or an out point; with\n`seconds` alone it makes a whole event of the last that many seconds.",
+      "properties": {
+        "angle": {
+          "description": "The angle it was seen on, which playback starts from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "A name for the event. Its id when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "point": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MarkPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seconds": {
+          "description": "For an in point, how many seconds before now it goes. For a whole\nevent, how long it is. 0 is now.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "MarkRequest2": {
       "description": "`scene.history.mark`.",
       "properties": {
         "label": {
@@ -11855,6 +12297,106 @@
       },
       "type": "object"
     },
+    "PlayRequest2": {
+      "description": "`replay.play`: load an event, or the last seconds of an angle, into a\nreplay source and play it from the start.",
+      "properties": {
+        "angle": {
+          "description": "The angle to show. The event's own angle, then the first angle.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "event": {
+          "description": "The event to play. Without one, the last `seconds` of the angle.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seconds": {
+          "description": "How far back to start when no event is named. 10 when left out.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "The source to play it on, added if it is not there. `replay` when\nleft out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed": {
+          "description": "1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "take": {
+          "description": "Put it on air once it is loaded, as `program.take` would.",
+          "type": "boolean"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Transition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The transition for that take: a name such as `\"fade\"` or a stinger's\nobject. A cut when left out."
+        }
+      },
+      "type": "object"
+    },
+    "PlayStatus": {
+      "description": "What `replay.play` and `replay.set` answer with.",
+      "properties": {
+        "angle": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long it plays at this speed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "event": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "position_ms": {
+          "description": "Where it is, in milliseconds of playback.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "description": "The source it plays on.",
+          "type": "string"
+        },
+        "speed": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "source",
+        "angle",
+        "speed",
+        "duration_ms",
+        "position_ms"
+      ],
+      "type": "object"
+    },
     "Playback": {
       "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
       "properties": {
@@ -13102,6 +13644,136 @@
       ],
       "type": "object"
     },
+    "ReplayConfig": {
+      "description": "The `[replay]` table. With no angles nothing is built.",
+      "properties": {
+        "angles": {
+          "description": "The angles to record: source ids, and `programme` for the programme\nitself. Empty turns replay off.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "bitrate_kbps": {
+          "description": "The bitrate a source angle is encoded at, in kbit/s. 0 or left out\nis the programme's own bitrate.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seconds": {
+          "description": "Seconds each angle keeps, 1 to 1800. 60 when left out.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ReplayEvent": {
+      "description": "One event: a stretch of time between an in point and an out point, the\nsame stretch on every angle.",
+      "properties": {
+        "angle": {
+          "description": "The angle it was marked on, which playback starts from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "A slug the mixer gives it: `replay-1`, `replay-2`.",
+          "type": "string"
+        },
+        "in_ms": {
+          "description": "The in point, in milliseconds of the mixer's clock.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "What the desk shows. The id until it is renamed.",
+          "type": "string"
+        },
+        "out_ms": {
+          "description": "The out point. Absent while the event is still open (marked in and not\nout yet).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "in_ms"
+      ],
+      "type": "object"
+    },
+    "ReplaySetRequest": {
+      "description": "`replay.set`: change the angle or the speed of a replay that is playing,\nfrom the frame it is on.",
+      "properties": {
+        "angle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "speed": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ReplayStatus": {
+      "description": "`replay.get`: everything about replay on this mixer.",
+      "properties": {
+        "angles": {
+          "items": {
+            "$ref": "#/$defs/AngleStatus"
+          },
+          "type": "array"
+        },
+        "config": {
+          "$ref": "#/$defs/ReplayConfig"
+        },
+        "events": {
+          "description": "Every event, oldest first. An event whose stretch has left every ring\nis still listed until it is deleted, and plays nothing.",
+          "items": {
+            "$ref": "#/$defs/ReplayEvent"
+          },
+          "type": "array"
+        },
+        "now_ms": {
+          "description": "The mixer's clock now, in the same milliseconds as an event's points.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "on": {
+          "description": "Whether anything is being recorded.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "on",
+        "config",
+        "angles",
+        "events",
+        "now_ms"
+      ],
+      "type": "object"
+    },
     "Report": {
       "description": "What `project.import` answers with.",
       "properties": {
@@ -13411,6 +14083,67 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "SaveRequest2": {
+      "description": "`replay.save`: write an event, or the whole buffer of one angle, to an\nMP4 in the media folder without encoding it again.",
+      "properties": {
+        "angle": {
+          "description": "The angle to save. The event's own, then `programme` if it is\nrecorded, then the first angle.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "event": {
+          "description": "The event to save. The whole buffer when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The file's name, without a folder. Made from the time when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SaveStatus": {
+      "description": "What `replay.save` answers with once the file is written.",
+      "properties": {
+        "angle": {
+          "type": "string"
+        },
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The file, as the media library names it: `Replays/<name>.mp4`.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its absolute path on the mixer's machine.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "angle",
+        "duration_ms",
+        "bytes"
       ],
       "type": "object"
     },
@@ -15631,6 +16364,54 @@
         }
       ]
     },
+    "SignRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "ip": {
+          "description": "An address the link opens from and from nowhere else, for a link meant\nfor one viewer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "The HLS output, by id.",
+          "type": "string"
+        },
+        "ttl_secs": {
+          "description": "How long the link works, in seconds: 3600 when left out, at most\n2592000 (thirty days).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "output"
+      ],
+      "type": "object"
+    },
+    "SignedLink": {
+      "properties": {
+        "expires": {
+          "description": "When it stops working, in Unix seconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "master_url_path": {
+          "description": "The multivariant playlist's path with the signed query on it. Put the\npage's origin in front of it for a link.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "master_url_path",
+        "expires"
+      ],
+      "type": "object"
+    },
     "Snapshot": {
       "description": "`event/snapshot`: the full state, and where in the stream it sits.",
       "properties": {
@@ -16312,6 +17093,59 @@
           "description": "\"fade\", or {type, duration_ms, params}. Absent is a cut."
         }
       },
+      "type": "object"
+    },
+    "TalkbackRequest": {
+      "description": "`guest.talkback.set`.",
+      "properties": {
+        "guest": {
+          "description": "The guest to talk to. Left out, every guest that is live or joining.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on": {
+          "description": "Hold talkback (true) or let it go (false).",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "Another input to talk with, such as a microphone on the mixer. It is\nmuted on the programme from then on, for as long as it is the\ntalkback source. Left out, the source stays what it was.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "on"
+      ],
+      "type": "object"
+    },
+    "TalkbackState": {
+      "description": "Talkback as it stands.",
+      "properties": {
+        "held": {
+          "description": "The guests it is held into now.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "present": {
+          "description": "Whether that source is in the mixer now.",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "The source that talks: `guest-talkback` (the operator's browser\nmicrophone, published to `/guest/talkback/whip`) unless another input\nwas chosen. It is kept muted on the programme.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "present",
+        "held"
+      ],
       "type": "object"
     },
     "Tally": {
@@ -18808,6 +19642,17 @@
     {
       "ext": null,
       "legacy": null,
+      "name": "event/guest.changed",
+      "pattern": "guest.changed",
+      "payload": {
+        "$ref": "#/$defs/GuestList"
+      },
+      "since": "1",
+      "summary": "An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key."
+    },
+    {
+      "ext": null,
+      "legacy": null,
       "name": "event/health",
       "pattern": "health",
       "payload": {
@@ -18881,6 +19726,11 @@
         "schemes": []
       },
       {
+        "description": "Brightness, contrast, gamma, saturation and hue",
+        "id": "color/filter",
+        "schemes": []
+      },
+      {
         "description": "The person cut out of the camera, with no green screen: a matting model on the GPU where there is one and the CPU where there is not",
         "id": "matte/filter",
         "schemes": []
@@ -18918,6 +19768,11 @@
       {
         "description": "Hold the sound back to meet a late picture",
         "id": "delay/filter",
+        "schemes": []
+      },
+      {
+        "description": "Ride the level towards a loudness target, in LUFS",
+        "id": "loudness/filter",
         "schemes": []
       },
       {
@@ -19136,6 +19991,13 @@
         "id": "test/source",
         "schemes": [
           "test://"
+        ]
+      },
+      {
+        "description": "An instant replay: an event or the last seconds of an angle, at any speed",
+        "id": "replay/source",
+        "schemes": [
+          "replay://"
         ]
       },
       {
@@ -19481,6 +20343,13 @@
         },
         "schemes": [
           "html:"
+        ]
+      },
+      {
+        "description": "A guest's camera and microphone, taken in over WHIP from an invite link",
+        "id": "guest/source",
+        "schemes": [
+          "guest://"
         ]
       }
     ]
@@ -21520,6 +22389,117 @@
         "idempotentHint": false,
         "profile": "search",
         "readOnlyHint": false,
+        "tool": "create_guest_invite"
+      },
+      "mutating": true,
+      "name": "guest.invite.create",
+      "params": {
+        "$ref": "#/$defs/InviteCreateRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/guest/invite/create"
+      },
+      "result": {
+        "$ref": "#/$defs/InviteCreated"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "guest.invite.link",
+      "params": {
+        "$ref": "#/$defs/InviteIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/guest/invite/link"
+      },
+      "result": {
+        "$ref": "#/$defs/InviteLink"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "An invite's link and QR code again, to copy or show."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_guests"
+      },
+      "mutating": false,
+      "name": "guest.invite.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/guest/invite/list"
+      },
+      "result": {
+        "$ref": "#/$defs/GuestList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "guest.invite.revoke",
+      "params": {
+        "$ref": "#/$defs/InviteIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/guest/invite/revoke"
+      },
+      "result": {
+        "$ref": "#/$defs/InviteRevoked"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "guest.talkback.set",
+      "params": {
+        "$ref": "#/$defs/TalkbackRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/guest/talkback/set"
+      },
+      "result": {
+        "$ref": "#/$defs/GuestList"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
         "tool": "add_headend_channels"
       },
       "mutating": true,
@@ -21829,6 +22809,32 @@
       "scope": "read",
       "since": "1",
       "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "sign_viewer_link"
+      },
+      "mutating": true,
+      "name": "hls.sign",
+      "params": {
+        "$ref": "#/$defs/SignRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/hls/sign"
+      },
+      "result": {
+        "$ref": "#/$defs/SignedLink"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "A viewer link to one HLS output that stops working after a time, and can be held to one address."
     },
     {
       "destructive": false,
@@ -23152,6 +24158,53 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mutating": false,
+      "name": "program.key.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/program/key/list"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyListing"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The downstream keys on air, bottom first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_downstream_key"
+      },
+      "mutating": true,
+      "name": "program.key.set",
+      "params": {
+        "$ref": "#/$defs/KeySetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/program/key/set"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyListing"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Put a scene on air as a downstream key, above whatever is taken, or take it off."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
@@ -23652,6 +24705,244 @@
       "destructive": false,
       "idempotent": true,
       "mutating": true,
+      "name": "replay.event.delete",
+      "params": {
+        "$ref": "#/$defs/EventIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/event/delete"
+      },
+      "result": {
+        "$ref": "#/$defs/EventIdRequest"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Forget a replay event. The recording it pointed at is not touched."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "replay.event.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/replay/event/list"
+      },
+      "result": {
+        "$ref": "#/$defs/EventList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every replay event, oldest first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "replay.event.rename",
+      "params": {
+        "$ref": "#/$defs/EventRenameRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/event/rename"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplayEvent"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Give a replay event a name."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "get_replay"
+      },
+      "mutating": false,
+      "name": "replay.get",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/replay"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplayStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Whether replay is on, each angle's buffer depth and size, and every event."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "mark_replay"
+      },
+      "mutating": true,
+      "name": "replay.mark",
+      "params": {
+        "$ref": "#/$defs/MarkRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/mark"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplayEvent"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "play_replay"
+      },
+      "mutating": true,
+      "name": "replay.play",
+      "params": {
+        "$ref": "#/$defs/PlayRequest2"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/play"
+      },
+      "result": {
+        "$ref": "#/$defs/PlayStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Play an event, or the last seconds of an angle, on a replay source, added if it is not there."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "save_replay"
+      },
+      "mutating": true,
+      "name": "replay.save",
+      "params": {
+        "$ref": "#/$defs/SaveRequest2"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/save"
+      },
+      "result": {
+        "$ref": "#/$defs/SaveStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_replay"
+      },
+      "mutating": true,
+      "name": "replay.set",
+      "params": {
+        "$ref": "#/$defs/ReplaySetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/set"
+      },
+      "result": {
+        "$ref": "#/$defs/PlayStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change a playing replay's angle or speed, from the frame it is on."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "start_replay"
+      },
+      "mutating": true,
+      "name": "replay.start",
+      "params": {
+        "$ref": "#/$defs/ReplayConfig"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/start"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplayStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Record these angles, each the last `seconds`. Called again, it changes them in place."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "replay.stop",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/replay/stop"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplayStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop recording, free every buffer and forget every event."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
       "name": "scene.add",
       "params": {
         "$ref": "#/$defs/AddSceneRequest"
@@ -23907,7 +25198,7 @@
       "mutating": true,
       "name": "scene.history.mark",
       "params": {
-        "$ref": "#/$defs/MarkRequest"
+        "$ref": "#/$defs/MarkRequest2"
       },
       "rest": {
         "method": "POST",
