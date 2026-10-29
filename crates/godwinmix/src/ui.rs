@@ -86,6 +86,24 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/programme/fullscreen.js", include_str!("../../../ui/panels/programme/fullscreen.js")),
     ("panels/programme/displays.js", include_str!("../../../ui/panels/programme/displays.js")),
     ("panels/programme/programme.css", include_str!("../../../ui/panels/programme/programme.css")),
+    // The teleprompter: alone at /prompter/ for a phone, a tablet or the
+    // monitor under the glass, and the desk panel that writes and drives it.
+    ("prompter/index.html", include_str!("../../../ui/prompter/index.html")),
+    ("prompter/prompter.css", include_str!("../../../ui/prompter/prompter.css")),
+    ("prompter/page.js", include_str!("../../../ui/prompter/page.js")),
+    ("prompter/clock.js", include_str!("../../../ui/prompter/clock.js")),
+    ("prompter/controls.js", include_str!("../../../ui/prompter/controls.js")),
+    ("prompter/follow.js", include_str!("../../../ui/prompter/follow.js")),
+    ("prompter/keys.js", include_str!("../../../ui/prompter/keys.js")),
+    ("prompter/link.js", include_str!("../../../ui/prompter/link.js")),
+    ("prompter/stage.js", include_str!("../../../ui/prompter/stage.js")),
+    ("prompter/text.js", include_str!("../../../ui/prompter/text.js")),
+    ("panels/prompter/entry.js", include_str!("../../../ui/panels/prompter/entry.js")),
+    ("panels/prompter/panel.js", include_str!("../../../ui/panels/prompter/panel.js")),
+    ("panels/prompter/editor.js", include_str!("../../../ui/panels/prompter/editor.js")),
+    ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
+    ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
+    ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
@@ -701,6 +719,9 @@ where
         // so the bare name is sent on to it.
         .route("/programme", get(|| async { axum::response::Redirect::permanent("programme/") }))
         .route("/programme/", get(|| async { asset("programme/index.html") }))
+        // The prompter page, the same way: its scripts sit beside it.
+        .route("/prompter", get(|| async { axum::response::Redirect::permanent("prompter/") }))
+        .route("/prompter/", get(|| async { asset("prompter/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so

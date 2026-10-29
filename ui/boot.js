@@ -25,6 +25,7 @@ const PANELS = [
   "./panels/media/entry.js",
   "./panels/graphics/entry.js",
   "./panels/alerts/panel.js",
+  "./panels/prompter/entry.js",
 ];
 
 /**

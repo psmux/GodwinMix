@@ -76,10 +76,13 @@ impl Prompter {
     }
 
     fn loaded(&self, method: &str) -> Result<(), RpcError> {
-        match self.inner.lock().on {
-            Some(_) => Ok(()),
-            None => Err(check::nothing_loaded(method, self.ids())),
+        // The lock is let go before the refusal lists the scripts, which
+        // takes it again.
+        let loaded = self.inner.lock().on.is_some();
+        if loaded {
+            return Ok(());
         }
+        Err(check::nothing_loaded(method, self.ids()))
     }
 }
 

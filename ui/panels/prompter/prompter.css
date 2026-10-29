@@ -1,0 +1,8 @@
+/* The Prompter panel. Theme values only. */
+
+.prompter-panel { min-width: 0; }
+.prompter-drive { padding: var(--pad); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.prompter-speed { min-width: 6em; text-align: center; }
+.prompter-markers:empty { display: none; }
+.prompter-look input.num { width: 5em; }
+.prompter-text { width: 100%; box-sizing: border-box; min-height: 12em; resize: vertical; font: inherit; line-height: 1.4; }
