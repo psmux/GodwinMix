@@ -19,7 +19,7 @@ is the timed path from install to on air.
 | `default` | what GodwinMix does out of the box: two RTMP cameras, one destination | `live` | `dark` | rtmp |
 | `church` | a Sunday service: two cameras, lyrics, slides, YouTube and Facebook | `icon` | `calm` | camera, browser, rtmp |
 | `classroom` | a lesson: a camera, the screen, slides, a recording and a stream | `snapshot` | `daylight` | camera, screen, rtmp |
-| `esports` | a match: four player feeds, a caster, an overlay, replays | `live` | `neon` | ndi, browser, rtmp, screen, replay |
+| `esports` | a match: four player feeds, a caster, an overlay, replays (built in) | `live` | `neon` | ndi, browser, rtmp, screen |
 | `headless-agent` | a channel nobody watches: no multiview, snapshots on, MCP documented | `label` | `dark` | browser, rtmp, director |
 | `broadcast` | a contribution feed: SRT in and out, TSL tally, Companion | `live` | `broadcast` | srt, ndi, tally, companion |
 
