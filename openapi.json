@@ -16009,6 +16009,54 @@
           }
         ]
       },
+      "SignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ip": {
+            "description": "An address the link opens from and from nowhere else, for a link meant\nfor one viewer.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {
+            "description": "The HLS output, by id.",
+            "type": "string"
+          },
+          "ttl_secs": {
+            "description": "How long the link works, in seconds: 3600 when left out, at most\n2592000 (thirty days).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "output"
+        ],
+        "type": "object"
+      },
+      "SignedLink": {
+        "properties": {
+          "expires": {
+            "description": "When it stops working, in Unix seconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "master_url_path": {
+            "description": "The multivariant playlist's path with the signed query on it. Put the\npage's origin in front of it for a link.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "master_url_path",
+          "expires"
+        ],
+        "type": "object"
+      },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
         "properties": {
@@ -21701,6 +21749,44 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/hls/sign": {
+      "post": {
+        "description": "JSON-RPC method `hls.sign`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "hls.sign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLink"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A viewer link to one HLS output that stops working after a time, and can be held to one address.",
+        "tags": [
+          "hls"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/log/gst": {

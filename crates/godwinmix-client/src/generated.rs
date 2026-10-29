@@ -4020,24 +4020,10 @@ pub struct KeyColorRequest {
     pub y: Option<f64>,
 }
 
-/// The keys on air, bottom first.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct KeyListing {
-    pub keys: Vec<KeyRecord>,
-}
-
 /// How a publisher gives its key.
 pub type KeyMode = String;
 /// The values api_level 1 knows for [`KeyMode`].
 pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct KeyRecord {
-    pub id: String,
-    pub name: String,
-}
 
 /// What `channel.key.reveal` answers: the key itself, and nothing a list
 /// would carry.
@@ -4045,20 +4031,6 @@ pub struct KeyRecord {
 #[serde(default)]
 pub struct KeyRevealed {
     pub secret: String,
-}
-
-/// `program.key.set`.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct KeySetRequest {
-    /// True to put it on air, false to take it off.
-    pub on: bool,
-    /// The scene to put on air as a key, or take off, by name or by id.
-    pub scene: String,
-    /// How the key comes and goes: a name or {type, duration_ms, params}, as
-    /// in `program.take`. A fade of 300 ms when absent; `"cut"` for none.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transition: Option<Transition>,
 }
 
 /// A custom ladder.
@@ -6913,6 +6885,31 @@ pub type ShowWork = String;
 /// The values api_level 1 knows for [`ShowWork`].
 pub const SHOW_WORK_VALUES: &[&str] = &["mix", "transcode", "copy"];
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignRequest {
+    /// An address the link opens from and from nowhere else, for a link meant
+    /// for one viewer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip: Option<String>,
+    /// The HLS output, by id.
+    pub output: String,
+    /// How long the link works, in seconds: 3600 when left out, at most
+    /// 2592000 (thirty days).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignedLink {
+    /// When it stops working, in Unix seconds.
+    pub expires: u64,
+    /// The multivariant playlist's path with the signed query on it. Put the
+    /// page's origin in front of it for a link.
+    pub master_url_path: String,
+}
+
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8181,7 +8178,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 272] = [
+pub const METHODS: [MethodInfo; 271] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8273,6 +8270,7 @@ pub const METHODS: [MethodInfo; 272] = [
     MethodInfo { name: "headend.profile.save", summary: "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/profile/save")) },
     MethodInfo { name: "headend.scan", summary: "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/headend/scan")) },
     MethodInfo { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/headend/status")) },
+    MethodInfo { name: "hls.sign", summary: "A viewer link to one HLS output that stops working after a time, and can be held to one address.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/hls/sign")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
@@ -8331,8 +8329,6 @@ pub const METHODS: [MethodInfo; 272] = [
     MethodInfo { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program")) },
     MethodInfo { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/golive")) },
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
-    MethodInfo { name: "program.key.list", summary: "The downstream keys on air, bottom first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/key/list")) },
-    MethodInfo { name: "program.key.set", summary: "Put a scene on air as a downstream key, above whatever is taken, or take it off.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/key/set")) },
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
     MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
     MethodInfo { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/thumbnail")) },
@@ -9265,6 +9261,11 @@ impl Client {
         self.call("headend.status", &serde_json::json!({})).await
     }
 
+    /// A viewer link to one HLS output that stops working after a time, and can be held to one address.
+    pub async fn hls_sign(&self, params: &SignRequest) -> Result<SignedLink> {
+        self.call("hls.sign", params).await
+    }
+
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.
     pub async fn log_gst(&self, params: &LogGstRequest) -> Result<LogGstResult> {
         self.call("log.gst", params).await
@@ -9553,16 +9554,6 @@ impl Client {
     /// The last hundred takes, newest first, with the token that asked for each.
     pub async fn program_history(&self, params: &HistoryRequest) -> Result<Vec<TakeRecord>> {
         self.call("program.history", params).await
-    }
-
-    /// The downstream keys on air, bottom first.
-    pub async fn program_key_list(&self) -> Result<KeyListing> {
-        self.call("program.key.list", &serde_json::json!({})).await
-    }
-
-    /// Put a scene on air as a downstream key, above whatever is taken, or take it off.
-    pub async fn program_key_set(&self, params: &KeySetRequest) -> Result<KeyListing> {
-        self.call("program.key.set", params).await
     }
 
     /// Take back to the shot before this one.

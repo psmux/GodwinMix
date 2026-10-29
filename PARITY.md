@@ -76,7 +76,8 @@ Mark an item done only when it is merged with its tests and its how to page.
 | DVR, timeshift and catch up | live window only, 600 s at most | built in, the HLS output | |
 | SCTE-35 cues in and out | none | built in, the TS muxer and HLS | |
 | Teletext, subtitles and CEA-608 passed through | detected, dropped | built in, the TS muxer | |
-| Signed playback URLs and IP allow lists | a static viewer key | built in | |
+| Signed playback URLs | a static viewer key | built in, `hls/signed.rs` | on `feat/hls-signed-links`; a link can be held to one address |
+| IP allow lists per output | none | built in | |
 | DRM | none | plugin | |
 | Origin and edge, clustering | none | built in, with nodes | |
 | Several tenants on one station | station wide tokens | built in | |

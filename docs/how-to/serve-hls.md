@@ -188,6 +188,22 @@ without a key, which is where the gateway is. A request from anywhere else
 still needs the key, and is told so. Add `"open_public": true` only if the
 output is meant to be open to everyone who can reach the port.
 
+## Send a link that runs out
+
+The viewer link works for as long as the output keeps its name. For someone who
+should watch for an evening and no longer, a paying viewer or a reviewer, send a
+signed link instead:
+
+```sh
+gmx ctl rpc hls.sign '{"output":"viewers","ttl_secs":10800}'
+```
+
+The answer's `master_url_path` works for three hours and then answers 401. Add
+`"ip":"203.0.113.7"` and it opens from that address only. Nothing is stored, so
+there is nothing to clean up; to end every signed link to an output at once,
+change its viewer key. The longest a link may live is thirty days. An agent
+does the same with the `sign_viewer_link` tool.
+
 ## Play it
 
 Any HLS player opens the link: Safari, VLC, a smart TV, `ffplay`, or hls.js

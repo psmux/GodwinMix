@@ -130,6 +130,7 @@ Keys accepted on every method, handled before a method runs.
 | `headend.profile.save` | `POST /api/v1/headend/profile/save` | admin |  | 1 | Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change. |
 | `headend.scan` | `POST /api/v1/headend/scan` | admin |  | 1 | Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add. |
 | `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
+| `hls.sign` | `POST /api/v1/hls/sign` | operate |  | 1 | A viewer link to one HLS output that stops working after a time, and can be held to one address. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
@@ -1943,6 +1944,23 @@ MCP tool `headend_status` in the `search` profile: readOnlyHint true, destructiv
   },
   "result": {
     "$ref": "#/$defs/HeadendStatus"
+  }
+}
+```
+
+#### `hls.sign`
+
+A viewer link to one HLS output that stops working after a time, and can be held to one address.
+
+MCP tool `sign_viewer_link` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SignRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedLink"
   }
 }
 ```
