@@ -122,6 +122,7 @@ Start here if you have never run it.
 * [Debug a show](how-to/debug-a-show.md)
 * [The desktop app](how-to/desktop-app.md)
 * [Stop streaming, and quit without leaving anything running](how-to/stop-streaming-and-quit.md)
+* [Sign in from a browser](how-to/sign-in-from-a-browser.md): find the token the desktop app made, and open the mixer in a browser signed in
 * [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)

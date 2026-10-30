@@ -120,6 +120,7 @@ fn on_navigation(app: &AppHandle, url: &Url) -> bool {
         "fullscreen" => crate::output::main_fullscreen(app, url),
         "programme-output" => crate::output::menu(app),
         "programme-output-close" => crate::output::stop(app),
+        "open-in-browser" => crate::browser::open(app),
         _ => {}
     }
     false
