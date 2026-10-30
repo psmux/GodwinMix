@@ -2,6 +2,19 @@
 
 ## An intermittent heap corruption on Windows, 2026-10-29
 
+**Found, 2026-10-30.** With Windows Error Reporting set to keep full dumps
+(`HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps`,
+`DumpType` 2), one run of the core suite left five dumps (the core library,
+`overlay`, `encoder_late`, `recording_live`, `virtual_set`). All five stop in
+the same place: `catalogue::preload::load` loads the qsv plugin,
+`gst_plugin_qsv_register` opens oneVPL (`libmfx64_gen`), and releasing a D3D11
+decode context frees memory inside the Intel driver (`igd11dxva64`,
+`igddxvacommon64`) that fails the heap check. No other thread was in
+GStreamer or in GodwinMix. The fix ranks `h264-qsv` under Media Foundation in
+`codecs.toml`, so nothing loads the qsv plugin unless the config asks for it.
+`late_start` crashed 9 times in 30 before and none in 20 after. The notes
+below are what was known before the dumps.
+
 Found while testing 0.3.21 on the Zenbook Duo (Core Ultra 9 285H, Arc 140T,
 Windows 11), and present in 0.3.20 as well: about one run in five, a process
 that starts the engine ends with `0xc0000374` (STATUS_HEAP_CORRUPTION).
