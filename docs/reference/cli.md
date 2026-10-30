@@ -11,6 +11,7 @@
 | `--supervised` | `GODWINMIX_SUPERVISED` (`1`, `true`, `yes` or `on`) | something starts this mixer again when it exits. Only then does `core.restart` exit, and `core.info` answers `restart: {possible: true, how: "supervised"}`. The systemd unit, the compose file and the desktop app set it. Off by default, because a restart that never comes back is worse than none |
 | `--example-config` | | print the first run config and exit |
 | `--rehearsal` | | refuse `output.add` and accept only rehearsal tokens |
+| | `GODWINMIX_ICE_TCP` (`0`, `off` or `false`) | stop WebRTC viewers' and guests' connections from listening on a TCP port on every network address (ICE-TCP). On by default, so someone on a network that blocks UDP can still connect. The core's own WebRTC tests turn it off, because on one machine those listeners only ask Windows to allow each test program through the firewall |
 
 A mixer leaving because of `core.restart` exits with status 75. The desktop app
 starts its mixer again on that status and on no other, so its Quit stays a quit.

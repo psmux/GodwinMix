@@ -6,6 +6,7 @@
 * **Help > Address and token** shows the mixer's address and the token the page signed in with, hidden until you press Show, with Copy, Copy sign in link and Open in a browser. The desktop app makes its token itself on first start, and until now no screen showed it. The prompt a browser shows for a token now says where to find it. See [Sign in from a browser](docs/how-to/sign-in-from-a-browser.md).
 * `gmx ctl status` names the scene on air. It said `program : black` whenever a scene was on air, because it read only a source taken on its own.
 * A remote node and a core on the same machine send media over the loopback only. The media ports were opened on every interface, which on Windows also asked the person to allow the test programs through the firewall.
+* The core's WebRTC tests no longer listen for ICE-TCP on every network address, which is what made Windows ask to allow the core's test program. The mixer itself keeps ICE-TCP; `GODWINMIX_ICE_TCP=0` turns it off.
 
 ## 0.3.21 (2026-10-30)
 
