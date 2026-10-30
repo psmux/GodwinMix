@@ -80,6 +80,7 @@ pub mod secrets;
 pub mod setup;
 pub mod snapshot;
 pub mod telemetry;
+pub mod webrtc_ice;
 pub mod whep;
 pub mod state;
 pub mod tasks;

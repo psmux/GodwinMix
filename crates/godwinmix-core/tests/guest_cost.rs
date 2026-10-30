@@ -127,6 +127,7 @@ async fn guest_in(handle: &MixerHandle, id: &str) -> Browser {
 #[ignore = "a measurement; see the top of the file"]
 async fn guests_cost_this_much() {
     gst::init().unwrap();
+    godwinmix_core::webrtc_ice::set_tcp(false);
     let canvas = std::env::var("GMX_GUEST_CANVAS").unwrap_or_else(|_| "1280x720".into());
     let (w, h) = canvas.split_once('x').expect("GMX_GUEST_CANVAS is WIDTHxHEIGHT");
     let n: usize = std::env::var("GMX_GUESTS").ok().and_then(|v| v.parse().ok()).unwrap_or(2).clamp(1, 8);

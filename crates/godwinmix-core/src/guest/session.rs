@@ -76,6 +76,7 @@ fn webrtcbin(pipeline: &gst::Pipeline, video: &str, ice: &IceConfig) -> Result<g
         .map_err(|e| Refusal::unavailable(format!("{e:#}")))?;
     crate::probe::set_enum(&bin, "bundle-policy", "max-bundle");
     crate::probe::set_int(&bin, "latency", 200);
+    crate::webrtc_ice::apply(&bin);
     if !ice.stun.is_empty() {
         bin.set_property("stun-server", &ice.stun);
     }

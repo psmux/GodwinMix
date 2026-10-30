@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 /// on them.
 fn programme(id: &str) -> Option<(gst::Pipeline, Box<dyn Output>)> {
     gst::init().ok()?;
+    crate::webrtc_ice::set_tcp(false);
     for e in ["webrtcbin", "nicesrc", "x264enc", "avenc_aac", "opusenc", "avdec_h264"] {
         if !crate::probe::exists(e) {
             eprintln!("skipping: {e} is not installed");
@@ -61,6 +62,7 @@ struct Viewer {
 fn viewer(video: &str) -> Viewer {
     let pipeline = gst::Pipeline::new();
     let bin = gst::ElementFactory::make("webrtcbin").property_from_str("bundle-policy", "max-bundle").build().unwrap();
+    crate::webrtc_ice::apply(&bin);
     pipeline.add(&bin).unwrap();
     for caps in [format!("application/x-rtp,media=video,encoding-name={video},clock-rate=90000,payload=102,packetization-mode=(string)1"), "application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000,payload=111".into()] {
         let caps: gst::Caps = caps.parse().unwrap();
