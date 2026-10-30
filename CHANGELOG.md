@@ -3,6 +3,7 @@
 ## Unreleased
 
 * The ingest plugin no longer says another program holds 127.0.0.1 on the RTMP port when RTMP listens on one outside address, where the loopback was never going to reach it. A warning it did raise now goes once the port answers the plugin again; it used to stay until the next restart.
+* The container image keeps its secret store, which holds channel keys and RTMPS certificates, in the config volume at `/etc/godwinmix/home`. It was under the mixer user's home, which the image does not have, so a key or certificate either failed to save or was lost when the container was made again for an upgrade. Found on the btn36 ingest relay, whose RTMPS port stayed shut after an upgrade until its old store was copied across.
 
 ## 0.3.22 (2026-10-30)
 
