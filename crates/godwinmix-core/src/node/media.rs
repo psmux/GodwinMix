@@ -590,13 +590,16 @@ mod tests {
 
     #[test]
     fn a_plan_says_where_the_media_goes() {
+        // Two loopback addresses stand for the node and the core: planning
+        // checks a port is free, and on a LAN address that check opens it on
+        // every interface, which on Windows asks to allow the test program.
         let pool = PortPool::new();
-        let srt = plan(BridgeTransport::Srt, "10.0.0.21", "10.0.0.1", &pool, None).unwrap();
-        assert!(srt.target.starts_with("srt://10.0.0.21:"), "got {}", srt.target);
+        let srt = plan(BridgeTransport::Srt, "127.0.0.21", "127.0.0.1", &pool, None).unwrap();
+        assert!(srt.target.starts_with("srt://127.0.0.21:"), "got {}", srt.target);
         assert_eq!(srt.latency_ms, 120);
 
-        let rtp = plan(BridgeTransport::Rtp, "10.0.0.21", "10.0.0.1", &pool, Some(150)).unwrap();
-        assert!(rtp.target.starts_with("10.0.0.1:"), "got {}", rtp.target);
+        let rtp = plan(BridgeTransport::Rtp, "127.0.0.21", "127.0.0.1", &pool, Some(150)).unwrap();
+        assert!(rtp.target.starts_with("127.0.0.1:"), "got {}", rtp.target);
         assert_eq!(rtp.latency_ms, 150);
         assert_eq!(
             rtp.audio_port,
