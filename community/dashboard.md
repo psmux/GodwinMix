@@ -74,8 +74,8 @@ where GitHub records them and they are not argued about here.
 | Metric | Now | Target |
 |---|---|---|
 | Median time to first response (30 days) | no data | under 48 h |
-| Items opened in the window | 17 | |
-| Of those, still with no reply | 17 | 0 |
+| Items opened in the window | 20 | |
+| Of those, still with no reply | 20 | 0 |
 | Open items waiting longer than 48 h | 1 | 0 |
 | New contributors (first merged PR, 30 days) | 1 | |
 
