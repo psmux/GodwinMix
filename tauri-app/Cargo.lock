@@ -1512,7 +1512,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-desktop"
-version = "0.3.21"
+version = "0.3.22"
 dependencies = [
  "getrandom 0.3.4",
  "objc2",
