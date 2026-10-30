@@ -147,8 +147,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # A user with no login and no home of its own to write to. The mixer needs to
-# write two places and nothing else: the runtime source list beside its config,
-# and the media directory.
+# write two places and nothing else: the config directory, which holds the
+# runtime lists and, under home/, the secret store with channel keys and
+# certificates, and the media directory.
 RUN useradd --system --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin godwinmix \
     && mkdir -p /etc/godwinmix /var/lib/godwinmix/media /var/lib/godwinmix/run \
     && chown -R godwinmix:godwinmix /etc/godwinmix /var/lib/godwinmix
@@ -174,6 +175,7 @@ ENV DISPLAY=:99 \
     XDG_RUNTIME_DIR=/tmp/xdg \
     LIBGL_ALWAYS_SOFTWARE=1 \
     XDG_CACHE_HOME=/var/lib/godwinmix/cache \
+    GODWINMIX_HOME=/etc/godwinmix/home \
     GODWINMIX_CONFIG=/etc/godwinmix/godwinmix.toml
 
 # The control server and the UI. One port, as the mixer has always been.
