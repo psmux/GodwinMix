@@ -43,12 +43,12 @@ impl PortPool {
         Self::default()
     }
 
-    /// `count` consecutive free ports, or an error naming the range.
-    pub fn take(&self, count: u16) -> Result<u16> {
+    /// `count` consecutive free ports on `host`, or an error naming the range.
+    pub fn take(&self, count: u16, host: &str) -> Result<u16> {
         let mut taken = self.taken.lock();
         let mut base = FIRST_MEDIA_PORT;
         while base + count <= FIRST_MEDIA_PORT + MEDIA_PORTS {
-            if (0..count).all(|i| !taken.contains(&(base + i)) && free(base + i)) {
+            if (0..count).all(|i| !taken.contains(&(base + i)) && free(host, base + i)) {
                 for i in 0..count {
                     taken.insert(base + i);
                 }
@@ -73,8 +73,28 @@ impl PortPool {
 
 /// Whether a UDP port can be bound right now. Cheap, and it catches the case
 /// the pool cannot see: something outside GodwinMix already has it.
-fn free(port: u16) -> bool {
-    std::net::UdpSocket::bind(("0.0.0.0", port)).is_ok()
+fn free(host: &str, port: u16) -> bool {
+    std::net::UdpSocket::bind((listen_on(host), port)).is_ok()
+}
+
+/// The host in a plan's target, `srt://host:port` or `host:port`.
+fn target_host(target: &str) -> &str {
+    let rest = target.split_once("://").map_or(target, |(_, r)| r);
+    rest.rsplit_once(':').map_or(rest, |(h, _)| h)
+}
+
+/// The address to listen on for media that comes from `host`. A node and a
+/// core on one machine talk over the loopback, and a socket on every
+/// interface would be open to the network for nothing, which on Windows also
+/// asks the person to allow it in the firewall.
+pub fn listen_on(host: &str) -> &'static str {
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    match bare.parse::<std::net::IpAddr>() {
+        Ok(ip) if ip.is_loopback() && ip.is_ipv6() => "::1",
+        Ok(ip) if ip.is_loopback() => "127.0.0.1",
+        _ if bare.eq_ignore_ascii_case("localhost") => "127.0.0.1",
+        _ => "0.0.0.0",
+    }
 }
 
 /// Settle how one remote source's media will travel.
@@ -96,7 +116,7 @@ pub fn plan(
         // stable address, and because one listener serves a core that
         // reconnects without the node having to be told.
         BridgeTransport::Srt => {
-            let port = pool.take(1)?;
+            let port = pool.take(1, media_host)?;
             Ok(MediaPlan {
                 transport,
                 target: format!("srt://{media_host}:{port}"),
@@ -108,7 +128,7 @@ pub fn plan(
         // the other way round from SRT because a jitter buffer belongs at the
         // receiver and the receiver is the core.
         BridgeTransport::Rtp => {
-            let port = pool.take(2)?;
+            let port = pool.take(2, core_host)?;
             Ok(MediaPlan {
                 transport,
                 target: format!("{core_host}:{port}"),
@@ -187,6 +207,7 @@ fn rtp_receiver(id: &str, plan: &MediaPlan) -> Result<Receiver> {
     crate::probe::set_enum(&bin, "buffer-mode", "synced");
 
     let video = make("udpsrc", &format!("{id}-rtp-v"))?;
+    video.set_property("address", listen_on(target_host(&plan.target)));
     video.set_property("port", port as i32);
     video.set_property(
         "caps",
@@ -197,6 +218,7 @@ fn rtp_receiver(id: &str, plan: &MediaPlan) -> Result<Receiver> {
             .build(),
     );
     let audio = make("udpsrc", &format!("{id}-rtp-a"))?;
+    audio.set_property("address", listen_on(target_host(&plan.target)));
     audio.set_property("port", plan.audio_port as i32);
     audio.set_property(
         "caps",
@@ -307,7 +329,7 @@ fn srt_sender(
     let port = plan.target.rsplit(':').next().unwrap_or("0");
     sink.set_property(
         "uri",
-        format!("srt://0.0.0.0:{port}?mode=listener&latency={}", plan.latency_ms),
+        format!("srt://{}:{port}?mode=listener&latency={}", listen_on(target_host(&plan.target)), plan.latency_ms),
     );
     crate::probe::set_bool(&sink, "wait-for-connection", false);
     crate::probe::set_bool(&sink, "async", false);
@@ -541,11 +563,25 @@ fn needs(elements: &[&str], transport: &str) -> Result<()> {
 mod tests {
     use super::*;
 
+    /// A node and a core on one machine listen on the loopback only, so the
+    /// network never sees the port and Windows never asks about it; anything
+    /// else keeps listening on every interface.
+    #[test]
+    fn media_from_this_machine_is_listened_for_on_the_loopback() {
+        assert_eq!(listen_on("127.0.0.1"), "127.0.0.1");
+        assert_eq!(listen_on("localhost"), "127.0.0.1");
+        assert_eq!(listen_on("[::1]"), "::1");
+        assert_eq!(listen_on("192.168.1.20"), "0.0.0.0");
+        assert_eq!(listen_on("studio-b.local"), "0.0.0.0");
+        assert_eq!(target_host("srt://127.0.0.1:20101"), "127.0.0.1");
+        assert_eq!(target_host("192.168.1.20:20100"), "192.168.1.20");
+    }
+
     #[test]
     fn the_pool_hands_out_distinct_ports() {
         let pool = PortPool::new();
-        let a = pool.take(2).unwrap();
-        let b = pool.take(2).unwrap();
+        let a = pool.take(2, "127.0.0.1").unwrap();
+        let b = pool.take(2, "127.0.0.1").unwrap();
         assert_ne!(a, b);
         assert!(b >= a + 2 || a >= b + 2, "two takes must not overlap: {a} and {b}");
         pool.give_back(a, 2);
