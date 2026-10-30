@@ -74,12 +74,17 @@ impl Listeners {
         self.wants = Wants::of(table, self.settings.open_door);
         self.wants.relay.extend(self.readers.iter().map(|id| format!("direct.{id}")));
         self.problems.clear();
-        if let Some(why) = &self.relay_why {
-            self.problems.insert("relay".into(), why.clone());
-        }
         self.apply_rtmp();
         self.apply_srt();
         self.apply_rtmps(table.tls.as_ref());
+        // A cause found once can go: the other program exits, or the port
+        // moves to the loopback. The relay keeps its own port either way.
+        if self.relay_why.is_some() && self.rtmp.as_ref().is_some_and(|(server, _)| server.answers_on_loopback()) {
+            self.relay_why = None;
+        }
+        if let Some(why) = &self.relay_why {
+            self.problems.entry("relay".into()).or_insert_with(|| why.clone());
+        }
     }
 
     pub fn rtmp_port(&self) -> u16 {
@@ -105,6 +110,11 @@ impl Listeners {
                     if self.own_relay.is_none() {
                         self.gate.set_relay(format!("127.0.0.1:{}", self.rtmp_port));
                     }
+                } else if !reaches_loopback(&bind) {
+                    // Bound to one outside address, 127.0.0.1 was never going
+                    // to reach it. Nothing is wrong; the relay takes a port.
+                    self.note(format!("RTMP listens on {bind} only, so this machine's readers use a loopback port of their own"));
+                    self.relay_of_its_own();
                 } else {
                     let why = format!(
                         "127.0.0.1:{} reaches another program, not this plugin: another GodwinMix, or an ingest plugin \
@@ -246,6 +256,11 @@ impl Listeners {
         }
         self.problems.insert(what.to_string(), why);
     }
+}
+
+/// Whether a listener bound to `bind` can be reached on 127.0.0.1.
+fn reaches_loopback(bind: &str) -> bool {
+    matches!(bind, "" | "0.0.0.0" | "::" | "[::]" | "localhost") || bind.starts_with("127.")
 }
 
 #[cfg(test)]
