@@ -125,7 +125,7 @@ directory:
 | File | What it is |
 |---|---|
 | `godwinmix.toml` | the mixer's config, written from `godwinmix.example.toml` with the example's sample cameras commented out, and yours to edit from then on |
-| `core-token` | the bearer token the local mixer is started with, generated once, owner readable only |
+| `core-token` | the bearer token the local mixer is started with, generated once, owner readable only. **Help > Address and token** shows it; see [Sign in from a browser](sign-in-from-a-browser.md) |
 | `connection.json` | which mixer was connected to last |
 | `local-core.port` | the port the local mixer was given, so a shell that crashed finds its mixer again instead of starting a second one |
 | `lan.json` | whether other devices may connect, and the port kept for them once they may |

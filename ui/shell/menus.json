@@ -375,6 +375,10 @@
           "title": "Open on another device…"
         },
         {
+          "command": "help.signin",
+          "title": "Address and token…"
+        },
+        {
           "command": "help.agents",
           "title": "Connect an AI agent"
         },
