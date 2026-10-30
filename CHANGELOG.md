@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* The ingest plugin no longer says another program holds 127.0.0.1 on the RTMP port when RTMP listens on one outside address, where the loopback was never going to reach it. A warning it did raise now goes once the port answers the plugin again; it used to stay until the next restart.
+
 ## 0.3.22 (2026-10-30)
 
 Fixes found while testing 0.3.21 on a Zenbook Duo with Windows 11.
