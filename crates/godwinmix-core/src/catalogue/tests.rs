@@ -641,6 +641,19 @@ fn every_platform_resolves_an_encoder_and_a_compositor() {
     }
 }
 
+/// An Intel laptop on Windows has the qsv elements as well as Media
+/// Foundation and D3D11. Loading the qsv plugin corrupted the heap inside the
+/// Intel driver in about one start in five on an Arc 140T, so neither the
+/// encoder nor the decoder may come from it unless someone pins it.
+#[test]
+fn an_intel_windows_machine_takes_nothing_from_the_qsv_plugin() {
+    let cat = Catalogue::shipped().unwrap();
+    let reg = with(windows_registry(), &["qsvh264enc", "qsvh264dec", "qsvav1enc", "qsvav1dec"]);
+    let sel = cat.select(&Request::default(), &reg).unwrap();
+    assert_eq!(sel.video_encode.element, "mfh264enc");
+    assert!(!sel.video_decode.element.starts_with("qsv"), "decode came from {}", sel.video_decode.element);
+}
+
 /// And whatever the machine has, forcing software must still work, because
 /// that is the switch an operator reaches for when the GPU misbehaves during
 /// a show.

@@ -48,6 +48,8 @@ pub(super) fn sender() -> Sender {
     .downcast::<gst::Pipeline>()
     .expect("a pipeline");
     let bin = pipeline.by_name("w").expect("webrtcbin");
+    crate::webrtc_ice::set_tcp(false);
+    crate::webrtc_ice::apply(&bin);
     pipeline.set_state(gst::State::Playing).expect("the sender plays");
     Sender { pipeline, bin }
 }

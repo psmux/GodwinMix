@@ -82,7 +82,7 @@ export async function openAgents(client) {
     pane,
     el("p.sm", { text: "Things to ask first:" }),
     ...STARTERS.map((t) => copyable("", t)),
-    el("p.sm.dim", { text: `The agent finds this mixer by itself while GodwinMix is open on this machine. For an agent on another machine, set GODWINMIX_URL to ${location.origin} and GODWINMIX_TOKEN to the mixer's token (the desktop app keeps it in a file named core-token in its data folder).` }),
+    el("p.sm.dim", { text: `The agent finds this mixer by itself while GodwinMix is open on this machine. For an agent on another machine, set GODWINMIX_URL to ${location.origin} and GODWINMIX_TOKEN to the mixer's token, which Help > Address and token shows.` }),
     el("a", { href: "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/connect-an-ai-agent.md", target: "_blank", rel: "noopener", text: "More: connect an AI agent" }),
   ]);
   show(all[0]);

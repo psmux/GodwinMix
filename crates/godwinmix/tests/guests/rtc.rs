@@ -41,6 +41,8 @@ pub fn sender() -> Peer {
     .downcast::<gst::Pipeline>()
     .expect("a pipeline");
     let bin = pipeline.by_name("w").expect("webrtcbin");
+    godwinmix_core::webrtc_ice::set_tcp(false);
+    godwinmix_core::webrtc_ice::apply(&bin);
     pipeline.set_state(gst::State::Playing).expect("the sender plays");
     Peer { pipeline, bin, frames: Default::default(), sound: Default::default() }
 }
@@ -49,6 +51,8 @@ pub fn sender() -> Peer {
 pub fn viewer() -> Peer {
     let pipeline = gst::Pipeline::new();
     let bin = gst::ElementFactory::make("webrtcbin").property_from_str("bundle-policy", "max-bundle").build().unwrap();
+    godwinmix_core::webrtc_ice::set_tcp(false);
+    godwinmix_core::webrtc_ice::apply(&bin);
     pipeline.add(&bin).unwrap();
     let wanted = [
         "application/x-rtp,media=video,encoding-name=H264,clock-rate=90000,payload=102,packetization-mode=(string)1",

@@ -39,7 +39,7 @@ export function askForToken(reason) {
         el("p.dim", {
           text:
             reason ||
-            "This mixer asks for a token before it answers. If you set the mixer up, the token is the one you chose in Mixer settings under Control token. The mixer never shows it again, so if it is lost, set a new one there from a page that is already connected with an admin token. Otherwise, ask whoever runs this mixer.",
+            "This mixer asks for a token before it answers. If it is the GodwinMix desktop app, it made the token itself: on that computer, choose Help > Address and token to copy it, or GodwinMix > Open in browser to open a browser already signed in. If you set the token yourself, it is the one in Mixer settings under Control token. Otherwise, ask whoever runs this mixer.",
           style: { marginTop: "0" },
         }),
         el("div.form", {}, [el("div.field", {}, [el("label", {}, [el("span.lbl", { text: "Token" }), input])])]),
