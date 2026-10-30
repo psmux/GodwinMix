@@ -85,6 +85,7 @@ const ACTIONS = {
     document.querySelector("gmx-outputs")?.show("resources");
   },
   "help.devices": (client) => import("./devices.js").then((m) => m.openDevices(client)),
+  "help.signin": () => import("./signin.js").then((m) => m.openSignIn()),
   "help.agents": (client) => import("./agents.js").then((m) => m.openAgents(client)),
   "help.docs": () => window.open(DOCS, "_blank", "noopener"),
   "help.about": (client) => about(client),

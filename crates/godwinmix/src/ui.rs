@@ -466,6 +466,7 @@ const ASSETS: &[(&str, &str)] = &[
     // menu. Data, fetched when a menu first opens.
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
     ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
+    ("shell/signin.js", include_str!("../../../ui/shell/signin.js")),
     ("shell/agents-setup.js", include_str!("../../../ui/shell/agents-setup.js")),
     ("shell/agents-manual.js", include_str!("../../../ui/shell/agents-manual.js")),
     ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
@@ -671,6 +672,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/lan-devices.js", include_str!("../../../ui/test/lan-devices.js")),
     // Help > Connect an AI agent against a fake client.
     ("test/agents.js", include_str!("../../../ui/test/agents.js")),
+    ("test/signin.js", include_str!("../../../ui/test/signin.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     ("test/phone-camera.js", include_str!("../../../ui/test/phone-camera.js")),
     ("test/publish-retry.js", include_str!("../../../ui/test/publish-retry.js")),
@@ -1397,6 +1399,8 @@ mod tests {
         reachable.extend(closure_of("shell/agents.js"));
         // Help > Open on another device, on its first press.
         reachable.extend(closure_of("shell/devices.js"));
+        // Help > Address and token, on its first press.
+        reachable.extend(closure_of("shell/signin.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         // The palette's Open Channels, Channels as rows and Paste several push addresses.

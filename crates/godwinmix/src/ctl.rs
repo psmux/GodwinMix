@@ -506,7 +506,7 @@ async fn status(api: &Api, json: bool) -> Result<()> {
         return Ok(());
     }
     let s: MixerStatus = api.get("core.status", None, &[]).await?;
-    println!("program : {}", s.program.as_deref().unwrap_or("black"));
+    println!("program : {}", on_air_words(&s.scene, &s.program));
     if let Some(ad) = &s.ad {
         println!("ad      : {} ({})", if ad.on_air { "on air" } else { "armed" }, ad.uri);
     }
@@ -663,7 +663,13 @@ async fn output(api: &Api, cmd: OutputCmd) -> Result<()> {
 
 /// What is on air, in the words an operator uses for it.
 fn on_air(state: &ProgramState) -> String {
-    match (&state.scene, &state.program) {
+    on_air_words(&state.scene, &state.program)
+}
+
+/// The same from a scene and a source, which `core.status` carries as well:
+/// a scene on air is named rather than called black.
+fn on_air_words(scene: &Option<String>, program: &Option<String>) -> String {
+    match (scene, program) {
         (Some(scene), Some(source)) => format!("{scene} (the source {source})"),
         (Some(scene), None) => scene.clone(),
         (None, Some(source)) => source.clone(),
@@ -1309,6 +1315,17 @@ mod tests {
 
     fn api() -> Api {
         Api::new("http://mixer:8080/", None).unwrap()
+    }
+
+    /// `gmx ctl status` said black while a scene was on air, because it read
+    /// only the source taken on its own.
+    #[test]
+    fn status_names_the_scene_on_air() {
+        let some = |s: &str| Some(s.to_string());
+        assert_eq!(on_air_words(&some("Studio cutout"), &None), "Studio cutout");
+        assert_eq!(on_air_words(&some("Wide"), &some("cam-wide")), "Wide (the source cam-wide)");
+        assert_eq!(on_air_words(&None, &some("cam-wide")), "cam-wide");
+        assert_eq!(on_air_words(&None, &None), "black");
     }
 
     /// The CLI does not carry a path table of its own. Every command resolves

@@ -18,8 +18,10 @@ const SENDER: &str = "webrtcbin name=w bundle-policy=max-bundle \
 
 pub fn run() {
     gst::init().unwrap();
+    godwinmix_core::webrtc_ice::set_tcp(false);
     let send = gst::parse::launch(SENDER).unwrap().downcast::<gst::Pipeline>().unwrap();
     let sbin = send.by_name("w").unwrap();
+    godwinmix_core::webrtc_ice::apply(&sbin);
     send.set_state(gst::State::Playing).unwrap();
     let recv = receiver();
     let rbin = recv.by_name("r").unwrap();
@@ -42,6 +44,7 @@ pub fn run() {
 fn receiver() -> gst::Pipeline {
     let pipeline = gst::Pipeline::new();
     let bin = gst::ElementFactory::make("webrtcbin").name("r").property_from_str("bundle-policy", "max-bundle").build().unwrap();
+    godwinmix_core::webrtc_ice::apply(&bin);
     pipeline.add(&bin).unwrap();
     for caps in [
         "application/x-rtp,media=video,encoding-name=H264,clock-rate=90000,payload=102,packetization-mode=(string)1",

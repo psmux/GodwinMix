@@ -131,6 +131,7 @@ function commands(client) {
     cmd("output.running", "What is running, and stop it", "Outputs"),
     cmd("output.resources", "Show resources", "Outputs"),
     cmd("help.devices", "Open on another device", "Help"),
+    cmd("help.signin", "Address and token: copy them or open in a browser", "Help"),
     cmd("help.agents", "Connect an AI agent", "Help"),
     cmd("help.docs", "Documentation", "Help"),
     cmd("help.about", "About GodwinMix", "Help"),

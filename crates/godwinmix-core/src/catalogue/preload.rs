@@ -9,6 +9,12 @@
 //! So the plugins behind the selection are loaded here, whether or not the
 //! first source or output wants them yet.
 //!
+//! Five crash dumps from that laptop (2026-10-30) all stop in the Intel
+//! driver (igd11dxva64, igddxvacommon64) under `gst_plugin_qsv_register`, on
+//! this thread, with no other thread in GStreamer. So `h264-qsv` is now
+//! ranked under Media Foundation in `codecs.toml`, and the qsv plugin is
+//! loaded only on a machine whose config asks for it.
+//!
 //! Hardware entries only. The risk is a driver registering its encoders, and
 //! a software codec has no driver. Loading those too cost an idle core the
 //! whole of gst-libav and what a distribution's FFmpeg links against (speech
