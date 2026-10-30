@@ -28,7 +28,7 @@ for what an unverified entry means in practice.
 | `h265-va` | video | h265 | Linux | `vah265enc` / `vah265dec` | 215 | LGPL-2.1-or-later | no |
 | `av1-va` | video | av1 | Linux | `vaav1enc` / `vaav1dec` | 205 | LGPL-2.1-or-later | no |
 | `h264-va-legacy` | video | h264 | Linux | `vaapih264enc` / `vaapih264dec` | 150 | LGPL-2.1-or-later | no |
-| `h264-qsv` | video | h264 | Windows | `qsvh264enc` / `qsvh264dec` | 220 | LGPL-2.1-or-later | no |
+| `h264-qsv` | video | h264 | Windows | `qsvh264enc` / `qsvh264dec` | 170 | LGPL-2.1-or-later | no |
 | `av1-qsv` | video | av1 | Windows | `qsvav1enc` / `qsvav1dec` | 200 | LGPL-2.1-or-later | no |
 | `h264-amf` | video | h264 | Windows | `amfh264enc` / `d3d12h264dec` | 210 | LGPL-2.1-or-later | no |
 | `av1-amf` | video | av1 | Windows | `amfav1enc` / `d3d12av1dec` | 195 | LGPL-2.1-or-later | no |

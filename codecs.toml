@@ -163,7 +163,7 @@ properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.
 id = "h264-qsv"
 codec = "h264"
 accel = "qsv"
-rank = 220
+rank = 170
 encoder = "qsvh264enc"
 decoder = "qsvh264dec"
 download = "d3d11download"
@@ -173,7 +173,7 @@ license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "gop-size", unit = "frames" }
 verified = []
-comment = "Intel Quick Sync on Windows. On Linux the same silicon is reached through the `va` entry."
+comment = "Intel Quick Sync on Windows. On Linux the same silicon is reached through the `va` entry. Ranked under Media Foundation (180), so neither its encoder nor its decoder is chosen on its own: loading the qsv plugin registers its encoders through oneVPL, and on an Intel Arc 140T with GStreamer 1.28.6 that corrupts the heap inside the Intel driver in about one load in five (five crash dumps, 2026-10-30, all in igd11dxva64 under gst_plugin_qsv_register). Media Foundation reaches the same Quick Sync silicon through the driver's MFT without loading the plugin. Set `encode = \"qsv\"` under `[hardware]` to choose it anyway."
 properties = { "rate-control" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, "low-latency" = true, "b-frames" = 0 }
 
 [[video]]
