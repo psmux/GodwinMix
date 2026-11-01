@@ -22,6 +22,15 @@ export function choices(media, sources, opts = {}) {
   return out;
 }
 
+/** The presenter to offer first: a camera, a phone or a feed from another
+ * machine before a test pattern, a picture or a page, which are rarely a
+ * person. The first source when nothing looks like a camera. */
+export function likelyPresenter(sources) {
+  const live = /camera|decklink|ndi|whip|guest|rtmp|srt|ipcam|device|capture/i;
+  const hit = (sources || []).find((s) => live.test(`${s.type || ""} ${s.uri || ""}`));
+  return hit ? hit.id : (sources || [])[0]?.id || "";
+}
+
 /** The request the dialog sends, from what is picked: the sources in the
  * layout's slot order, background, presenter, then what stands in front. */
 export function request(picked) {
@@ -64,6 +73,7 @@ export async function openGreenScreen(opts) {
   const sources = client.state.sources || [];
   const background = select("Background", choices(media, sources));
   const presenter = select("Presenter", choices([], sources));
+  presenter.value = likelyPresenter(sources);
   const foreground = select("Foreground", choices(media, sources, { none: "Nothing in front" }));
   const screen = select("Behind the presenter", SCREENS.map(([value, label]) => ({ value, label })));
   const name = el("input", { type: "text", placeholder: "Presenter", "aria-label": "Scene name" });

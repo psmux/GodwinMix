@@ -27,6 +27,12 @@ export async function greenScreenTests(test, eq, ok) {
     eq(got.map((c) => c.value), ["", "newsroom.png", "cam"]);
     eq(got[2].label, "Studio camera (cam)");
   });
+  test("the presenter picker starts on a camera rather than a test pattern", () => {
+    const sources = [{ id: "bars", type: "test/source", uri: "test://smpte" }, { id: "logo", type: "image/source" }, { id: "cam", type: "camera/source" }];
+    eq(vs.likelyPresenter(sources), "cam");
+    eq(vs.likelyPresenter([{ id: "clip", type: "file/source" }]), "clip");
+    eq(vs.likelyPresenter([]), "");
+  });
   test("the request is the layout's slots in order, leaving out what was not picked", () => {
     eq(vs.request({ background: "newsroom.png", presenter: "cam", foreground: "", name: " " }), { sources: ["newsroom.png", "cam"], layout: "virtual-set", name: "Presenter" });
     eq(vs.request({ background: "a", presenter: "cam", foreground: "desk.png", name: "News" }), { sources: ["a", "cam", "desk.png"], layout: "virtual-set", name: "News" });
