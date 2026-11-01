@@ -39,6 +39,12 @@ export async function greenScreenTests(test, eq, ok) {
     eq(got.map((o) => o.value), ["set:set", "/g/studio.png", "a.png"]);
     ok(got[1].img, "a gallery background has a picture");
   });
+  test("the presenter row leaves out pictures, pages and test patterns, unless that is all there is", async () => {
+    const t = await import("../panels/scenes/green-screen-tiles.js");
+    const sources = [{ id: "bars", type: "test/source" }, { id: "logo", type: "image/source" }, { id: "cam", type: "camera/source" }, { id: "clip", type: "file/source" }];
+    eq(t.people(sources, "cam").map((s) => s.id), ["cam", "clip"]);
+    eq(t.people([{ id: "logo", type: "image/source" }], "").map((s) => s.id), ["logo"]);
+  });
   test("the request is the layout's slots in order, leaving out what was not picked", () => {
     eq(vs.request({ background: "newsroom.png", presenter: "cam", foreground: "", name: " " }), { sources: ["newsroom.png", "cam"], layout: "virtual-set", name: "Presenter" });
     eq(vs.request({ background: "a", presenter: "cam", foreground: "desk.png", name: "News" }), { sources: ["a", "cam", "desk.png"], layout: "virtual-set", name: "News" });
