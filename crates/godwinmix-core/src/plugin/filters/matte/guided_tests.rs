@@ -1,7 +1,7 @@
 use super::*;
 fn apply(mask: &[u8], guide: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
-    alpha(mask, (16, 8), guide, 128, (128, 64), Region { x: 0, y: 0, w: 128, h: 64 },
+    alpha(mask, (16, 8), (guide, 128), (128, 64), Region { x: 0, y: 0, w: 128, h: 64 },
         &std::array::from_fn(|i| i as u8), &mut out);
     out
 }

@@ -19,7 +19,7 @@ impl State {
 
     fn alpha_into(&self, luma: &[u8], stride: usize, size: (usize, usize), r: Region, mask: Option<&super::super::worker::Mask>, out: &mut Vec<u8>) {
         match mask {
-            Some(m) => super::super::guided::alpha(&m.data, (m.width, m.height), luma, stride, size, r, &self.curve, out),
+            Some(m) => super::super::guided::alpha(&m.data, (m.width, m.height), (luma, stride), size, r, &self.curve, out),
             None => blocks::alpha(&[], (0, 0), size, r, &self.curve, out),
         }
         if self.settings.feather > 0 {

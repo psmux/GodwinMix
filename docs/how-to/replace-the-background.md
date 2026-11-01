@@ -177,6 +177,8 @@ I420 frames, an output file, width, height and `fast` or `fine`. Pass a final ar
 canvas size. It writes the person over that picture and reports total cost
 and refinement cost separately. Refinement includes component cleanup and
 guided alpha; total cost also includes sampling, inference and smoothing.
-File I/O and compositing are outside the timers.
+File I/O and compositing are outside the timers. An optional final `baseline`
+argument renders the previous bilinear path with its old edge defaults, on
+the same background. This lets you compare matching frames.
 It processes every frame in order, so it shows edge quality rather than the
 extra mask delay of the live worker.

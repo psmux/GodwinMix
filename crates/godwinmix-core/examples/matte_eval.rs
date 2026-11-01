@@ -95,7 +95,7 @@ fn main() -> anyhow::Result<()> {
         } else { guided::alpha(
             &mask,
             (spec.width, spec.height),
-            planes.y, w,
+            (planes.y, w),
             (w, h),
             Region { x: 0, y: 0, w, h },
             &curve,
