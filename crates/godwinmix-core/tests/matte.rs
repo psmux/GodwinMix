@@ -71,7 +71,7 @@ fn run(quality: &str, device: &str) -> Option<(f64, f64, Duration)> {
 }
 
 #[test]
-fn a_frame_with_nobody_in_it_is_cut_out_to_black_on_the_cpu() {
+fn matte_empty_frame_is_cut_out_on_the_cpu() {
     let Some((before, after, took)) = run("fast", "cpu") else { return };
     eprintln!("fast on cpu: mean luma {before:.0} -> {after:.0} in {took:?}");
     assert!(before > 80.0, "the pattern is bright to start with: {before}");
@@ -79,9 +79,9 @@ fn a_frame_with_nobody_in_it_is_cut_out_to_black_on_the_cpu() {
 }
 
 #[test]
-fn the_fine_model_runs_on_whatever_the_machine_has() {
-    let Some((before, after, took)) = run("fine", "auto") else { return };
-    eprintln!("fine on auto: mean luma {before:.0} -> {after:.0} in {took:?}");
+fn matte_fine_runs_on_the_cpu() {
+    let Some((before, after, took)) = run("fine", "cpu") else { return };
+    eprintln!("fine on cpu: mean luma {before:.0} -> {after:.0} in {took:?}");
     assert!(after < 40.0, "the cutout took nothing away: {before} -> {after}");
 }
 

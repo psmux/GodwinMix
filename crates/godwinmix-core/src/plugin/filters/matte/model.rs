@@ -103,10 +103,13 @@ pub fn places() -> Vec<PathBuf> {
     }
     if let Some(home) = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }) {
         out.push(Path::new(&home).join(".godwinmix").join("models"));
+        out.push(Path::new(&home).join(".cache").join("gmx-models"));
     }
     if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
         out.extend(shipped(&exe_dir));
     }
+    #[cfg(target_os = "macos")]
+    out.push(PathBuf::from("/Applications/GodwinMix.app/Contents/Resources/models"));
     out
 }
 
@@ -127,30 +130,5 @@ pub fn shipped(exe_dir: &Path) -> Vec<PathBuf> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn auto_takes_the_fine_model_only_with_a_gpu() {
-        let dir = std::env::temp_dir().join(format!("gmx-models-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("selfie.onnx"), b"x").unwrap();
-        std::fs::write(dir.join("modnet.onnx"), b"x").unwrap();
-        std::env::set_var("GODWINMIX_MODELS_DIR", &dir);
-        assert_eq!(choose(&Quality::Auto, true).unwrap().name, "fine");
-        assert_eq!(choose(&Quality::Auto, false).unwrap().name, "fast");
-        let fine = choose(&Quality::Fine, false).unwrap();
-        assert_eq!((fine.width, fine.height, fine.mean), (512, 288, 0.5));
-
-        std::fs::write(dir.join("mine.onnx"), b"x").unwrap();
-        let err = choose(&Quality::Named("mine".into()), true).unwrap_err();
-        assert!(format!("{err:#}").contains("mine.json"), "{err:#}");
-        std::fs::write(dir.join("mine.json"), r#"{"width": 320, "height": 192, "mean": 0.5, "std": 0.5}"#).unwrap();
-        let mine = choose(&Quality::Named("mine".into()), true).unwrap();
-        assert_eq!((mine.width, mine.height), (320, 192));
-        let err = choose(&Quality::Named("absent".into()), true).unwrap_err();
-        assert!(format!("{err:#}").contains("models folder"), "{err:#}");
-        std::env::remove_var("GODWINMIX_MODELS_DIR");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
+#[path = "model_tests.rs"]
+mod tests;

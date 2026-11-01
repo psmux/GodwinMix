@@ -68,6 +68,7 @@ pub struct Picture {
 pub fn still(ctx: &BuildCtx, uri: &str) -> Result<Picture> {
     let decode = make("uridecodebin", &format!("{}-src-image", ctx.id))?;
     decode.set_property("uri", crate::input::to_uri(uri));
+    crate::gstutil::software_jpeg(&decode);
     let convert = make("videoconvert", &format!("{}-image-convert", ctx.id))?;
     let scale = make("videoscale", &format!("{}-image-scale", ctx.id))?;
     let size = make("capsfilter", &format!("{}-image-size", ctx.id))?;
@@ -100,6 +101,7 @@ pub fn sequence(ctx: &BuildCtx, uri: &str) -> Result<Picture> {
     let rate = fps(&ctx.cfg.effective_params())?;
     src.set_property("caps", gst::Caps::builder(kind).field("framerate", gst::Fraction::new(rate, 1)).build());
     let decode = make("decodebin", &format!("{}-sequence-decode", ctx.id))?;
+    crate::gstutil::software_jpeg(&decode);
     let convert = make("videoconvert", &format!("{}-sequence-convert", ctx.id))?;
     Ok(Picture { before: vec![src], dynamic: decode, after: vec![convert] })
 }

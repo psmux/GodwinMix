@@ -59,6 +59,7 @@ pub mod graphics;
 pub mod guests;
 pub mod headend;
 pub mod health;
+pub mod lut;
 pub mod idempotency;
 pub mod machine;
 pub mod media;

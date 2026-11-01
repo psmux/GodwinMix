@@ -149,6 +149,7 @@ const SOUND = new Set(["gain", "eq", "gate", "expander", "compressor", "limiter"
 export const FILTER_TITLES = {
   "chroma/filter": "Chroma key: a green or blue screen",
   "color/filter": "Colour: brightness, contrast, saturation and hue",
+  "lut/filter": "Look: LUTs, camera log and graded presets",
   "matte/filter": "Background cutout: no screen needed",
 };
 

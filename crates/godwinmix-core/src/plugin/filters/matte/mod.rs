@@ -20,6 +20,9 @@
 //! (`sample`), and the mask laid over a frame (`blocks`, `run`).
 
 mod blocks;
+mod components;
+mod guided;
+mod discovery;
 pub mod model;
 pub mod params;
 pub mod runtime;
@@ -132,6 +135,9 @@ pub fn ready(params: &Params) -> Result<String> {
     let s = Settings::from_params(params)?;
     runtime::load()?;
     let gpu = model::wants_gpu(s.device) && runtime::has_gpu(s.device);
+    if s.device == params::Device::Gpu && !gpu {
+        anyhow::bail!("The cutout is set to GPU, but this runtime has no GPU accelerator. Choose Automatic or The CPU under Runs on.");
+    }
     let spec = model::choose(&s.quality, gpu)?;
     Ok(format!("the {} model on the {}", spec.name, if gpu { "GPU" } else { "CPU" }))
 }
