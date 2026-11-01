@@ -44,13 +44,13 @@ export async function greenScreenTests(test, eq, ok) {
   pick("Background", "newsroom.png");
   pick("Presenter", "cam");
   pick("Foreground", "desk.png");
-  // What is behind the presenter is left at a green screen.
+  // An ordinary room needs no screen setting.
   dialog.el.querySelector("footer .btn.primary").click();
   await tick();
   test("Make the scene makes one scene.create_from call with what was picked", () => {
     const call = client.calls.find((c) => c.method === "scene.create_from");
     ok(call, "no scene.create_from call");
-    eq(call.params, { sources: ["newsroom.png", "cam", "desk.png"], layout: "virtual-set", name: "Presenter" });
+    eq(call.params, { sources: ["newsroom.png", "cam", "desk.png"], layout: "virtual-set", name: "Presenter", settings: { screen: "none" } });
     ok(made && made.id === "s1", "the panel was not told about the new scene");
     ok(refreshed, "the scene list was not read again");
     ok(!document.body.contains(dialog.el), "the dialog stayed open");

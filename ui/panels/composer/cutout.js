@@ -14,7 +14,7 @@ export const CHOICES = [
   ["quality", "Model", [
     ["auto", "Automatic: fine on a GPU, fast without one"],
     ["fast", "Fast: any computer, softer edge"],
-    ["fine", "Fine: hair and hands, wants a GPU"],
+    ["fine", "Fine: more edge detail, slower on the CPU"],
   ]],
   ["device", "Runs on", [
     ["auto", "Automatic: the GPU if there is one"],
@@ -27,7 +27,7 @@ export const CHOICES = [
 export const SLIDERS = [
   ["cutoff", "Edge position", 0.5, 0, 1, "Lower keeps more around the person, higher keeps less"],
   ["softness", "Edge softness", 0.3, 0, 1, "How wide the soft band at the edge is; 0 is a hard edge"],
-  ["steady", "Steadiness", 0.5, 0, 0.95, "How much the edge carries from one frame to the next; higher shimmers less and follows fast movement later"],
+  ["steady", "Steadiness", 0.5, 0, 0.95, "How much small edge changes carry between frames; large changes follow movement immediately"],
   ["feather", "Feather", 0, 0, 20, "Pixels the edge is softened over, inwards"],
   ["matte_left", "Matte left", 0, 0, 0.9, "Cut off this much of the picture on the left, whatever the model says"],
   ["matte_right", "Matte right", 0, 0, 0.9, "And on the right"],
