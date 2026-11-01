@@ -107,6 +107,7 @@ Start here if you have never run it.
 * [Keep a graphic up with a downstream key](how-to/keep-a-graphic-up-with-a-downstream-key.md)
 * [Clean up a microphone with sound filters](how-to/clean-up-a-microphone.md)
 * [Correct a camera's colour](how-to/correct-a-cameras-colour.md)
+* [Use LUTs and looks](how-to/use-luts-and-looks.md)
 * [Replace the background behind a person, with or without a green screen](how-to/replace-the-background.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
 * [Keep the show on air when a feed drops](how-to/keep-the-show-on-air-when-a-feed-drops.md): a backup source that takes over by itself and hands back when the feed is steady
@@ -186,6 +187,7 @@ Start here if you have never run it.
 * [Live data: the feed methods, events, formats and limits](reference/live-data.md)
 * [Feed paths and templates](reference/feed-paths.md)
 * [The chroma key](reference/chroma-key.md)
+* [LUTs and looks](reference/luts.md)
 * [Sound filters](reference/sound-filters.md)
 * [Audio buses: the master, buses, cue and mix minus](reference/audio-buses.md)
 * [The cutout: a person with no screen behind them](reference/cutout.md)
