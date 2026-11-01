@@ -22,40 +22,7 @@ pub fn dir() -> PathBuf {
     crate::gallery::dir().join("luts")
 }
 
-/// One LUT the library has.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct Entry {
-    pub name: String,
-    pub title: String,
-    /// `camera`, `look` or `imported`.
-    pub group: String,
-    /// Points a side.
-    pub size: usize,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub about: String,
-}
-
-/// A saved preset. Anything left out is the filter's default.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-pub struct Preset {
-    pub name: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub title: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lut: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub amount: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub brightness: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub contrast: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub gamma: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub saturation: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hue_shift: Option<f64>,
-}
+pub use godwinmix_protocol::lut::{LutEntry as Entry, LutPreset as Preset};
 
 #[derive(Default, Serialize, Deserialize)]
 struct PresetFile {
