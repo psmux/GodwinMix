@@ -10086,8 +10086,24 @@
             "null"
           ]
         },
+        "tint": {
+          "description": "-1 greener to 1 more magenta.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "title": {
           "type": "string"
+        },
+        "warmth": {
+          "description": "-1 cooler to 1 warmer.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "required": [
@@ -10166,6 +10182,13 @@
     },
     "LutPreviews": {
       "properties": {
+        "log_like": {
+          "description": "For a source, whether its picture looks like a log recording (flat,\ngrey, no deep blacks). The camera conversions are for those only: on\na normal camera they push skin bright and red.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "original": {
           "description": "The picture with no look, to compare against.",
           "type": "string"
