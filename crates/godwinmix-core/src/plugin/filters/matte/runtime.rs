@@ -18,7 +18,7 @@ use ort::ep::ExecutionProviderDispatch;
 use ort::session::builder::GraphOptimizationLevel;
 use ort::session::Session;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 /// The library's file name on this platform.
 pub const LIBRARY: &str = if cfg!(windows) {
@@ -29,21 +29,17 @@ pub const LIBRARY: &str = if cfg!(windows) {
     "libonnxruntime.so"
 };
 
-static LOADED: OnceLock<PathBuf> = OnceLock::new();
-static LOADING: Mutex<()> = Mutex::new(());
+static LOADED: OnceLock<std::result::Result<PathBuf, String>> = OnceLock::new();
 
-/// Cache a successful load. A missing runtime can be installed and retried
-/// without forcing the operator to restart a running programme.
+/// Load the runtime, once a process, and answer where it came from. A
+/// failure is kept too: `ort` holds the first library it was pointed at for
+/// the life of the process, and a second try after a failed one reported
+/// success on an empty handle, which panicked at the first real call.
 pub fn load() -> Result<&'static Path> {
-    if let Some(path) = LOADED.get() {
-        return Ok(path.as_path());
+    match LOADED.get_or_init(super::discovery::locate) {
+        Ok(path) => Ok(path.as_path()),
+        Err(why) => Err(anyhow!("{why}")),
     }
-    let _guard = LOADING.lock().unwrap_or_else(|e| e.into_inner());
-    if LOADED.get().is_none() {
-        let path = super::discovery::locate().map_err(|why| anyhow!("{why}"))?;
-        let _ = LOADED.set(path);
-    }
-    Ok(LOADED.get().expect("loaded above").as_path())
 }
 
 /// What a session runs on, for the operator to read.
