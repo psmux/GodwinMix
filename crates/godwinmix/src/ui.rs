@@ -385,6 +385,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/fix-row.js", include_str!("../../../ui/panels/scenes/fix-row.js")),
     ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
     ("panels/scenes/green-screen.js", include_str!("../../../ui/panels/scenes/green-screen.js")),
+    ("panels/scenes/green-screen-tiles.js", include_str!("../../../ui/panels/scenes/green-screen-tiles.js")),
+    ("panels/scenes/green-screen.css", include_str!("../../../ui/panels/scenes/green-screen.css")),
     ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
     ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
     ("panels/scenes/pictures.js", include_str!("../../../ui/panels/scenes/pictures.js")),

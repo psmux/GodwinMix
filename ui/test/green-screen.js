@@ -11,6 +11,7 @@ function fakeClient() {
     call: async (method, params) => {
       calls.push({ method, params });
       if (method === "media.list") return { items: [{ name: "newsroom.png" }, { name: "desk.png" }] };
+      if (method === "gallery.list") return { items: [{ id: "studio", name: "Studio", zone: "full", kind: "picture", uri: "/g/studio.png" }, { id: "news-set", name: "News set", zone: "full", kind: "set" }] };
       if (method === "source.key_color") return { color: params.x === undefined ? "#2fb04c" : "#30b050", found: "green" };
       if (method === "scene.create_from") return { id: "s1", name: "Presenter", key: "#2fb04c", key_from: "guessed", added: ["newsroom"] };
       return {};
@@ -33,6 +34,11 @@ export async function greenScreenTests(test, eq, ok) {
     eq(vs.likelyPresenter([{ id: "clip", type: "file/source" }]), "clip");
     eq(vs.likelyPresenter([]), "");
   });
+  test("the backgrounds are the gallery's sets, its full frame pictures, then library files, and never a lower third", () => {
+    const got = vs.backgrounds({}, [{ id: "studio", name: "Studio", zone: "full", kind: "picture", uri: "/g/studio.png" }, { id: "set", name: "Set", zone: "full", kind: "set", uri: "x" }, { id: "lt", name: "Lower", zone: "lower-third", kind: "template", uri: "y" }], [{ name: "a.png" }]);
+    eq(got.map((o) => o.value), ["set:set", "/g/studio.png", "a.png"]);
+    ok(got[1].img, "a gallery background has a picture");
+  });
   test("the request is the layout's slots in order, leaving out what was not picked", () => {
     eq(vs.request({ background: "newsroom.png", presenter: "cam", foreground: "", name: " " }), { sources: ["newsroom.png", "cam"], layout: "virtual-set", name: "Presenter" });
     eq(vs.request({ background: "a", presenter: "cam", foreground: "desk.png", name: "News" }), { sources: ["a", "cam", "desk.png"], layout: "virtual-set", name: "News" });
@@ -44,12 +50,18 @@ export async function greenScreenTests(test, eq, ok) {
   let made = null;
   let refreshed = false;
   const dialog = await vs.openGreenScreen({ client, scenes: { refresh: async () => { refreshed = true; } }, onMade: (a) => { made = a; } });
-  // By name, not by place: "Behind the presenter" moved to the top of the
-  // dialog, and picking by place then put the camera in the background.
-  const pick = (label, value) => { dialog.el.querySelector(`select[aria-label="${label}"]`).value = value; };
-  pick("Background", "newsroom.png");
-  pick("Presenter", "cam");
-  pick("Foreground", "desk.png");
+  // By name, not by place: each row of pictures is a radio group named for
+  // what it picks, and the foreground is a select under Advanced.
+  const tile = (label, value) => dialog.el.querySelector(`[role=radiogroup][aria-label="${label}"] [data-value="${value}"]`);
+  test("the dialog is pictures to pick from, with an ordinary room picked and the camera first", () => {
+    ok(tile("Presenter", "cam") && tile("Background", "newsroom.png"), "no tiles");
+    eq(tile("Behind the presenter", "none").getAttribute("aria-checked"), "true");
+    eq(tile("Presenter", "cam").getAttribute("aria-checked"), "true");
+    ok(dialog.el.querySelector(".gs-upload"), "no Upload your own tile");
+  });
+  tile("Background", "newsroom.png").click();
+  tile("Presenter", "cam").click();
+  dialog.el.querySelector('select[aria-label="Foreground"]').value = "desk.png";
   // An ordinary room needs no screen setting.
   dialog.el.querySelector("footer .btn.primary").click();
   await tick();
