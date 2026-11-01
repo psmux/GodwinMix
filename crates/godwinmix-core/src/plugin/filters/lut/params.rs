@@ -6,6 +6,8 @@
 //! | `file` | a LUT file on the mixer's machine, read directly | none |
 //! | `preset` | a saved preset, whose values fill what is not given | none |
 //! | `amount` | 0 is none of the LUT, 1 is all of it | 1 |
+//! | `warmth` | -1 cooler to 1 warmer, before the LUT | 0 |
+//! | `tint` | -1 greener to 1 more magenta, before the LUT | 0 |
 //! | `brightness`, `contrast`, `gamma`, `saturation`, `hue_shift` | the colour correction, as `color/filter` takes it, run before the LUT | 0 |
 //!
 //! `file` is what an OBS "Apply LUT" filter becomes, since OBS names the
@@ -41,7 +43,7 @@ pub fn preset_params(p: &Preset) -> Params {
     if let Some(l) = &p.lut {
         out.insert("lut".into(), l.clone().into());
     }
-    let nums = [("amount", p.amount), ("brightness", p.brightness), ("contrast", p.contrast), ("gamma", p.gamma), ("saturation", p.saturation), ("hue_shift", p.hue_shift)];
+    let nums = [("amount", p.amount), ("warmth", p.warmth), ("tint", p.tint), ("brightness", p.brightness), ("contrast", p.contrast), ("gamma", p.gamma), ("saturation", p.saturation), ("hue_shift", p.hue_shift)];
     for (k, v) in nums {
         if let Some(v) = v {
             out.insert(k.into(), v.into());
@@ -52,6 +54,11 @@ pub fn preset_params(p: &Preset) -> Params {
 
 pub fn amount(params: &Params) -> Result<f32> {
     Ok(num(KIND, params, &["amount", "clut_amount"], 1.0, 0.0, 1.0)? as f32)
+}
+
+/// Warmth and tint, the white balance a look starts from.
+pub fn white(params: &Params) -> Result<[f32; 2]> {
+    Ok([num(KIND, params, &["warmth", "temperature"], 0.0, -1.0, 1.0)? as f32, num(KIND, params, &["tint"], 0.0, -1.0, 1.0)? as f32])
 }
 
 pub fn colour(params: &Params) -> Result<Colour> {
@@ -89,5 +96,6 @@ pub fn load(source: &Source, dir: &Path) -> Result<Option<Arc<Lut>>> {
 pub fn validate(params: &Params) -> Result<()> {
     amount(params)?;
     colour(params)?;
+    white(params)?;
     Ok(())
 }

@@ -31,12 +31,15 @@ pub struct Recipe<'a> {
     /// 0 leaves the LUT out, 1 is all of it.
     pub amount: f32,
     pub colour: Settings,
+    /// White balance before the LUT: warmth (-1 cooler to 1 warmer) and
+    /// tint (-1 greener to 1 more magenta). What takes the red out of a face.
+    pub white: [f32; 2],
 }
 
 impl Recipe<'_> {
     /// True when the table would change nothing, so none is made.
     pub fn is_identity(&self) -> bool {
-        (self.lut.is_none() || self.amount <= 0.0) && self.colour.is_identity()
+        (self.lut.is_none() || self.amount <= 0.0) && self.colour.is_identity() && self.white == [0.0, 0.0]
     }
 }
 
@@ -56,21 +59,33 @@ pub fn build(r: &Recipe) -> Table {
 
 fn point(r: &Recipe, y: f64, u: f64, v: f64) -> [u16; 3] {
     let (y, (u, v)) = if r.colour.is_identity() { (y, (u, v)) } else { (luma_value(&r.colour, y), chroma_value(&r.colour, u, v)) };
-    let (y, u, v) = match r.lut.filter(|_| r.amount > 0.0) {
-        Some(lut) => {
+    let lut = r.lut.filter(|_| r.amount > 0.0);
+    let (y, u, v) = match (lut, r.white == [0.0, 0.0]) {
+        (None, true) => (y, u, v),
+        _ => {
             // Luma past black or white goes round the LUT and is added back
             // after, so a table point at 240 does not pull 235 down. Colour
             // outside RGB is held at the cube's edge, as a grading tool does.
             let legal = y.clamp(16.0, 235.0);
-            let rgb = to_rgb(legal, u, v).map(|c| c.clamp(0.0, 1.0));
-            let graded = lut.sample(rgb);
+            let rgb = balance(to_rgb(legal, u, v), r.white).map(|c| c.clamp(0.0, 1.0));
+            let graded = lut.map(|l| l.sample(rgb)).unwrap_or(rgb);
             let k = r.amount.min(1.0);
             let (gy, gu, gv) = to_yuv(std::array::from_fn(|i| rgb[i] + (graded[i] - rgb[i]) * k));
             (gy + (y - legal), gu, gv)
         }
-        None => (y, u, v),
     };
     [y, u, v].map(|c| (c.clamp(0.0, 255.0) * ONE as f64).round() as u16)
+}
+
+/// Warmth moves red and blue apart; tint moves green against both. The
+/// gains are normalised so a grey stays as bright as it was.
+fn balance(rgb: [f32; 3], [warmth, tint]: [f32; 2]) -> [f32; 3] {
+    if warmth == 0.0 && tint == 0.0 {
+        return rgb;
+    }
+    let gains = [1.0 + 0.15 * warmth + 0.05 * tint, 1.0 - 0.1 * tint, 1.0 - 0.15 * warmth + 0.05 * tint];
+    let grey = 0.2126 * gains[0] + 0.7152 * gains[1] + 0.0722 * gains[2];
+    std::array::from_fn(|i| rgb[i] * gains[i] / grey)
 }
 
 /// Limited range BT.709 to RGB, 0 to 1 for a legal colour.

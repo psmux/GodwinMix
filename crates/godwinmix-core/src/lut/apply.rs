@@ -150,7 +150,7 @@ mod tests {
     use crate::plugin::filters::colour::Settings;
 
     fn table(lut: &Lut, amount: f32) -> Table {
-        build(&Recipe { lut: Some(lut), amount, colour: Settings::default() })
+        build(&Recipe { lut: Some(lut), amount, colour: Settings::default(), white: [0.0, 0.0] })
     }
 
     fn run(t: &Table, w: usize, h: usize, yuv: (u8, u8, u8)) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
@@ -184,6 +184,14 @@ mod tests {
         let t = table(&looks::find("black-and-white").unwrap().lut(), 1.0);
         let (_, u, v) = run(&t, 2, 2, real_colours()[6]);
         assert!((u[0] as i32 - 128).abs() <= 1 && (v[0] as i32 - 128).abs() <= 1, "{} {}", u[0], v[0]);
+    }
+
+    #[test]
+    fn warmth_alone_warms_a_grey_without_a_lut() {
+        let t = build(&Recipe { lut: None, amount: 1.0, colour: Settings::default(), white: [1.0, 0.0] });
+        let (y, u, v) = run(&t, 2, 2, (126, 128, 128));
+        assert!(u[0] < 126 && v[0] > 130, "{:?}", (u[0], v[0]));
+        assert!((y[0] as i32 - 126).abs() <= 2, "brightness kept: {}", y[0]);
     }
 
     #[test]

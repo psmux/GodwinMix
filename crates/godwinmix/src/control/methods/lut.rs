@@ -88,8 +88,9 @@ async fn preview_looks(call: Call, params: Value) -> Result<Value, RpcError> {
         None => None,
     };
     let shown = still.as_ref().and(req.source.clone());
+    let log_like = still.as_ref().map(preview::looks_log);
     let out = blocking(move || render(&req, still)).await?;
-    body(LutPreviews { source: shown, original: out.0, previews: out.1 })
+    body(LutPreviews { source: shown, original: out.0, log_like, previews: out.1 })
 }
 
 fn render(req: &LutPreviewRequest, still: Option<RgbImage>) -> anyhow::Result<(String, Vec<LutPreview>)> {

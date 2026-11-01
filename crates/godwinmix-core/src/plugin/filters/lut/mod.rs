@@ -72,7 +72,7 @@ impl Default for Look {
 pub fn table_for(params: &Params, dir: &std::path::Path) -> Result<Option<Table>> {
     let p = merged(params, dir)?;
     let lut = params::load(&params::source(&p), dir)?;
-    let recipe = Recipe { lut: lut.as_deref(), amount: params::amount(&p)?, colour: params::colour(&p)? };
+    let recipe = Recipe { lut: lut.as_deref(), amount: params::amount(&p)?, colour: params::colour(&p)?, white: params::white(&p)? };
     Ok((!recipe.is_identity()).then(|| bake::build(&recipe)))
 }
 

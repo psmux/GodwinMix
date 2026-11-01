@@ -29,6 +29,27 @@ pub fn graded(still: &RgbImage, table: &Table) -> RgbImage {
     out
 }
 
+/// Whether a picture looks like a log recording: flat, with no deep blacks,
+/// no bright whites and little colour. A camera conversion is for these
+/// only; on a normal picture it pushes skin bright and red.
+pub fn looks_log(img: &RgbImage) -> bool {
+    let mut lumas: Vec<u8> = Vec::with_capacity(img.width() as usize * img.height() as usize);
+    let (mut colour, mut n) = (0.0f32, 0.0f32);
+    for p in img.pixels() {
+        let [r, g, b] = p.0.map(|c| c as f32 / 255.0);
+        lumas.push(((0.2126 * r + 0.7152 * g + 0.0722 * b) * 255.0) as u8);
+        let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+        colour += max - min;
+        n += 1.0;
+    }
+    if lumas.is_empty() {
+        return false;
+    }
+    lumas.sort_unstable();
+    let at = |q: f32| lumas[((lumas.len() - 1) as f32 * q) as usize];
+    at(0.02) > 18 && at(0.98) < 200 && colour / n < 0.16
+}
+
 pub fn jpeg(img: &RgbImage) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 82).encode_image(img).context("encoding a preview")?;
@@ -81,9 +102,22 @@ mod tests {
     }
 
     #[test]
+    fn a_normal_picture_is_not_log_and_a_flat_one_is() {
+        assert!(!looks_log(&test_card(160)));
+        let lut = looks::find("slog3-to-709").unwrap().lut();
+        // The card made flat the way a log camera records: lifted and grey.
+        let flat = RgbImage::from_fn(160, 90, |x, _| {
+            let v = 0.3 + 0.3 * x as f32 / 159.0;
+            Rgb([v + 0.03, v, v - 0.02].map(|c| (c * 255.0) as u8))
+        });
+        assert!(looks_log(&flat));
+        assert!(lut.size() > 0);
+    }
+
+    #[test]
     fn black_and_white_previews_without_colour() {
         let lut = looks::find("black-and-white").unwrap().lut();
-        let t = build(&Recipe { lut: Some(&lut), amount: 1.0, colour: Settings::default() });
+        let t = build(&Recipe { lut: Some(&lut), amount: 1.0, colour: Settings::default(), white: [0.0, 0.0] });
         let out = graded(&test_card(160), &t);
         for p in out.pixels().step_by(97) {
             let [r, g, b] = p.0;
