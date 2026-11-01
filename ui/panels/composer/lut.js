@@ -76,7 +76,7 @@ export function lutEditor(o) {
   const grid = el("div.lut-grid", { role: "listbox", "aria-label": "Looks" });
   const status = el("span.sm.faint.grow");
 
-  const amount = slider("Amount", typeof params.amount === "number" ? params.amount : 1, 0, 1, 0.01, (v) => {
+  const amount = slider("amount", "Amount", typeof params.amount === "number" ? params.amount : 1, 0, 1, 0.01, (v) => {
     params = withParam(params, "amount", v);
     send(false);
   }, (v) => `${Math.round(v * 100)}%`);
@@ -84,7 +84,7 @@ export function lutEditor(o) {
   const adjust = el("details.lut-adjust", {}, [
     el("summary.sm", { text: "Adjust brightness, contrast and colour" }),
     ...COLOUR.map(([key, text, min, max, step]) =>
-      slider(text, typeof params[key] === "number" ? params[key] : 0, min, max, step, (v) => {
+      slider(key, text, typeof params[key] === "number" ? params[key] : 0, min, max, step, (v) => {
         params = withParam(params, key, v);
         send(false);
       })
@@ -105,16 +105,28 @@ export function lutEditor(o) {
     return b;
   }
 
+  // `scene.item.filter.set` merges params, so a key is never just left out:
+  // an empty `preset` or `lut` is how one is taken off, and a preset is sent
+  // with every value it holds so nothing picked before stays under it.
   function pick(name, kind) {
     if (kind === "preset") {
-      params = Object.assign({}, { preset: name });
+      const p = library.presets.find((x) => x.name === name) || {};
+      params = { preset: name, lut: p.lut || "", amount: typeof p.amount === "number" ? p.amount : 1 };
+      for (const [key] of COLOUR) params[key] = typeof p[key] === "number" ? p[key] : 0;
     } else {
-      params = withParam(params, "lut", name);
-      delete params.preset;
-      if (!name) delete params.lut;
+      params = withParam(withParam(params, "lut", name), "preset", "");
     }
     send(true);
+    sync();
     draw();
+  }
+
+  /** Every slider to what the params now say, after a preset moved them. */
+  function sync() {
+    for (const input of [amount, adjust].flatMap((n) => [...n.querySelectorAll("input[data-key]")])) {
+      const key = input.dataset.key;
+      input.show(typeof params[key] === "number" ? params[key] : key === "amount" ? 1 : 0);
+    }
   }
 
   function draw() {
@@ -194,7 +206,7 @@ export function lutEditor(o) {
   async function savePreset() {
     const title = nameField.value.trim();
     if (!title) return nameField.focus();
-    const keep = Object.fromEntries(["lut", "amount", ...COLOUR.map((c) => c[0])].filter((k) => params[k] !== undefined).map((k) => [k, params[k]]));
+    const keep = Object.fromEntries(["lut", "amount", ...COLOUR.map((c) => c[0])].filter((k) => params[k] !== undefined && params[k] !== "").map((k) => [k, params[k]]));
     try {
       const saved = await o.client.call("lut.preset.save", Object.assign({ name: title, title }, keep));
       naming.hidden = true;
@@ -238,9 +250,13 @@ function presetAbout(p) {
   return parts.join(", ") || p.title || p.name;
 }
 
-function slider(text, value, min, max, step, change, show) {
+function slider(key, text, value, min, max, step, change, show) {
   const fmt = show || ((v) => String(v));
-  const input = el("input", { type: "range", min: String(min), max: String(max), step: String(step), value: String(value), "aria-label": text });
+  const input = el("input", { type: "range", min: String(min), max: String(max), step: String(step), value: String(value), "aria-label": text, "data-key": key });
+  input.show = (v) => {
+    input.value = String(v);
+    shown.textContent = fmt(v);
+  };
   const shown = el("span.sm.faint", { text: fmt(value) });
   on(input, "input", () => {
     shown.textContent = fmt(Number(input.value));
