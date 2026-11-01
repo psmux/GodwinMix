@@ -72,7 +72,7 @@ pub fn nlog(x: f32) -> f32 {
 
 /// HLG, ITU-R BT.2100, scaled so its grey lands at 0.18 like the others.
 pub fn hlg(x: f32) -> f32 {
-    let (a, b, c) = (0.178_832_77, 0.284_668_92, 0.559_910_73);
+    let (a, b, c) = (0.178_832_77, 0.284_668_92, 0.559_910_7);
     let e = if x <= 0.5 { x * x / 3.0 } else { (((x - c) / a).exp() + b) / 12.0 };
     e * 3.75
 }
@@ -158,9 +158,9 @@ mod tests {
     #[test]
     fn rec709_to_itself_is_the_identity() {
         let m = to_rec709(&REC709);
-        for i in 0..3 {
-            for j in 0..3 {
-                near(m[i][j], if i == j { 1.0 } else { 0.0 }, 1e-4);
+        for (i, row) in m.iter().enumerate() {
+            for (j, &v) in row.iter().enumerate() {
+                near(v, if i == j { 1.0 } else { 0.0 }, 1e-4);
             }
         }
     }

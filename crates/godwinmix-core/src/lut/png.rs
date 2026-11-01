@@ -24,6 +24,9 @@ pub fn parse(bytes: &[u8]) -> Result<Lut> {
     from_rgb(w, h, &rgb)
 }
 
+/// The colour at a cube point, by red, green and blue index.
+type Reader<'a> = dyn Fn(usize, usize, usize) -> [f32; 3] + 'a;
+
 /// The cube in an RGB picture `w` by `h`, three bytes a pixel, rows packed.
 pub fn from_rgb(w: usize, h: usize, rgb: &[u8]) -> Result<Lut> {
     if w != h {
@@ -33,7 +36,7 @@ pub fn from_rgb(w: usize, h: usize, rgb: &[u8]) -> Result<Lut> {
         let i = (y * w + x) * 3;
         [rgb[i], rgb[i + 1], rgb[i + 2]].map(|c| c as f32 / 255.0)
     };
-    let (size, at): (usize, Box<dyn Fn(usize, usize, usize) -> [f32; 3]>) = if w == 512 {
+    let (size, at): (usize, Box<Reader>) = if w == 512 {
         (64, Box::new(|r, g, b| px((b % 8) * 64 + r, (b / 8) * 64 + g)))
     } else {
         let level = (1..=16).find(|l| l * l * l == w).with_context(|| {

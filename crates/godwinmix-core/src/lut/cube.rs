@@ -73,7 +73,10 @@ fn size(text: &str, lo: usize, hi: usize) -> Result<usize> {
     Ok(n)
 }
 
-fn range(text: &str) -> Result<(Option<[f32; 3]>, Option<[f32; 3]>)> {
+/// A domain's low and high, each for all three channels.
+type Domain = (Option<[f32; 3]>, Option<[f32; 3]>);
+
+fn range(text: &str) -> Result<Domain> {
     let v: Vec<f32> = text.split_whitespace().map(str::parse).collect::<Result<_, _>>().context("a range is two numbers")?;
     let [lo, hi] = v[..] else { bail!("a range is two numbers, the low and the high") };
     Ok((Some([lo; 3]), Some([hi; 3])))
