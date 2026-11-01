@@ -20,8 +20,8 @@ above them stays in front.
 2. Pick the **Background** (upload a picture or a clip in the **Media** tab
    first, or pick a source), the **Presenter** camera and, if you like, a
    **Foreground** such as a desk: a PNG with a transparent background.
-3. Under **Behind the presenter** choose **A green screen**, **A blue
-   screen** or **No screen: cut the person out**.
+3. **No screen: cut the person out** is selected already. If you have a
+   green or blue screen, choose that instead.
 4. Press **Make the scene**, and take it like any other scene.
 
 The person stands on the bottom edge, in the middle, at nine tenths of the
@@ -44,6 +44,13 @@ machine has, and falls back to the CPU on any machine:
 | Windows | DirectML: any Direct3D 12 GPU, Intel, AMD or NVIDIA | the CPU |
 | macOS | CoreML: the GPU and the Neural Engine | the CPU |
 | Linux | CUDA or OpenVINO, with a runtime built for them | the CPU, x86 and ARM, a Raspberry Pi included |
+
+Desktop installers include both models and ONNX Runtime. You do not need a
+GPU, a model download or a separate runtime installation. A source checkout
+also checks `~/.cache/gmx-models` and, on macOS, an installed
+`/Applications/GodwinMix.app`. If neither carries the files, run
+`dev/fetch-models.sh` once before using the cutout. A plain `cargo run` does
+not download them. Missing files produce an error before the scene changes.
 
 Two models ship, both under the Apache License 2.0:
 
@@ -69,8 +76,9 @@ Under the cutout in the composer, or with `scene.item.filter.set` on the item:
   with something else, an encoder say.
 * **Edge position**: lower keeps more around the person, higher keeps less.
 * **Edge softness**: the width of the soft band at the edge. 0 is a hard edge.
-* **Steadiness**: how much of the last frame's edge carries into the next. The
-  edge shimmers less, and follows fast movement a little later.
+* **Steadiness**: how much small changes carry between masks. Large changes
+  follow the new mask immediately, reducing trails around moving hands.
+  This cannot remove the delay of a slow model.
 * **Feather**: softens the edge inwards by that many pixels.
 * **Matte left, right, top, bottom**: cut away the edges of the picture,
   whatever the model says. A lamp or a doorway the model takes for part of
@@ -144,4 +152,22 @@ them. Its recurrent form takes more than one input and is not read yet.
 * **Bits of the room stay.** Raise **Edge position**, or pull a matte in from
   that side.
 * **The edge flickers.** Raise **Steadiness**, or use the fine model.
-* **Fast movement leaves a trail.** Lower **Steadiness**.
+* **Fast movement leaves a trail.** Choose **Fast** on a CPU. Steadiness
+  follows large changes immediately, but a late mask still trails the picture.
+  Lower **Steadiness** if small movements smear.
+
+## Check quality on your own footage
+
+The fast model keeps a speaker's main outline with a low CPU cost. Loose hair,
+spaces between fingers and fast hands can lose detail. The fine model can
+improve the edge, but on a CPU its mask may arrive too late for quick gestures.
+Try both in preview before taking the scene on air. Good light and separation
+between the person's clothes and the room help. Feathering cannot recover
+missing hair, and the filter does not reconstruct foreground colours already
+mixed with the old background.
+
+For a repeatable CPU comparison, the `matte_eval` core example accepts packed
+I420 frames, an output file, width, height and `fast` or `fine`. It writes the
+person over blue and reports sampling, inference, smoothing and alpha cost.
+It processes every frame in order, so it shows edge quality rather than the
+extra mask delay of the live worker.
