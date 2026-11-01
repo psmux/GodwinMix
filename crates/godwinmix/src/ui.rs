@@ -190,6 +190,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/composer.js", include_str!("../../../ui/panels/composer/composer.js")),
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
     ("panels/composer/cutout.js", include_str!("../../../ui/panels/composer/cutout.js")),
+    ("panels/composer/lut.js", include_str!("../../../ui/panels/composer/lut.js")),
     ("panels/composer/colour.js", include_str!("../../../ui/panels/composer/colour.js")),
     ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
@@ -1394,6 +1395,7 @@ mod tests {
         reachable.extend(closure_of("panels/scenes/green-screen.js"));
         reachable.extend(closure_of("panels/composer/key.js"));
         reachable.extend(closure_of("panels/composer/cutout.js"));
+        reachable.extend(closure_of("panels/composer/lut.js"));
         reachable.extend(closure_of("panels/composer/colour.js"));
         // Help > Connect an AI agent, on its first press.
         reachable.extend(closure_of("shell/agents.js"));

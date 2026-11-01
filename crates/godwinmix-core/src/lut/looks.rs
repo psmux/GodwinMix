@@ -107,12 +107,20 @@ fn fade(c: [f32; 3], black: f32, white: f32) -> [f32; 3] {
     c.map(|v| black + v.clamp(0.0, 1.0) * (white - black))
 }
 
+/// Warm colours, skin among them, lean orange; everything else leans teal,
+/// most in the shadows. How warm a colour is decides which way it goes, so
+/// a face stays a face against a teal room.
 fn teal_orange(c: [f32; 3]) -> [f32; 3] {
     let y = luma(c);
-    // The shadow tint fades out towards black, so black stays black.
-    let (shadow, high) = ((1.0 - y).powi(2) * (y * 8.0).min(1.0), y * y);
-    let toned: [f32; 3] = std::array::from_fn(|i| c[i] + [-0.05, 0.015, 0.06][i] * shadow + [0.06, 0.01, -0.06][i] * high);
-    contrast(saturate(toned, 1.1), 1.1)
+    let warm = ((c[0] - c[2]) * 3.0).clamp(0.0, 1.0);
+    let cold = 1.0 - warm;
+    // Nothing is tinted at black, so black stays black.
+    let lift = (y * 8.0).min(1.0);
+    let shade = (1.0 - y) * lift;
+    let toned: [f32; 3] = std::array::from_fn(|i| {
+        c[i] + [0.06, 0.015, -0.07][i] * warm * (0.4 + y) + [-0.12, 0.02, 0.10][i] * cold * (0.35 * lift + shade)
+    });
+    contrast(saturate(toned, 1.15), 1.15)
 }
 
 #[cfg(test)]
@@ -144,6 +152,15 @@ mod tests {
         for v in out {
             assert!((v - 0.44).abs() < 0.03, "{out:?}");
         }
+    }
+
+    #[test]
+    fn teal_orange_keeps_skin_warm_and_turns_a_grey_wall_teal() {
+        let lut = find("teal-orange").unwrap().lut();
+        let skin = lut.sample([0.85, 0.62, 0.5]);
+        assert!(skin[0] > skin[2] + 0.2, "{skin:?}");
+        let wall = lut.sample([0.35, 0.35, 0.35]);
+        assert!(wall[2] > wall[0] + 0.05 && wall[1] > wall[0], "{wall:?}");
     }
 
     #[test]
