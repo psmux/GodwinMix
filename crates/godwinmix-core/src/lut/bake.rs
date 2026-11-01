@@ -19,9 +19,10 @@ use crate::plugin::filters::colour::Settings;
 pub const POINTS: usize = 33;
 pub const ONE: i32 = 64;
 
+/// One table per channel, each `[(y * 33 + u) * 33 + v]` times [`ONE`]. Kept
+/// apart so a luma lookup reads only the luma table.
 pub struct Table {
-    /// `[(y * 33 + u) * 33 + v]`, each Y, U and V times [`ONE`].
-    pub values: Vec<[u16; 3]>,
+    pub channels: [Vec<u16>; 3],
 }
 
 /// Everything that decides the table.
@@ -40,15 +41,17 @@ impl Recipe<'_> {
 }
 
 pub fn build(r: &Recipe) -> Table {
-    let mut values = Vec::with_capacity(POINTS * POINTS * POINTS);
+    let n = POINTS * POINTS * POINTS;
+    let mut channels = [Vec::with_capacity(n), Vec::with_capacity(n), Vec::with_capacity(n)];
     for yi in 0..POINTS {
         for ui in 0..POINTS {
             for vi in 0..POINTS {
-                values.push(point(r, (yi * 8) as f64, (ui * 8) as f64, (vi * 8) as f64));
+                let p = point(r, (yi * 8) as f64, (ui * 8) as f64, (vi * 8) as f64);
+                (0..3).for_each(|c| channels[c].push(p[c]));
             }
         }
     }
-    Table { values }
+    Table { channels }
 }
 
 fn point(r: &Recipe, y: f64, u: f64, v: f64) -> [u16; 3] {
