@@ -277,7 +277,7 @@ export class Inspector {
     for (const [i, filter] of (record.filters || []).entries()) {
       const enabled = el("input", { type: "checkbox", checked: filter.enabled !== false });
       on(enabled, "change", () =>
-        api.set(filter.name || filter.type || i, undefined, enabled.checked).then(() => this.changed()).catch((e) => errorToast(e, "Filter"))
+        api.set(filter.name || filter.type || i, undefined, enabled.checked).then((a) => this.changed(a)).catch((e) => errorToast(e, "Filter"))
       );
       list.appendChild(
         el("div.row", {}, [
@@ -285,7 +285,7 @@ export class Inspector {
           el("button.btn.icon", {
             text: "×",
             title: "Remove this filter",
-            onclick: () => api.remove(filter.name || filter.type || i).then(() => this.changed()).catch((e) => errorToast(e, "Filter")),
+            onclick: () => api.remove(filter.name || filter.type || i).then((a) => this.changed(a)).catch((e) => errorToast(e, "Filter")),
           }),
         ])
       );
@@ -325,8 +325,8 @@ export class Inspector {
       picker.value = "";
       if (!type) return;
       try {
-        await api.add(type, {});
-        this.changed();
+        // Redraw from the answer: the composer's own copy has no new filter.
+        this.changed(await api.add(type, {}));
       } catch (e) {
         errorToast(e, "Filter");
       }
