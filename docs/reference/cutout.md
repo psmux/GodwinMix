@@ -80,6 +80,15 @@ is evaluated with the average luma of each actual 2x2 block. The edge curve
 then produces soft alpha. This happens on the frame's thread; inference and
 component cleanup stay on the worker. No new crate is required.
 
+On an Apple M4 Pro at 1920 x 1080, the optimized evaluator measured guided
+alpha at 2.04 ms mean and 2.10 ms P95 with the fast model; component cleanup
+added 0.37 ms on the worker. With fine, guided alpha averaged 2.49 ms with
+a 5.45 ms P95, so this is not a hard 3 ms deadline guarantee. These spans
+exclude compositing and I/O. The evaluator compiles the actual refinement
+modules with `cargo rustc -p godwinmix-core --features matte --example matte_eval -- -C opt-level=3`;
+the linked core library is a development build and the native runtime uses
+the CPU. This does not establish full mixer release throughput.
+
 The tighter default cutoff of 0.6 and softness of 0.2 reduce uncertain room
 pixels. Feather stays zero because extra inward blur loses hair. Edge colour
 reconstruction is not enabled: pulling colours from solid foreground can

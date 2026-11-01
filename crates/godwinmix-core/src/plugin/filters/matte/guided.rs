@@ -55,9 +55,10 @@ fn read(src: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
 
 /// Full frame luma, including its stride, guides the low resolution mask.
 pub fn alpha(
-    mask: &[u8], size: (usize, usize), luma: &[u8], stride: usize,
+    mask: &[u8], size: (usize, usize), guide: (&[u8], usize),
     frame: (usize, usize), region: Region, curve: &[u8; 256], out: &mut Vec<u8>,
 ) {
+    let (luma, stride) = guide;
     if size.0 == 0 || size.1 == 0 || mask.len() < size.0 * size.1 {
         blocks::alpha(mask, size, frame, region, curve, out);
         return;
