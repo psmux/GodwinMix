@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* A look or a colour correction on a presenter in a virtual set now shows on air. A key or a cutout keeps a reference to the camera's frame it hands the compositor, so a filter after it graded a copy and the programme showed the original. Colour filters added to an item now go in front of its key or cutout.
+* A filter added in the composer appears at once with its controls. The composer redrew from its own copy of the draft, which did not have the new filter yet, so adding a look, a colour correction or a key seemed to do nothing until the composer was closed and opened again.
+
 ## 0.3.23 (2026-11-01)
 
 Looks from LUTs, and a cleaner edge on a background with no green screen.
