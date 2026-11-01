@@ -27762,6 +27762,11 @@
       "path": "/api/v1/fx/upload"
     },
     {
+      "method": "POST",
+      "note": "?name=look.cube with the file as the body: a .cube, .3dl or .png LUT imported into the LUT library, answering what lut.import answers",
+      "path": "/api/v1/luts/upload"
+    },
+    {
       "method": "GET",
       "note": "a gallery item's picture as a JPEG, for an <img>: ?width= (64 to 1920) and ?background= (checker, black, white, #rrggbb), as gallery.preview draws it",
       "path": "/api/v1/gallery/{id}/preview.jpg"
