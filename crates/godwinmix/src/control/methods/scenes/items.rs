@@ -597,7 +597,9 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;
         let item = ops::item_mut(&mut doc.scenes[i].items, id)
             .ok_or_else(|| anyhow::anyhow!("the item went away"))?;
-        item.filters.push(godwinmix_core::scene::Filter {
+        // A colour filter goes in front of a key or a cutout, or it grades a
+        // copy of the frame and air never sees it (`scene::filter_order`).
+        godwinmix_core::scene::filter_order::insert(&mut item.filters, godwinmix_core::scene::Filter {
             kind: req.type_id.clone(),
             name: req.name.clone(),
             enabled: true,

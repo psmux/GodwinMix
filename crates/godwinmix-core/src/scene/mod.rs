@@ -10,6 +10,7 @@
 pub mod collection;
 pub mod document;
 pub mod expr;
+pub mod filter_order;
 pub mod flat;
 pub mod geometry;
 pub mod id;
