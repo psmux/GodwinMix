@@ -20,6 +20,8 @@
 //! (`sample`), and the mask laid over a frame (`blocks`, `run`).
 
 mod blocks;
+mod components;
+mod guided;
 mod discovery;
 pub mod model;
 pub mod params;

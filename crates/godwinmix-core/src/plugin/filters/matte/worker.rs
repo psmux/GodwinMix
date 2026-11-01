@@ -14,7 +14,10 @@
 use super::model::{self, Spec};
 use super::params::Settings;
 use super::runtime::{self, Ran};
-use super::sample::{self, Planes};
+use super::sample;
+#[path = "inference.rs"]
+mod inference;
+use inference::{infer, prepare, wait_for_change, Open};
 use gstreamer as gst;
 use gstreamer_video as gst_video;
 use parking_lot::{Condvar, Mutex};
@@ -85,13 +88,6 @@ impl Drop for Worker {
     }
 }
 
-/// The session in use and what it was opened for.
-struct Open {
-    session: ort::session::Session,
-    spec: Spec,
-    for_settings: (super::params::Quality, super::params::Device),
-}
-
 fn run(shared: &Shared) {
     let mut open: Option<Open> = None;
     let (mut input, mut out) = (Vec::new(), Vec::new());
@@ -137,6 +133,7 @@ fn run(shared: &Shared) {
         let started = Instant::now();
         let Some(answer) = infer(o, &frame, &info, &mut input) else { continue };
         sample::mask(&answer, last.as_deref().map(|m| m.data.as_slice()), settings.steady, &mut out);
+        super::components::clean(&mut out, o.spec.width, o.spec.height);
         let mask = Arc::new(Mask { width: o.spec.width, height: o.spec.height, data: std::mem::take(&mut out) });
         // The old mask's buffer, once nobody draws from it, is the next one's.
         if let Some(old) = last.replace(mask.clone()).and_then(|m| Arc::try_unwrap(m).ok()) {
@@ -148,52 +145,5 @@ fn run(shared: &Shared) {
             let ms = started.elapsed().as_secs_f32() * 1000.0;
             tracing::debug!(model = %o.spec.name, ms, "a frame through the cutout");
         }
-    }
-}
-
-fn prepare(settings: &Settings) -> anyhow::Result<(ort::session::Session, Spec, Ran)> {
-    let gpu = model::wants_gpu(settings.device) && runtime::has_gpu(settings.device);
-    let spec = model::choose(&settings.quality, gpu)?;
-    let (session, ran) = runtime::session(&spec, settings.device)?;
-    Ok((session, spec, ran))
-}
-
-/// One frame through the model. `None` when the frame cannot be read.
-fn infer(o: &mut Open, frame: &gst::Buffer, info: &gst_video::VideoInfo, input: &mut Vec<f32>) -> Option<Vec<f32>> {
-    let f = gst_video::VideoFrameRef::from_buffer_ref_readable(frame.as_ref(), info).ok()?;
-    let s = info.stride();
-    let planes = Planes {
-        y: f.plane_data(0).ok()?,
-        u: f.plane_data(1).ok()?,
-        v: f.plane_data(2).ok()?,
-        strides: [s[0] as usize, s[1] as usize, s[2] as usize],
-        width: info.width() as usize,
-        height: info.height() as usize,
-    };
-    sample::input(&planes, &o.spec, input);
-    let shape = [1usize, 3, o.spec.height, o.spec.width];
-    let tensor = ort::value::TensorRef::from_array_view((shape, input.as_slice())).ok()?;
-    let outputs = match o.session.run(ort::inputs![tensor]) {
-        Ok(outputs) => outputs,
-        Err(e) => {
-            tracing::warn!(error = %e, "the cutout model failed on a frame");
-            return None;
-        }
-    };
-    let (_, data) = outputs[0].try_extract_tensor::<f32>().ok()?;
-    // A model may answer at another size; only one the size of its input is
-    // used, which every model this reads does.
-    (data.len() == o.spec.width * o.spec.height).then(|| data.to_vec())
-}
-
-fn wait_for_change(shared: &Shared, from: &(super::params::Quality, super::params::Device)) {
-    while !shared.stop.load(Ordering::SeqCst) {
-        let now = shared.settings.lock().clone();
-        if (now.quality.clone(), now.device) != *from {
-            return;
-        }
-        let mut job = shared.job.lock();
-        job.take();
-        shared.wake.wait_for(&mut job, std::time::Duration::from_secs(1));
     }
 }

@@ -16,8 +16,8 @@ desktop app, the release binaries and the container image all are.
 | `quality` | `auto`, `fast`, `fine` | `auto` | Which model: `fast` is MediaPipe selfie segmentation, `fine` is MODNet. `auto` takes `fine` where a GPU will run it and `fast` where none will. |
 | `model` | a name | none | A model of your own, `name.onnx` with `name.json` beside it in a models folder. Takes the place of `quality`. Letters, digits, `-` and `_` only. |
 | `device` | `auto`, `gpu`, `cpu` | `auto` | Where the model runs. `gpu` is refused on a machine with no GPU accelerator; `auto` falls back to the CPU. |
-| `cutoff` | 0 to 1 | 0.5 | Where the edge sits in the model's answer. |
-| `softness` | 0 to 1 | 0.3 | The width of the ramp across the edge. 0 is a hard edge. |
+| `cutoff` | 0 to 1 | 0.6 | Where the edge sits in the model's answer. |
+| `softness` | 0 to 1 | 0.2 | The width of the ramp across the edge. 0 is a hard edge. |
 | `steady` | 0 to 0.95 | 0.5 | How much small changes carry into the next mask. Large changes follow the new mask immediately. |
 | `feather` | 0 to 20 pixels | 0 | Softens the edge inwards by about this many pixels. |
 | `matte_left`, `matte_right`, `matte_top`, `matte_bottom` | 0 to 0.98 each | 0 | The fraction of the picture cut away from each edge, whatever the model says. Each opposite pair must add up to less than 0.98. |
@@ -65,13 +65,30 @@ first output is read as 1 x 1 x height x width, 0 to 1, at the input's size.
   hand the board a keyed picture
 ```
 
-The frame's thread never waits for the model. On a 1080p canvas its own work
-is the mask laid over each 2x2 block, bilinearly, in fixed point: about 2 ms a
-frame, measured on an Intel Arc 140T laptop with
-`cargo test --release --features matte -- --ignored cost_per_1080p`. The board
-draws a cutout exactly as it draws a key, in stacking order with every other
-item. Where nothing can draw it (a source's input side, or a programme
-composited on a GPU), the cutout is written into the frame over black.
+The frame's thread never waits for the model. Small disconnected foreground
+components and small enclosed holes are cleaned at model resolution on the
+worker. Regions larger than one part in 1500 of the mask survive even when
+detached, so a raised hand is not discarded just because it misses the body.
+Eight connected neighbours preserve diagonal attachments. Open background
+regions are never filled.
+
+The current frame's luma guides the newest mask using a native Rust
+[fast guided filter](https://arxiv.org/abs/1505.00996). Linear coefficients
+are fitted at one eighth of the frame width and height, with a radius of four
+samples and epsilon 0.0004 on luma scaled to 0 to 1. Their bilinear expansion
+is evaluated with the average luma of each actual 2x2 block. The edge curve
+then produces soft alpha. This happens on the frame's thread; inference and
+component cleanup stay on the worker. No new crate is required.
+
+The tighter default cutoff of 0.6 and softness of 0.2 reduce uncertain room
+pixels. Feather stays zero because extra inward blur loses hair. Edge colour
+reconstruction is not enabled: pulling colours from solid foreground can
+spread shirt and skin colours into hair. The guide cannot recover hair the
+model misses or distinguish a room patch with the same luma as hair.
+
+The board draws a cutout in stacking order with every other item. Where
+nothing can draw it (a source's input side, or a programme composited on a
+GPU), the cutout is written into the frame over black.
 
 ## Refusals
 

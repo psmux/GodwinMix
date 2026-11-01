@@ -4,6 +4,9 @@
 use crate::config::Params;
 use crate::plugin::filters::chroma::params::Matte;
 use anyhow::{bail, Result};
+#[path = "parse.rs"]
+mod parse;
+use parse::{device, fraction, quality};
 
 /// Which model cuts the person out.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,8 +52,8 @@ impl Default for Settings {
         Settings {
             quality: Quality::Auto,
             device: Device::Auto,
-            cutoff: 0.5,
-            softness: 0.3,
+            cutoff: 0.6,
+            softness: 0.2,
             steady: 0.5,
             feather: 0,
             matte: Matte::default(),
@@ -106,78 +109,6 @@ impl Settings {
     }
 }
 
-fn quality(key: &str, value: &toml::Value) -> Result<Quality> {
-    match value.as_str().unwrap_or_default().trim() {
-        "" | "auto" => Ok(Quality::Auto),
-        "fast" => Ok(Quality::Fast),
-        "fine" => Ok(Quality::Fine),
-        name if key == "model" && is_name(name) => Ok(Quality::Named(name.to_string())),
-        other => bail!(
-            "matte/filter params.{key} must be auto, fast or fine, or `model` the name of a \
-             model in the models folder, not `{other}`"
-        ),
-    }
-}
-
-fn is_name(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-}
-
-fn device(key: &str, value: &toml::Value) -> Result<Device> {
-    match value.as_str().unwrap_or_default().trim() {
-        "" | "auto" => Ok(Device::Auto),
-        "gpu" => Ok(Device::Gpu),
-        "cpu" => Ok(Device::Cpu),
-        other => bail!("matte/filter params.{key} must be auto, gpu or cpu, not `{other}`"),
-    }
-}
-
-fn fraction(key: &str, value: &toml::Value, lo: f32, hi: f32) -> Result<f32> {
-    let n = value.as_float().or_else(|| value.as_integer().map(|i| i as f64));
-    match n.map(|n| n as f32) {
-        Some(n) if (lo..=hi).contains(&n) => Ok(n),
-        _ => bail!("matte/filter params.{key} must be a number from {lo} to {hi}, not `{value}`"),
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn params(text: &str) -> Params {
-        toml::from_str(text).unwrap()
-    }
-
-    #[test]
-    fn nothing_set_is_a_working_cutout() {
-        let s = Settings::from_params(&Params::new()).unwrap();
-        assert_eq!(s.quality, Quality::Auto);
-        let c = s.curve();
-        assert_eq!((c[0], c[255]), (0, 255));
-        assert!(c[128] > 100 && c[128] < 160, "{}", c[128]);
-    }
-
-    #[test]
-    fn a_wrong_setting_names_what_it_takes() {
-        let err = Settings::from_params(&params("blur = 3")).unwrap_err().to_string();
-        assert!(err.contains("quality") && err.contains("softness"), "{err}");
-        let err = Settings::from_params(&params("steady = 2.0")).unwrap_err().to_string();
-        assert!(err.contains("0 to 0.95"), "{err}");
-        let err = Settings::from_params(&params("matte_left = 0.5\nmatte_right = 0.5")).unwrap_err().to_string();
-        assert!(err.contains("leaves nothing"), "{err}");
-    }
-
-    #[test]
-    fn a_model_of_ones_own_is_named_by_its_file() {
-        let s = Settings::from_params(&params("model = \"rvm_mobilenetv3\"")).unwrap();
-        assert_eq!(s.quality, Quality::Named("rvm_mobilenetv3".into()));
-        assert!(Settings::from_params(&params("model = \"../escape\"")).is_err());
-    }
-
-    #[test]
-    fn a_hard_edge_is_a_step_at_the_cutoff() {
-        let s = Settings { softness: 0.0, ..Settings::default() };
-        let c = s.curve();
-        assert_eq!((c[126], c[129]), (0, 255));
-    }
-}
+#[path = "params_tests.rs"]
+mod tests;
