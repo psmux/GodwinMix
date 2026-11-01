@@ -9,7 +9,7 @@
 //! not applied yet.
 
 mod params;
-mod tables;
+pub mod tables;
 #[cfg(test)]
 mod tests;
 

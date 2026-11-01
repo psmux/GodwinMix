@@ -60,6 +60,7 @@ pub mod hls;
 pub mod hooks;
 pub mod inherit;
 pub mod input;
+pub mod lut;
 pub mod media;
 pub mod media_org;
 pub mod mixer;

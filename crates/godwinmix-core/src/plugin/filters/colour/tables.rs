@@ -28,32 +28,42 @@ fn byte(v: f64) -> u8 {
 }
 
 fn luma(s: &Settings) -> Box<[u8; 256]> {
-    // OBS's own curves: a negative gamma darkens, a positive one lightens.
-    let gamma = if s.gamma < 0.0 { 1.0 - s.gamma } else { 1.0 / (1.0 + s.gamma) };
-    let contrast = if s.contrast < 0.0 { 1.0 / (1.0 - s.contrast) } else { 1.0 + s.contrast };
     let mut out = Box::new([0u8; 256]);
     for (i, o) in out.iter_mut().enumerate() {
-        let y = ((i as f64 - 16.0) / 219.0).clamp(0.0, 1.0);
-        let y = y.powf(gamma);
-        let y = (y - 0.5) * contrast + 0.5 + s.brightness;
-        *o = byte(16.0 + y.clamp(0.0, 1.0) * 219.0);
+        *o = byte(luma_value(s, i as f64));
     }
     out
 }
 
+/// One luma value, 0 to 255, through gamma, contrast and brightness. The
+/// LUT filter bakes this into its own table, so both agree.
+pub fn luma_value(s: &Settings, y: f64) -> f64 {
+    // OBS's own curves: a negative gamma darkens, a positive one lightens.
+    let gamma = if s.gamma < 0.0 { 1.0 - s.gamma } else { 1.0 / (1.0 + s.gamma) };
+    let contrast = if s.contrast < 0.0 { 1.0 / (1.0 - s.contrast) } else { 1.0 + s.contrast };
+    let y = ((y - 16.0) / 219.0).clamp(0.0, 1.0);
+    let y = y.powf(gamma);
+    let y = (y - 0.5) * contrast + 0.5 + s.brightness;
+    16.0 + y.clamp(0.0, 1.0) * 219.0
+}
+
 fn chroma(s: &Settings) -> Vec<[u8; 2]> {
-    let (sin, cos) = s.hue_shift.to_radians().sin_cos();
-    let scale = 1.0 + s.saturation;
     let mut out = vec![[128u8; 2]; 65536];
     for u in 0..256usize {
         for v in 0..256usize {
-            let (cu, cv) = (u as f64 - 128.0, v as f64 - 128.0);
-            let ru = (cu * cos - cv * sin) * scale;
-            let rv = (cu * sin + cv * cos) * scale;
-            out[u << 8 | v] = [byte(128.0 + ru), byte(128.0 + rv)];
+            let (ru, rv) = chroma_value(s, u as f64, v as f64);
+            out[u << 8 | v] = [byte(ru), byte(rv)];
         }
     }
     out
+}
+
+/// One chroma pair, 0 to 255, turned by the hue and scaled by the saturation.
+pub fn chroma_value(s: &Settings, u: f64, v: f64) -> (f64, f64) {
+    let (sin, cos) = s.hue_shift.to_radians().sin_cos();
+    let scale = 1.0 + s.saturation;
+    let (cu, cv) = (u - 128.0, v - 128.0);
+    (128.0 + (cu * cos - cv * sin) * scale, 128.0 + (cu * sin + cv * cos) * scale)
 }
 
 /// Run the tables over one I420 frame's planes, in place.
