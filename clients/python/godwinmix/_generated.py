@@ -2757,6 +2757,101 @@ class LookRequest(TypedDict, total=False):
     # Percent of the width left on each side, 0 to 30.
     mirror: Optional[bool]
 
+class LutEntry(TypedDict, total=False):
+    """One LUT the library has."""
+
+    about: str
+    # For a built in, what it is for.
+    group: str
+    # `camera` for a log to Rec.709 conversion, `look` for a built in grade, `imported` for one brought in with `lut.import`.
+    name: str
+    # The slug a filter names it by: `lut = "teal-orange"`.
+    size: int
+    # Points a side of its cube, or the length of a 1D table.
+    title: str
+
+class LutImportRequest(TypedDict, total=False):
+    """`lut.import`: a file on the mixer's machine."""
+
+    name: Optional[str]
+    # The slug to keep it under. Taken from the file name when absent.
+    path: str
+    # An absolute path, or a name in the media library (where `media.upload` puts a file): a `.cube`, a `.3dl` or a `.png`.
+    title: Optional[str]
+    # What the UI calls it. The file's own title, or its name, when absent.
+
+class LutImported(TypedDict, total=False):
+    lut: LutEntry
+
+class LutList(TypedDict, total=False):
+    errors: List[str]
+    # Files in the library that would not read, each with the reason.
+    formats: List[str]
+    # What `lut.import` reads.
+    luts: List[LutEntry]
+    presets: List[LutPreset]
+
+class LutListRequest(TypedDict, total=False):
+    """`lut.list`."""
+
+    group: Optional[str]
+    # `camera`, `look` or `imported` to see only those.
+
+class LutNameRequest(TypedDict, total=False):
+    """`lut.remove` and `lut.preset.remove`."""
+
+    name: str
+
+class LutPreset(TypedDict, total=False):
+    """A saved look: a LUT, how much of it, and a colour correction before it. Anything left out is the filter's default."""
+
+    amount: Optional[float]
+    # 0 to 1.
+    brightness: Optional[float]
+    # -1 to 1.
+    contrast: Optional[float]
+    # -4 to 4.
+    gamma: Optional[float]
+    # -3 to 3.
+    hue_shift: Optional[float]
+    # -180 to 180.
+    lut: Optional[str]
+    # The LUT, by name.
+    name: str
+    # A slug, made from what is given: "Church Warm" is kept as `church-warm`.
+    saturation: Optional[float]
+    # -1 to 5.
+    title: str
+
+class LutPreview(TypedDict, total=False):
+    image: str
+    # A JPEG as a data URL, ready for an `<img src>`.
+    kind: str
+    # `lut` or `preset`.
+    name: str
+    # The LUT or preset name.
+
+class LutPreviewRequest(TypedDict, total=False):
+    """`lut.preview`: small pictures of looks, on a source or on a test card."""
+
+    amount: Optional[float]
+    # The amount each LUT is shown at, 0 to 1. 1 when absent.
+    luts: Optional[List[str]]
+    # LUT names. Every LUT in the library when absent.
+    presets: List[str]
+    # Preset names, previewed after the LUTs.
+    source: Optional[str]
+    # The source to show them on. A test card of skin, sky, foliage and greys when absent or when the source has no picture yet.
+    width: Optional[int]
+    # Width of each picture in pixels, 64 to 640. 240 when absent.
+
+class LutPreviews(TypedDict, total=False):
+    original: str
+    # The picture with no look, to compare against.
+    previews: List[LutPreview]
+    source: Optional[str]
+    # The source the pictures show, or absent for the test card.
+
 class MachineStatus(TypedDict, total=False):
     """`machine.status`'s answer: the box, not one process."""
 
@@ -5650,6 +5745,12 @@ METHODS = (
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
+    {"name": "lut.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/lut/import"), "summary": "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library."},
+    {"name": "lut.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/lut/list"), "summary": 'Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.'},
+    {"name": "lut.preset.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/lut/preset/remove"), "summary": 'Delete a saved preset.'},
+    {"name": "lut.preset.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/lut/preset/save"), "summary": 'Save a look under a name: a LUT, how much of it, and a colour correction before it.'},
+    {"name": "lut.preview", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/lut/preview"), "summary": 'Small JPEG pictures of looks on a source, or on a test card, for a picker.'},
+    {"name": "lut.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/lut/remove"), "summary": 'Delete an imported LUT. The built in ones cannot be deleted.'},
     {"name": "machine.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/machine/status"), "summary": 'The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.'},
     {"name": "media.convert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/convert"), "summary": 'Transcode a library file to a web safe copy, in the background.'},
     {"name": "media.folder.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/folder/add"), "summary": 'Make a folder in the media library, inside another when the name has a / in it.'},
@@ -7399,6 +7500,108 @@ class GeneratedMethods:
         if target is not None:
             params["target"] = target
         return await self._call("log.set", params)
+
+    async def lut_import(
+        self,
+        path: str,
+        *,
+        name: Optional[str] = None,
+        title: Optional[str] = None,
+    ) -> LutImported:
+        """Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library."""
+        params: Dict[str, Any] = {}
+        params["path"] = path
+        if name is not None:
+            params["name"] = name
+        if title is not None:
+            params["title"] = title
+        return await self._call("lut.import", params)
+
+    async def lut_list(
+        self,
+        *,
+        group: Optional[str] = None,
+    ) -> LutList:
+        """Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets."""
+        params: Dict[str, Any] = {}
+        if group is not None:
+            params["group"] = group
+        return await self._call("lut.list", params)
+
+    async def lut_preset_remove(
+        self,
+        name: str,
+    ) -> Dict[str, Any]:
+        """Delete a saved preset."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("lut.preset.remove", params)
+
+    async def lut_preset_save(
+        self,
+        name: str,
+        *,
+        amount: Optional[float] = None,
+        brightness: Optional[float] = None,
+        contrast: Optional[float] = None,
+        gamma: Optional[float] = None,
+        hue_shift: Optional[float] = None,
+        lut: Optional[str] = None,
+        saturation: Optional[float] = None,
+        title: Optional[str] = None,
+    ) -> LutPreset:
+        """Save a look under a name: a LUT, how much of it, and a colour correction before it."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if amount is not None:
+            params["amount"] = amount
+        if brightness is not None:
+            params["brightness"] = brightness
+        if contrast is not None:
+            params["contrast"] = contrast
+        if gamma is not None:
+            params["gamma"] = gamma
+        if hue_shift is not None:
+            params["hue_shift"] = hue_shift
+        if lut is not None:
+            params["lut"] = lut
+        if saturation is not None:
+            params["saturation"] = saturation
+        if title is not None:
+            params["title"] = title
+        return await self._call("lut.preset.save", params)
+
+    async def lut_preview(
+        self,
+        *,
+        amount: Optional[float] = None,
+        luts: Optional[List[str]] = None,
+        presets: Optional[List[str]] = None,
+        source: Optional[str] = None,
+        width: Optional[int] = None,
+    ) -> LutPreviews:
+        """Small JPEG pictures of looks on a source, or on a test card, for a picker."""
+        params: Dict[str, Any] = {}
+        if amount is not None:
+            params["amount"] = amount
+        if luts is not None:
+            params["luts"] = luts
+        if presets is not None:
+            params["presets"] = presets
+        if source is not None:
+            params["source"] = source
+        if width is not None:
+            params["width"] = width
+        return await self._call("lut.preview", params)
+
+    async def lut_remove(
+        self,
+        name: str,
+    ) -> Dict[str, Any]:
+        """Delete an imported LUT. The built in ones cannot be deleted."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("lut.remove", params)
 
     async def machine_status(
         self,
