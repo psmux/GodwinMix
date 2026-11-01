@@ -94,3 +94,49 @@
 .lut-tab.on {
   font-weight: 600;
 }
+
+.lut-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--dim, inherit);
+}
+
+.lut-note.warn {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warn, #d9a300);
+  color: var(--text, inherit);
+}
+
+/* The white balance tracks show where each end takes the picture. */
+.lut-white input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 4px;
+}
+
+.lut-warmth input[type="range"] {
+  background: linear-gradient(90deg, #4f8bff, #d8d8d8 50%, #ff9a3c);
+}
+
+.lut-tint input[type="range"] {
+  background: linear-gradient(90deg, #3fbf5f, #d8d8d8 50%, #e05ad8);
+}
+
+.lut-white input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+}
+
+.lut-white input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+}

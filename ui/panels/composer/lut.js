@@ -14,6 +14,14 @@ import { withShow } from "../../client/transport-rpc.js";
 import { withParam } from "./key.js";
 import { SLIDERS as COLOUR } from "./colour.js";
 
+/** The white balance sliders: param, label, and the class that colours the track. */
+export const WHITE = [
+  ["warmth", "Warmth", "lut-warmth"],
+  ["tint", "Tint", "lut-tint"],
+];
+
+const signed = (v) => (v > 0 ? `+${Math.round(v * 100)}` : String(Math.round(v * 100)));
+
 /** The tabs: which LUT group each shows, and what it is called. */
 export const TABS = [
   ["look", "Looks"],
@@ -64,6 +72,7 @@ export function lutEditor(o) {
   let library = { luts: [], presets: [] };
   let pictures = new Map();
   let tab = "look";
+  let logLike = null;
   let timer = null;
   const send = (now) => {
     clearTimeout(timer);
@@ -80,6 +89,17 @@ export function lutEditor(o) {
     params = withParam(params, "amount", v);
     send(false);
   }, (v) => `${Math.round(v * 100)}%`);
+
+  // White balance first, since a face too red or too green is the commonest
+  // thing to fix. Each slider's track shows the colour it moves towards.
+  const white = WHITE.map(([key, text, cls]) => {
+    const row = slider(key, text, typeof params[key] === "number" ? params[key] : 0, -1, 1, 0.01, (v) => {
+      params = withParam(params, key, v);
+      send(false);
+    }, signed);
+    row.classList.add("lut-white", cls);
+    return row;
+  });
 
   const adjust = el("details.lut-adjust", {}, [
     el("summary.sm", { text: "Adjust brightness, contrast and colour" }),
@@ -112,7 +132,7 @@ export function lutEditor(o) {
     if (kind === "preset") {
       const p = library.presets.find((x) => x.name === name) || {};
       params = { preset: name, lut: p.lut || "", amount: typeof p.amount === "number" ? p.amount : 1 };
-      for (const [key] of COLOUR) params[key] = typeof p[key] === "number" ? p[key] : 0;
+      for (const key of [...WHITE.map((w) => w[0]), ...COLOUR.map((c) => c[0])]) params[key] = typeof p[key] === "number" ? p[key] : 0;
     } else {
       params = withParam(withParam(params, "lut", name), "preset", "");
     }
@@ -123,7 +143,7 @@ export function lutEditor(o) {
 
   /** Every slider to what the params now say, after a preset moved them. */
   function sync() {
-    for (const input of [amount, adjust].flatMap((n) => [...n.querySelectorAll("input[data-key]")])) {
+    for (const input of [amount, ...white, adjust].flatMap((n) => [...n.querySelectorAll("input[data-key]")])) {
       const key = input.dataset.key;
       input.show(typeof params[key] === "number" ? params[key] : key === "amount" ? 1 : 0);
     }
@@ -150,6 +170,7 @@ export function lutEditor(o) {
       for (const p of library.presets) grid.appendChild(card(p.name, p.title || p.name, "preset", presetAbout(p)));
       if (!library.presets.length) grid.appendChild(el("p.sm.dim.lut-empty", { text: "No presets yet. Pick a look, set the amount and colour, then Save as preset." }));
     } else {
+      if (tab === "camera") grid.appendChild(el("p.sm.lut-note" + (logLike === false ? ".warn" : ""), { text: cameraNote(logLike) }));
       for (const l of library.luts.filter((x) => x.group === tab)) grid.appendChild(card(l.name, l.title, "lut", l.about));
       if (tab === "imported" && !library.luts.some((l) => l.group === "imported")) {
         grid.appendChild(el("p.sm.dim.lut-empty", { text: "Drop a .cube, .3dl or .png LUT here, or press Import." }));
@@ -165,6 +186,7 @@ export function lutEditor(o) {
       draw();
       const shot = await o.client.call("lut.preview", { source: o.source, width: 200, presets: library.presets.map((p) => p.name) });
       pictures = new Map([["lut:", shot.original], ...shot.previews.map((p) => [`${p.kind}:${p.name}`, p.image])]);
+      logLike = typeof shot.log_like === "boolean" ? shot.log_like : null;
       status.textContent = shot.source ? `Shown on ${shot.source}` : "Shown on a test card";
       draw();
     } catch (e) {
@@ -206,7 +228,7 @@ export function lutEditor(o) {
   async function savePreset() {
     const title = nameField.value.trim();
     if (!title) return nameField.focus();
-    const keep = Object.fromEntries(["lut", "amount", ...COLOUR.map((c) => c[0])].filter((k) => params[k] !== undefined && params[k] !== "").map((k) => [k, params[k]]));
+    const keep = Object.fromEntries(["lut", "amount", ...WHITE.map((w) => w[0]), ...COLOUR.map((c) => c[0])].filter((k) => params[k] !== undefined && params[k] !== "").map((k) => [k, params[k]]));
     try {
       const saved = await o.client.call("lut.preset.save", Object.assign({ name: title, title }, keep));
       naming.hidden = true;
@@ -224,6 +246,7 @@ export function lutEditor(o) {
     tabs,
     grid,
     amount,
+    ...white,
     adjust,
     el("div.row", {}, [save, el("button.btn.sm", { text: "Import LUT", title: "A .cube, .3dl or .png LUT", onclick: () => picker.click() }), picker]),
     naming,
@@ -241,6 +264,14 @@ export function lutEditor(o) {
   });
   load();
   return root;
+}
+
+/** What the Camera log tab says above its pictures. */
+export function cameraNote(logLike) {
+  if (logLike === false) {
+    return "This camera does not look like log. These conversions are for a camera set to S-Log, V-Log, C-Log, LogC, F-Log, N-Log or HLG; on a normal picture they make faces bright and red. Use Looks instead.";
+  }
+  return "Pick the one your camera records in. Each turns a flat log picture into a normal one.";
 }
 
 function presetAbout(p) {

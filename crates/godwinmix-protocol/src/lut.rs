@@ -40,6 +40,12 @@ pub struct LutPreset {
     /// 0 to 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub amount: Option<f64>,
+    /// -1 cooler to 1 warmer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warmth: Option<f64>,
+    /// -1 greener to 1 more magenta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<f64>,
     /// -1 to 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brightness: Option<f64>,
@@ -139,5 +145,10 @@ pub struct LutPreviews {
     pub source: Option<String>,
     /// The picture with no look, to compare against.
     pub original: String,
+    /// For a source, whether its picture looks like a log recording (flat,
+    /// grey, no deep blacks). The camera conversions are for those only: on
+    /// a normal camera they push skin bright and red.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub log_like: Option<bool>,
     pub previews: Vec<LutPreview>,
 }
