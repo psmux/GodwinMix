@@ -84,6 +84,12 @@ Under the cutout in the composer, or with `scene.item.filter.set` on the item:
   whatever the model says. A lamp or a doorway the model takes for part of
   the person goes this way.
 
+The defaults use the camera picture to refine the edge automatically, and
+remove small detached specks and small holes. No extra control is needed.
+The default edge position is 0.6, with softness 0.2. Lower the position if
+fine hair disappears. Larger room patches attached to the silhouette can
+still survive, especially where their brightness resembles the hair.
+
 Every setting is in the [cutout reference](../reference/cutout.md).
 
 ## Over the API, or from an agent
@@ -167,7 +173,10 @@ missing hair, and the filter does not reconstruct foreground colours already
 mixed with the old background.
 
 For a repeatable CPU comparison, the `matte_eval` core example accepts packed
-I420 frames, an output file, width, height and `fast` or `fine`. It writes the
-person over blue and reports sampling, inference, smoothing and alpha cost.
+I420 frames, an output file, width, height and `fast` or `fine`. Pass a final argument naming one packed I420 background frame at the same
+canvas size. It writes the person over that picture and reports total cost
+and refinement cost separately. Refinement includes component cleanup and
+guided alpha; total cost also includes sampling, inference and smoothing.
+File I/O and compositing are outside the timers.
 It processes every frame in order, so it shows edge quality rather than the
 extra mask delay of the live worker.
