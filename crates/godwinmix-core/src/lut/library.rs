@@ -80,8 +80,10 @@ fn header(path: &Path) -> Result<(String, usize)> {
 
 /// Every LUT read so far, by file and when it was written, so moving an
 /// amount slider does not read a 65 point file again.
-fn cache() -> &'static Mutex<HashMap<PathBuf, (SystemTime, Arc<Lut>)>> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, (SystemTime, Arc<Lut>)>>> = OnceLock::new();
+type Cache = Mutex<HashMap<PathBuf, (SystemTime, Arc<Lut>)>>;
+
+fn cache() -> &'static Cache {
+    static CACHE: OnceLock<Cache> = OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
