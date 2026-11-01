@@ -14,7 +14,7 @@ import { el, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { previewUrl } from "../graphics/model.js";
-import { tileGroup, step, backgrounds } from "./green-screen-tiles.js";
+import { tileGroup, step, backgrounds, people } from "./green-screen-tiles.js";
 
 export { backgrounds };
 
@@ -82,8 +82,7 @@ export async function openGreenScreen(opts) {
   const [media, gallery] = await Promise.all([listed("media.list", {}), listed("gallery.list", { limit: 500 })]);
   const sources = client.state.sources || [];
   const picture = (id) => (client.snapshotUrl ? `${client.snapshotUrl(id, 240)}&force=true` : undefined);
-  const people = [...sources].sort((a, b) => (b.id === likelyPresenter(sources)) - (a.id === likelyPresenter(sources)));
-  const presenter = tileGroup("Presenter", people.map((s) => ({ value: s.id, label: s.name || s.id, img: picture(s.id) })), likelyPresenter(sources));
+  const presenter = tileGroup("Presenter", people(sources, likelyPresenter(sources)).map((s) => ({ value: s.id, label: s.name || s.id, img: picture(s.id) })), likelyPresenter(sources));
   const screen = tileGroup("Behind the presenter", SCREENS.map(([value, label, swatch]) => ({ value, label, swatch, note: value === "none" ? "Cut out automatically" : "Keyed out" })), "none");
   const options = backgrounds(client, gallery, media);
   const background = tileGroup("Background", options, options[0] ? options[0].value : "");

@@ -58,6 +58,15 @@ export function tileGroup(label, options, chosen, change) {
   return group;
 }
 
+/** Sources that could show a person: not a picture, a page, a text or a
+ * test pattern. Every source when none looks like one. */
+export function people(sources, first) {
+  const still = /image|html|template|text|lyrics|slides|browser|colou?r|test|ticker|clock/i;
+  const live = (sources || []).filter((s) => !still.test(`${s.type || ""} ${s.uri || ""}`));
+  const list = live.length ? live : sources || [];
+  return [...list].sort((a, b) => (b.id === first) - (a.id === first));
+}
+
 /** Two letters for a tile with no picture: "Studio camera" is "SC". */
 export function initials(text) {
   const words = String(text || "?").replace(/\.[a-z0-9]+$/i, "").split(/[\s._-]+/).filter(Boolean);
