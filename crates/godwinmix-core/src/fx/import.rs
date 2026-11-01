@@ -39,7 +39,7 @@ pub fn import(root: &Path, media: &Path, req: &FxImportRequest) -> Result<FxImpo
 }
 
 /// An absolute path, or one inside the media folder.
-fn locate(media: &Path, asked: &str) -> Result<PathBuf> {
+pub fn locate(media: &Path, asked: &str) -> Result<PathBuf> {
     let p = Path::new(asked.trim());
     let path = if p.is_absolute() {
         p.to_path_buf()

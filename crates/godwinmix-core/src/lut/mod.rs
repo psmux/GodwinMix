@@ -25,6 +25,7 @@ pub mod library;
 pub mod log;
 pub mod looks;
 pub mod png;
+pub mod preview;
 pub mod threedl;
 
 /// The largest cube read: 65 points a side is what Resolve writes at most.
