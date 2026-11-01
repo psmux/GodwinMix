@@ -52,7 +52,7 @@ away and shows under **Imported**.
 ## Save a preset
 
 Pick a look, set the amount, the warmth, the tint and the colour sliders,
-press **Save as preset**, type a name and press **Save**. The preset holds all three, and
+press **Save as preset**, type a name and press **Save**. The preset holds all of them, and
 picking it on another camera gives that camera the same look. Saving under a
 name that already exists replaces it.
 

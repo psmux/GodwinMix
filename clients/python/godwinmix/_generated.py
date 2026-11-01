@@ -2821,7 +2821,11 @@ class LutPreset(TypedDict, total=False):
     # A slug, made from what is given: "Church Warm" is kept as `church-warm`.
     saturation: Optional[float]
     # -1 to 5.
+    tint: Optional[float]
+    # -1 greener to 1 more magenta.
     title: str
+    warmth: Optional[float]
+    # -1 cooler to 1 warmer.
 
 class LutPreview(TypedDict, total=False):
     image: str
@@ -2846,6 +2850,8 @@ class LutPreviewRequest(TypedDict, total=False):
     # Width of each picture in pixels, 64 to 640. 240 when absent.
 
 class LutPreviews(TypedDict, total=False):
+    log_like: Optional[bool]
+    # For a source, whether its picture looks like a log recording (flat, grey, no deep blacks). The camera conversions are for those only: on a normal camera they push skin bright and red.
     original: str
     # The picture with no look, to compare against.
     previews: List[LutPreview]
@@ -7548,7 +7554,9 @@ class GeneratedMethods:
         hue_shift: Optional[float] = None,
         lut: Optional[str] = None,
         saturation: Optional[float] = None,
+        tint: Optional[float] = None,
         title: Optional[str] = None,
+        warmth: Optional[float] = None,
     ) -> LutPreset:
         """Save a look under a name: a LUT, how much of it, and a colour correction before it."""
         params: Dict[str, Any] = {}
@@ -7567,8 +7575,12 @@ class GeneratedMethods:
             params["lut"] = lut
         if saturation is not None:
             params["saturation"] = saturation
+        if tint is not None:
+            params["tint"] = tint
         if title is not None:
             params["title"] = title
+        if warmth is not None:
+            params["warmth"] = warmth
         return await self._call("lut.preset.save", params)
 
     async def lut_preview(

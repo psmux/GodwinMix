@@ -2422,7 +2422,9 @@ export interface LutPreset {
   lut?: string | null;
   name: string;
   saturation?: number | null;
+  tint?: number | null;
   title?: string;
+  warmth?: number | null;
 }
 
 export interface LutPreview {
@@ -2441,6 +2443,7 @@ export interface LutPreviewRequest {
 }
 
 export interface LutPreviews {
+  log_like?: boolean | null;
   original: string;
   previews: LutPreview[];
   source?: string | null;
