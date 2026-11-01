@@ -121,7 +121,7 @@ export function lutEditor(o) {
     clear(tabs);
     for (const [id, text] of TABS) {
       const count = id === "preset" ? library.presets.length : library.luts.filter((l) => l.group === id).length;
-      tabs.appendChild(el("button.chip" + (tab === id ? ".on" : ""), {
+      tabs.appendChild(el("button.btn.sm.lut-tab" + (tab === id ? ".on" : ""), {
         type: "button",
         role: "tab",
         "aria-selected": tab === id ? "true" : "false",
@@ -208,6 +208,7 @@ export function lutEditor(o) {
   }
 
   const root = el("div.col.key-editor.lut-editor", {}, [
+    el("link", { rel: "stylesheet", href: new URL("./lut.css", import.meta.url).href }),
     tabs,
     grid,
     amount,

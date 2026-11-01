@@ -40,7 +40,14 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new("lut.remove", Scope::Operate, "Delete an imported LUT. The built in ones cannot be deleted.", handler(remove))
             .params(schema_of::<LutNameRequest>)
             .destructive()
-            .tool("remove_lut", Tier::Search, "Delete an imported LUT by name. A filter that names it passes the picture through until it is imported again."),
+            .tool(
+                "remove_lut",
+                Tier::Search,
+                "Delete an imported LUT from the mixer's library by its name, as list_luts shows it. \
+                 The built in camera conversions and looks are refused. A lut/filter that names the \
+                 deleted LUT passes its picture through unchanged until one of that name is imported \
+                 again. Example: remove_lut {\"name\": \"kodak\"}.",
+            ),
     );
     reg.register(
         MethodDef::new("lut.preset.save", Scope::Operate, "Save a look under a name: a LUT, how much of it, and a colour correction before it.", handler(preset_save))
@@ -58,7 +65,13 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new("lut.preset.remove", Scope::Operate, "Delete a saved preset.", handler(preset_remove))
             .params(schema_of::<LutNameRequest>)
             .destructive()
-            .tool("remove_lut_preset", Tier::Search, "Delete a saved LUT preset by name."),
+            .tool(
+                "remove_lut_preset",
+                Tier::Search,
+                "Delete a saved look preset by its name, as list_luts shows it under `presets`. A \
+                 lut/filter that names the preset keeps the look it already has on air, and refuses \
+                 the next change that names it. Example: remove_lut_preset {\"name\": \"church-warm\"}.",
+            ),
     );
     reg.register(
         MethodDef::new("lut.preview", Scope::Read, "Small JPEG pictures of looks on a source, or on a test card, for a picker.", handler(preview_looks))

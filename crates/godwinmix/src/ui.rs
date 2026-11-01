@@ -191,6 +191,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
     ("panels/composer/cutout.js", include_str!("../../../ui/panels/composer/cutout.js")),
     ("panels/composer/lut.js", include_str!("../../../ui/panels/composer/lut.js")),
+    ("panels/composer/lut.css", include_str!("../../../ui/panels/composer/lut.css")),
     ("panels/composer/colour.js", include_str!("../../../ui/panels/composer/colour.js")),
     ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),

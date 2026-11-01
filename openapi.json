@@ -9797,6 +9797,304 @@
         },
         "type": "object"
       },
+      "LutEntry": {
+        "description": "One LUT the library has.",
+        "properties": {
+          "about": {
+            "description": "For a built in, what it is for.",
+            "type": "string"
+          },
+          "group": {
+            "description": "`camera` for a log to Rec.709 conversion, `look` for a built in grade,\n`imported` for one brought in with `lut.import`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The slug a filter names it by: `lut = \"teal-orange\"`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Points a side of its cube, or the length of a 1D table.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "group",
+          "size"
+        ],
+        "type": "object"
+      },
+      "LutImportRequest": {
+        "description": "`lut.import`: a file on the mixer's machine.",
+        "properties": {
+          "name": {
+            "description": "The slug to keep it under. Taken from the file name when absent.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "An absolute path, or a name in the media library (where `media.upload`\nputs a file): a `.cube`, a `.3dl` or a `.png`.",
+            "type": "string"
+          },
+          "title": {
+            "description": "What the UI calls it. The file's own title, or its name, when absent.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "LutImported": {
+        "properties": {
+          "lut": {
+            "$ref": "#/components/schemas/LutEntry"
+          }
+        },
+        "required": [
+          "lut"
+        ],
+        "type": "object"
+      },
+      "LutList": {
+        "properties": {
+          "errors": {
+            "description": "Files in the library that would not read, each with the reason.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "formats": {
+            "description": "What `lut.import` reads.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "luts": {
+            "items": {
+              "$ref": "#/components/schemas/LutEntry"
+            },
+            "type": "array"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/LutPreset"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "luts",
+          "presets",
+          "formats"
+        ],
+        "type": "object"
+      },
+      "LutListRequest": {
+        "description": "`lut.list`.",
+        "properties": {
+          "group": {
+            "description": "`camera`, `look` or `imported` to see only those.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "LutNameRequest": {
+        "description": "`lut.remove` and `lut.preset.remove`.",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "LutPreset": {
+        "description": "A saved look: a LUT, how much of it, and a colour correction before it.\nAnything left out is the filter's default.",
+        "properties": {
+          "amount": {
+            "description": "0 to 1.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "brightness": {
+            "description": "-1 to 1.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "contrast": {
+            "description": "-4 to 4.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "gamma": {
+            "description": "-3 to 3.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hue_shift": {
+            "description": "-180 to 180.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lut": {
+            "description": "The LUT, by name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "A slug, made from what is given: \"Church Warm\" is kept as `church-warm`.",
+            "type": "string"
+          },
+          "saturation": {
+            "description": "-1 to 5.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "LutPreview": {
+        "properties": {
+          "image": {
+            "description": "A JPEG as a data URL, ready for an `<img src>`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`lut` or `preset`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The LUT or preset name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "image"
+        ],
+        "type": "object"
+      },
+      "LutPreviewRequest": {
+        "description": "`lut.preview`: small pictures of looks, on a source or on a test card.",
+        "properties": {
+          "amount": {
+            "description": "The amount each LUT is shown at, 0 to 1. 1 when absent.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "luts": {
+            "description": "LUT names. Every LUT in the library when absent.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "presets": {
+            "description": "Preset names, previewed after the LUTs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "The source to show them on. A test card of skin, sky, foliage and\ngreys when absent or when the source has no picture yet.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "width": {
+            "description": "Width of each picture in pixels, 64 to 640. 240 when absent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "LutPreviews": {
+        "properties": {
+          "original": {
+            "description": "The picture with no look, to compare against.",
+            "type": "string"
+          },
+          "previews": {
+            "items": {
+              "$ref": "#/components/schemas/LutPreview"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "The source the pictures show, or absent for the test card.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "original",
+          "previews"
+        ],
+        "type": "object"
+      },
       "MachineStatus": {
         "description": "`machine.status`'s answer: the box, not one process.",
         "properties": {
@@ -21891,6 +22189,224 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/lut/import": {
+      "post": {
+        "description": "JSON-RPC method `lut.import`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutImportRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutImported"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/lut/list": {
+      "get": {
+        "description": "JSON-RPC method `lut.list`. Needs the `read` scope.",
+        "operationId": "lut.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/lut/preset/remove": {
+      "post": {
+        "description": "JSON-RPC method `lut.preset.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.preset.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutNameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a saved preset.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/lut/preset/save": {
+      "post": {
+        "description": "JSON-RPC method `lut.preset.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.preset.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutPreset"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutPreset"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Save a look under a name: a LUT, how much of it, and a colour correction before it.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/lut/preview": {
+      "post": {
+        "description": "JSON-RPC method `lut.preview`. Needs the `read` scope.",
+        "operationId": "lut.preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutPreviewRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutPreviews"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Small JPEG pictures of looks on a source, or on a test card, for a picker.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/lut/remove": {
+      "post": {
+        "description": "JSON-RPC method `lut.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutNameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete an imported LUT. The built in ones cannot be deleted.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/machine/status": {

@@ -16,6 +16,14 @@ import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } fr
 import { motionSection } from "./motion.js";
 import { byPointer } from "../../shell/pointer.js";
 
+/** What a filter's row says, for the built in ones a person adds by name. */
+const SHORT_TITLES = {
+  "chroma/filter": "Chroma key",
+  "color/filter": "Colour",
+  "lut/filter": "Look",
+  "matte/filter": "Background cutout",
+};
+
 export class Inspector {
   /**
    * @param {{client, scenes, catalogue, context: () => object,
@@ -273,7 +281,7 @@ export class Inspector {
       );
       list.appendChild(
         el("div.row", {}, [
-          el("label.inline.grow", {}, [enabled, el("span.sm", { text: filter.name || filter.type })]),
+          el("label.inline.grow", {}, [enabled, el("span.sm", { text: filter.name || SHORT_TITLES[filter.type] || filter.type })]),
           el("button.btn.icon", {
             text: "×",
             title: "Remove this filter",
