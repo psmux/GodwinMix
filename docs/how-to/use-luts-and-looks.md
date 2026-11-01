@@ -13,7 +13,10 @@ as you pick.
 3. The grid shows the camera's own picture through every look. Pick one.
    **None** takes the look off.
 4. Move **Amount** to use less of it. 100% is the whole look.
-5. Open **Adjust brightness, contrast and colour** to correct the picture
+5. **Warmth** and **Tint** set the white balance before the look: a face
+   that is too red wants a little less warmth or a little green tint. Each
+   slider's track shows the colour it moves towards.
+6. Open **Adjust brightness, contrast and colour** to correct the picture
    before the look runs. These are the same sliders as the colour correction.
 
 The tabs sort the looks:
@@ -23,7 +26,9 @@ The tabs sort the looks:
   and day for night.
 * **Camera log** turns a log recording into Rec.709: Sony S-Log3, Panasonic
   V-Log, Canon C-Log3, ARRI LogC3, Fujifilm F-Log, Nikon N-Log, and HLG from
-  a phone or an HDR camera. Pick the one your camera is set to.
+  a phone or an HDR camera. Pick the one your camera is set to. They are for
+  log footage only: on a normal camera they make faces bright and red, and
+  the tab says so when the camera's picture does not look like log.
 * **Imported** holds the LUTs you brought in.
 * **Presets** holds the looks you saved.
 
@@ -46,8 +51,8 @@ away and shows under **Imported**.
 
 ## Save a preset
 
-Pick a look, set the amount and the colour sliders, press **Save as
-preset**, type a name and press **Save**. The preset holds all three, and
+Pick a look, set the amount, the warmth, the tint and the colour sliders,
+press **Save as preset**, type a name and press **Save**. The preset holds all three, and
 picking it on another camera gives that camera the same look. Saving under a
 name that already exists replaces it.
 
@@ -83,6 +88,10 @@ yet. The command that measured it:
 ```sh
 cargo test -p godwinmix-core --release --lib lut::apply::tests::cost -- --ignored --nocapture
 ```
+
+The looks leave skin its colour. Contrast bends brightness, not each colour
+on its own, and Vivid adds colour where there is little of it and none to
+skin, so a face does not turn red the way a plain saturation boost turns it.
 
 The camera conversions are a sound starting point for a live show, with a
 grey card near the middle and highlights that roll off rather than clip.

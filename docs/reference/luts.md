@@ -12,6 +12,8 @@ use them from the page is in [Use LUTs and looks](../how-to/use-luts-and-looks.m
 | `file` | string | none | a LUT file on the mixer's machine, read directly. OBS's `image_path` is read the same way |
 | `preset` | string | none | a saved preset. Its values fill in whatever the params leave out |
 | `amount` | number, 0 to 1 | 1 | how much of the LUT. OBS's `clut_amount` is read the same way |
+| `warmth` | -1 to 1 | 0 | white balance before the LUT: below 0 cooler, above 0 warmer. `temperature` is read the same way |
+| `tint` | -1 to 1 | 0 | white balance before the LUT: below 0 greener, above 0 more magenta |
 | `brightness` | -1 to 1 | 0 | as in `color/filter`, run before the LUT |
 | `contrast` | -4 to 4 | 0 | as above |
 | `gamma` | -3 to 3 | 0 | as above |
@@ -52,7 +54,10 @@ to four cores.
 | `sepia` | look | black and white toned brown |
 | `day-for-night` | look | darker, bluer, less colour |
 
-Each is made in code at 33 points a side. A camera conversion decodes the
+Each is made in code at 33 points a side. Contrast in the looks bends luma
+and moves the three channels together, and Vivid uses vibrance, which adds
+colour where there is little and none to skin tones, so no look but the warm
+ones makes a face redder. A camera conversion decodes the
 maker's log curve to scene linear, converts the gamut to Rec.709 with a
 matrix worked out from its primaries, and maps to the display with a filmic
 curve and a 2.4 gamma.
@@ -84,12 +89,14 @@ saturation = 0.1
 | `lut.list` | read | `group`: `camera`, `look` or `imported`, optional | `luts`, `presets`, `errors`, `formats` |
 | `lut.import` | operate | `path` (absolute, or a name in the media library), `name`, `title` | `lut` |
 | `lut.remove` | operate | `name` | `removed`. A built in is refused |
-| `lut.preset.save` | operate | a preset: `name` and any of `title`, `lut`, `amount` and the five colour settings | the preset as kept |
+| `lut.preset.save` | operate | a preset: `name` and any of `title`, `lut`, `amount`, `warmth`, `tint` and the five colour settings | the preset as kept |
 | `lut.preset.remove` | operate | `name` | `removed` |
-| `lut.preview` | read | `source`, `luts`, `presets`, `amount`, `width` (64 to 640, 240 by default) | `original`, `previews` (each `name`, `kind`, `image` as a JPEG data URL), `source` |
+| `lut.preview` | read | `source`, `luts`, `presets`, `amount`, `width` (64 to 640, 240 by default) | `original`, `previews` (each `name`, `kind`, `image` as a JPEG data URL), `source`, `log_like` |
 
 `lut.preview` grades a still of the source's tile on the mosaic through the
-same table a frame goes through. Without a source, or before the source has a
+same table a frame goes through. `log_like` says whether that still looks
+like a log recording (no deep blacks, no bright whites, little colour), so a
+picker can warn before a camera conversion is put on a normal camera. Without a source, or before the source has a
 picture, it uses a test card, and `source` is left out of the answer.
 
 `POST /api/v1/luts/upload?name=look.cube` takes a LUT file as the body,

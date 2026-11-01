@@ -17,12 +17,18 @@ above them stays in front.
 
 1. In the Scenes panel, press the **▾** beside **New scene** and choose
    **Presenter in front of a new background**.
-2. Pick the **Background** (upload a picture or a clip in the **Media** tab
-   first, or pick a source), the **Presenter** camera and, if you like, a
-   **Foreground** such as a desk: a PNG with a transparent background.
-3. **No screen: cut the person out** is selected already. If you have a
-   green or blue screen, choose that instead.
-4. Press **Make the scene**, and take it like any other scene.
+2. Under **Who is presenting?**, click the camera's picture. A camera, a
+   phone or a feed is picked already.
+3. Under **What is behind them now?**, **An ordinary room** is picked
+   already. Click **A green screen** or **A blue screen** if you have one.
+4. Under **Pick the new background**, click a picture. The gallery's
+   backgrounds and studio sets are there, with their pictures, and **Upload
+   your own** adds a picture or a clip on the spot. A studio set brings its
+   own desk and puts the presenter where the set wants them.
+5. Press **Make the scene**, and take it like any other scene.
+
+**Advanced** holds a **Foreground**, such as a desk in a transparent PNG, and
+the scene's name.
 
 The person stands on the bottom edge, in the middle, at nine tenths of the
 canvas height. Move and size them like any other item.
