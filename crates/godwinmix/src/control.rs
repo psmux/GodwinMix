@@ -22,6 +22,7 @@
 pub mod call;
 mod clip_leave;
 mod fx_rest;
+mod lut_rest;
 pub mod history;
 pub mod hls;
 pub mod hooks;

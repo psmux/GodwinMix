@@ -16,6 +16,14 @@ import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } fr
 import { motionSection } from "./motion.js";
 import { byPointer } from "../../shell/pointer.js";
 
+/** What a filter's row says, for the built in ones a person adds by name. */
+const SHORT_TITLES = {
+  "chroma/filter": "Chroma key",
+  "color/filter": "Colour",
+  "lut/filter": "Look",
+  "matte/filter": "Background cutout",
+};
+
 export class Inspector {
   /**
    * @param {{client, scenes, catalogue, context: () => object,
@@ -273,7 +281,7 @@ export class Inspector {
       );
       list.appendChild(
         el("div.row", {}, [
-          el("label.inline.grow", {}, [enabled, el("span.sm", { text: filter.name || filter.type })]),
+          el("label.inline.grow", {}, [enabled, el("span.sm", { text: filter.name || SHORT_TITLES[filter.type] || filter.type })]),
           el("button.btn.icon", {
             text: "×",
             title: "Remove this filter",
@@ -290,6 +298,10 @@ export class Inspector {
       if (filter.type === "color/filter") {
         const { colourEditor } = await import("./colour.js");
         list.appendChild(colourEditor({ filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
+      }
+      if (filter.type === "lut/filter") {
+        const { lutEditor } = await import("./lut.js");
+        list.appendChild(lutEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, source, set: (ref, params) => api.set(ref, params) }));
       }
       if (filter.type === "matte/filter") {
         const { cutoutEditor } = await import("./cutout.js");

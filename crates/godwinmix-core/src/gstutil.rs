@@ -169,6 +169,23 @@ pub fn make_live_aggregator(factory: &str, name: &str) -> Result<gst::Element> {
     }
 }
 
+/// Keep a hardware decoder away from a still JPEG. On a Mac the core ranks
+/// `vtdec_hw` above everything, and GStreamer 1.28 lets it take
+/// `image/jpeg`, where it reports "no valid frames" for an ordinary JPEG and
+/// the picture never arrives: a gallery card stayed blank and a JPEG
+/// background never reached the canvas. `jpegdec` decodes it in software in
+/// a few milliseconds. For `decodebin` and `uridecodebin` alike.
+pub fn software_jpeg(decode: &gst::Element) {
+    decode.connect("autoplug-select", false, |args| {
+        let caps = args[2].get::<gst::Caps>().ok()?;
+        let factory = args[3].get::<gst::ElementFactory>().ok()?;
+        let jpeg = caps.structure(0).is_some_and(|s| s.name() == "image/jpeg");
+        let hardware = factory.klass().contains("Hardware") || factory.name().starts_with("vtdec");
+        let result = gst::glib::Type::from_name("GstAutoplugSelectResult").and_then(gst::glib::EnumClass::with_type)?;
+        result.to_value(if jpeg && hardware { 2 } else { 0 })
+    });
+}
+
 pub fn capsfilter(name: &str, caps: &gst::Caps) -> Result<gst::Element> {
     let el = make("capsfilter", name)?;
     el.set_property("caps", caps);

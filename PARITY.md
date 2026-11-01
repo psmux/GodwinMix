@@ -43,7 +43,8 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Multiview layouts, and multiview out over NDI or to a screen | one fixed mosaic in the browser | built in | |
 | Vertical and horizontal from one show | a second show sharing the cameras | built in, a second canvas | |
 | Colour correction: brightness, contrast, gamma, saturation, hue | the OBS names were imported and did nothing | built in, `plugin/filters/colour/` | done in 0.3.21 |
-| LUTs, sharpen, masks | the OBS names are imported and do nothing | built in filters, GL where there is a GPU | |
+| LUTs: .cube, .3dl and PNG import, presets, camera log conversions and built in looks | OBS Apply LUT was imported and did nothing | built in, `lut/` and `plugin/filters/lut/` | done in 0.3.23 |
+| Sharpen, masks | the OBS names are imported and do nothing | built in filters, GL where there is a GPU | |
 | Virtual camera moves inside a set | 2D sets only | built in | |
 | 29.97 and 59.94 canvases | whole number rates only | built in, `config/rate.rs` | done in 0.3.21 |
 | HDR and 10 bit | 8 bit I420 | built in, behind a canvas setting | |

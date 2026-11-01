@@ -30,6 +30,7 @@ mod shows;
 pub mod config;
 mod filters;
 pub(crate) mod fx;
+mod lut;
 pub(crate) mod gallery;
 pub mod lifecycle;
 pub mod network;
@@ -100,6 +101,7 @@ pub fn registry() -> Registry<Call> {
     media_folders::register(&mut reg);
     templates::register(&mut reg);
     fx::register(&mut reg);
+    lut::register(&mut reg);
     gallery::register(&mut reg);
     tasks::register(&mut reg);
     agent::register(&mut reg);

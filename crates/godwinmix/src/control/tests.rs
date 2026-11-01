@@ -275,6 +275,10 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             // show.remove does, and a removed profile is gone.
             "headend.channel.remove",
             "headend.profile.remove",
+            // A deleted LUT or preset is gone from the disk, and a look that
+            // named it passes the picture through until it is made again.
+            "lut.preset.remove",
+            "lut.remove",
             "media.remove",
             // It restarts the mixer on a new address, as core.restart does.
             "network.share",

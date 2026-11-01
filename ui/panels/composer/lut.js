@@ -1,0 +1,297 @@
+// The controls of a look on one item: a grid of pictures, each the camera as
+// it would be with that look, so a look is picked by seeing it, not by name.
+//
+// The pictures come from `lut.preview`, which grades a still of the item's
+// own camera through the same table the frame goes through (a test card of
+// skin, sky and greys when there is no camera). Every change is
+// `scene.item.filter.set`, applied to the running filter in place, so the
+// programme changes as a look is picked. The composer's own canvas does not
+// run item filters; the grid is where the look is seen here.
+
+import { el, on, clear } from "../../shell/dom.js";
+import { errorToast } from "../../shell/toast.js";
+import { withShow } from "../../client/transport-rpc.js";
+import { withParam } from "./key.js";
+import { SLIDERS as COLOUR } from "./colour.js";
+
+/** The white balance sliders: param, label, and the class that colours the track. */
+export const WHITE = [
+  ["warmth", "Warmth", "lut-warmth"],
+  ["tint", "Tint", "lut-tint"],
+];
+
+const signed = (v) => (v > 0 ? `+${Math.round(v * 100)}` : String(Math.round(v * 100)));
+
+/** The tabs: which LUT group each shows, and what it is called. */
+export const TABS = [
+  ["look", "Looks"],
+  ["camera", "Camera log"],
+  ["imported", "Imported"],
+  ["preset", "Presets"],
+];
+
+export const ACCEPT = ".cube,.3dl,.png";
+
+/** Which tab a filter's params belong on when the editor opens. */
+export function tabFor(params, luts) {
+  if (params.preset) return "preset";
+  const hit = luts.find((l) => l.name === params.lut);
+  return hit ? hit.group : "look";
+}
+
+/** One file to `POST /api/v1/luts/upload`, which imports it. */
+export function upload(client, file) {
+  return new Promise((resolve, reject) => {
+    const t = client.transport || {};
+    const u = withShow(new URL("/api/v1/luts/upload", t.base || location.href));
+    u.searchParams.set("name", file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", u.toString());
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    if (t.token) xhr.setRequestHeader("Authorization", "Bearer " + t.token);
+    xhr.onload = () => (xhr.status < 300 ? resolve(JSON.parse(xhr.responseText || "{}")) : reject(new Error(messageOf(xhr.responseText))));
+    xhr.onerror = () => reject(new Error("the file could not reach the mixer"));
+    xhr.send(file);
+  });
+}
+
+function messageOf(text) {
+  try {
+    const body = JSON.parse(text);
+    return (body.error && body.error.message) || body.message || text;
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * @param {{client: object, filter: object, ref: string|number, source?: string, set: (ref, params) => Promise}} o
+ */
+export function lutEditor(o) {
+  let params = Object.assign({}, o.filter.params || {});
+  let library = { luts: [], presets: [] };
+  let pictures = new Map();
+  let tab = "look";
+  let logLike = null;
+  let timer = null;
+  const send = (now) => {
+    clearTimeout(timer);
+    const go = () => o.set(o.ref, params).catch((e) => errorToast(e, "Look"));
+    if (now) go();
+    else timer = setTimeout(go, 120);
+  };
+
+  const tabs = el("div.lut-tabs", { role: "tablist" });
+  const grid = el("div.lut-grid", { role: "listbox", "aria-label": "Looks" });
+  const status = el("span.sm.faint.grow");
+
+  const amount = slider("amount", "Amount", typeof params.amount === "number" ? params.amount : 1, 0, 1, 0.01, (v) => {
+    params = withParam(params, "amount", v);
+    send(false);
+  }, (v) => `${Math.round(v * 100)}%`);
+
+  // White balance first, since a face too red or too green is the commonest
+  // thing to fix. Each slider's track shows the colour it moves towards.
+  const white = WHITE.map(([key, text, cls]) => {
+    const row = slider(key, text, typeof params[key] === "number" ? params[key] : 0, -1, 1, 0.01, (v) => {
+      params = withParam(params, key, v);
+      send(false);
+    }, signed);
+    row.classList.add("lut-white", cls);
+    return row;
+  });
+
+  const adjust = el("details.lut-adjust", {}, [
+    el("summary.sm", { text: "Adjust brightness, contrast and colour" }),
+    ...COLOUR.map(([key, text, min, max, step]) =>
+      slider(key, text, typeof params[key] === "number" ? params[key] : 0, min, max, step, (v) => {
+        params = withParam(params, key, v);
+        send(false);
+      })
+    ),
+  ]);
+
+  function card(name, title, kind, about) {
+    const chosen = kind === "preset" ? params.preset === name : !params.preset && (params.lut || "") === name;
+    const img = pictures.get(`${kind}:${name}`);
+    const pic = img ? el("img", { src: img, alt: "", loading: "lazy", draggable: "false" }) : el("div.lut-pic-wait");
+    const b = el("button.lut-card" + (chosen ? ".on" : ""), {
+      type: "button",
+      role: "option",
+      "aria-selected": chosen ? "true" : "false",
+      title: about || title,
+      onclick: () => pick(name, kind),
+    }, [pic, el("span.lut-name", { text: title })]);
+    return b;
+  }
+
+  // `scene.item.filter.set` merges params, so a key is never just left out:
+  // an empty `preset` or `lut` is how one is taken off, and a preset is sent
+  // with every value it holds so nothing picked before stays under it.
+  function pick(name, kind) {
+    if (kind === "preset") {
+      const p = library.presets.find((x) => x.name === name) || {};
+      params = { preset: name, lut: p.lut || "", amount: typeof p.amount === "number" ? p.amount : 1 };
+      for (const key of [...WHITE.map((w) => w[0]), ...COLOUR.map((c) => c[0])]) params[key] = typeof p[key] === "number" ? p[key] : 0;
+    } else {
+      params = withParam(withParam(params, "lut", name), "preset", "");
+    }
+    send(true);
+    sync();
+    draw();
+  }
+
+  /** Every slider to what the params now say, after a preset moved them. */
+  function sync() {
+    for (const input of [amount, ...white, adjust].flatMap((n) => [...n.querySelectorAll("input[data-key]")])) {
+      const key = input.dataset.key;
+      input.show(typeof params[key] === "number" ? params[key] : key === "amount" ? 1 : 0);
+    }
+  }
+
+  function draw() {
+    clear(tabs);
+    for (const [id, text] of TABS) {
+      const count = id === "preset" ? library.presets.length : library.luts.filter((l) => l.group === id).length;
+      tabs.appendChild(el("button.btn.sm.lut-tab" + (tab === id ? ".on" : ""), {
+        type: "button",
+        role: "tab",
+        "aria-selected": tab === id ? "true" : "false",
+        text: count ? `${text} ${count}` : text,
+        onclick: () => {
+          tab = id;
+          draw();
+        },
+      }));
+    }
+    clear(grid);
+    grid.appendChild(card("", "None", "lut", "No look: the camera as it is"));
+    if (tab === "preset") {
+      for (const p of library.presets) grid.appendChild(card(p.name, p.title || p.name, "preset", presetAbout(p)));
+      if (!library.presets.length) grid.appendChild(el("p.sm.dim.lut-empty", { text: "No presets yet. Pick a look, set the amount and colour, then Save as preset." }));
+    } else {
+      if (tab === "camera") grid.appendChild(el("p.sm.lut-note" + (logLike === false ? ".warn" : ""), { text: cameraNote(logLike) }));
+      for (const l of library.luts.filter((x) => x.group === tab)) grid.appendChild(card(l.name, l.title, "lut", l.about));
+      if (tab === "imported" && !library.luts.some((l) => l.group === "imported")) {
+        grid.appendChild(el("p.sm.dim.lut-empty", { text: "Drop a .cube, .3dl or .png LUT here, or press Import." }));
+      }
+    }
+  }
+
+  async function load() {
+    status.textContent = "Loading looks";
+    try {
+      library = await o.client.call("lut.list", {});
+      tab = tabFor(params, library.luts);
+      draw();
+      const shot = await o.client.call("lut.preview", { source: o.source, width: 200, presets: library.presets.map((p) => p.name) });
+      pictures = new Map([["lut:", shot.original], ...shot.previews.map((p) => [`${p.kind}:${p.name}`, p.image])]);
+      logLike = typeof shot.log_like === "boolean" ? shot.log_like : null;
+      status.textContent = shot.source ? `Shown on ${shot.source}` : "Shown on a test card";
+      draw();
+    } catch (e) {
+      status.textContent = "";
+      errorToast(e, "Looks");
+    }
+  }
+
+  async function importFiles(files) {
+    for (const file of files) {
+      status.textContent = `Importing ${file.name}`;
+      try {
+        const done = await upload(o.client, file);
+        tab = "imported";
+        pick(done.lut.name, "lut");
+      } catch (e) {
+        errorToast(e, "Import LUT");
+      }
+    }
+    await load();
+  }
+
+  const picker = el("input", { type: "file", accept: ACCEPT, multiple: true, hidden: true });
+  on(picker, "change", () => importFiles([...picker.files]));
+  // Naming a preset happens in place: a field and a button under the grid.
+  const nameField = el("input", { type: "text", placeholder: "Name, such as Church warm", "aria-label": "Preset name" });
+  const naming = el("div.row.lut-naming", { hidden: true }, [nameField, el("button.btn.sm.primary", { text: "Save", onclick: () => savePreset() })]);
+  on(nameField, "keydown", (e) => {
+    if (e.key === "Enter") savePreset();
+    if (e.key === "Escape") naming.hidden = true;
+  });
+  const save = el("button.btn.sm", {
+    text: "Save as preset",
+    onclick: () => {
+      naming.hidden = !naming.hidden;
+      if (!naming.hidden) nameField.focus();
+    },
+  });
+  async function savePreset() {
+    const title = nameField.value.trim();
+    if (!title) return nameField.focus();
+    const keep = Object.fromEntries(["lut", "amount", ...WHITE.map((w) => w[0]), ...COLOUR.map((c) => c[0])].filter((k) => params[k] !== undefined && params[k] !== "").map((k) => [k, params[k]]));
+    try {
+      const saved = await o.client.call("lut.preset.save", Object.assign({ name: title, title }, keep));
+      naming.hidden = true;
+      nameField.value = "";
+      tab = "preset";
+      pick(saved.name, "preset");
+      await load();
+    } catch (e) {
+      errorToast(e, "Save preset");
+    }
+  }
+
+  const root = el("div.col.key-editor.lut-editor", {}, [
+    el("link", { rel: "stylesheet", href: new URL("./lut.css", import.meta.url).href }),
+    tabs,
+    grid,
+    amount,
+    ...white,
+    adjust,
+    el("div.row", {}, [save, el("button.btn.sm", { text: "Import LUT", title: "A .cube, .3dl or .png LUT", onclick: () => picker.click() }), picker]),
+    naming,
+    el("div.row", {}, [status]),
+  ]);
+  on(root, "dragover", (e) => {
+    e.preventDefault();
+    root.classList.add("drop-into");
+  });
+  on(root, "dragleave", () => root.classList.remove("drop-into"));
+  on(root, "drop", (e) => {
+    e.preventDefault();
+    root.classList.remove("drop-into");
+    importFiles([...(e.dataTransfer?.files || [])]);
+  });
+  load();
+  return root;
+}
+
+/** What the Camera log tab says above its pictures. */
+export function cameraNote(logLike) {
+  if (logLike === false) {
+    return "This camera does not look like log. These conversions are for a camera set to S-Log, V-Log, C-Log, LogC, F-Log, N-Log or HLG; on a normal picture they make faces bright and red. Use Looks instead.";
+  }
+  return "Pick the one your camera records in. Each turns a flat log picture into a normal one.";
+}
+
+function presetAbout(p) {
+  const parts = [];
+  if (p.lut) parts.push(p.lut);
+  if (typeof p.amount === "number") parts.push(`${Math.round(p.amount * 100)}%`);
+  return parts.join(", ") || p.title || p.name;
+}
+
+function slider(key, text, value, min, max, step, change, show) {
+  const fmt = show || ((v) => String(v));
+  const input = el("input", { type: "range", min: String(min), max: String(max), step: String(step), value: String(value), "aria-label": text, "data-key": key });
+  input.show = (v) => {
+    input.value = String(v);
+    shown.textContent = fmt(v);
+  };
+  const shown = el("span.sm.faint", { text: fmt(value) });
+  on(input, "input", () => {
+    shown.textContent = fmt(Number(input.value));
+    change(Number(input.value));
+  });
+  return el("label.field", {}, [el("span.lbl", { text }), input, shown]);
+}
