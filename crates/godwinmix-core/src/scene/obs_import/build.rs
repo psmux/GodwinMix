@@ -23,6 +23,7 @@ const FILTER_TYPES: &[(&str, &str)] = &[
     ("color_key_filter_v2", "colorkey/filter"),
     ("color_filter", "color/filter"),
     ("color_filter_v2", "color/filter"),
+    ("clut_filter", "lut/filter"),
     ("crop_filter", "crop/filter"),
     ("sharpness_filter", "sharpen/filter"),
     ("sharpness_filter_v2", "sharpen/filter"),
