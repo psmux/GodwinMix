@@ -16,6 +16,9 @@
 mod clip;
 mod draw;
 mod rgba;
+#[cfg(test)]
+#[path = "set_tests.rs"]
+mod set_tests;
 
 use super::entry::Entry;
 use anyhow::{Context, Result};
