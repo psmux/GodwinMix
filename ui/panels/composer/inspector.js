@@ -325,9 +325,7 @@ export class Inspector {
       picker.value = "";
       if (!type) return;
       try {
-        // The answer is the draft with the new filter on it. Without it the
-        // composer redrew from its own copy, which had no filter yet, so an
-        // added filter seemed to do nothing until the composer was reopened.
+        // Redraw from the answer: the composer's own copy has no new filter.
         this.changed(await api.add(type, {}));
       } catch (e) {
         errorToast(e, "Filter");
