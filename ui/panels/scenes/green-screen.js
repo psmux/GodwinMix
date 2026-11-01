@@ -5,13 +5,18 @@
 // It is a scene like any other, made by `scene.create_from` with the
 // `virtual-set` layout, the same call an agent makes. That call turns library
 // pictures into sources and guesses the key colour from the camera. The
-// dialog asks three things: the picture behind (from the media library or a
-// source), the camera, and an optional picture in front such as a desk.
-// Fetched on open, never before.
+// dialog is three rows of pictures to pick from: the camera, what is behind
+// the person now, and the new background (the gallery's backgrounds, library
+// files, or one uploaded on the spot). Something in front and the scene's
+// name are under Advanced. Fetched on open, never before.
 
-import { el } from "../../shell/dom.js";
+import { el, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
+import { previewUrl } from "../graphics/model.js";
+import { tileGroup, step, backgrounds } from "./green-screen-tiles.js";
+
+export { backgrounds };
 
 /** What a picker offers: library files first, then sources. */
 export function choices(media, sources, opts = {}) {
@@ -42,11 +47,11 @@ export function request(picked) {
   return body;
 }
 
-/** What can be behind the presenter. */
+/** What can be behind the presenter: value, label, and the swatch a tile shows. */
 export const SCREENS = [
-  ["none", "No screen: cut the person out"],
-  ["green", "A green screen"],
-  ["blue", "A blue screen"],
+  ["none", "An ordinary room", "room"],
+  ["green", "A green screen", "green"],
+  ["blue", "A blue screen", "blue"],
 ];
 
 function select(label, options) {
@@ -64,38 +69,75 @@ function field(label, control, hint) {
  */
 export async function openGreenScreen(opts) {
   const { client } = opts;
-  let media = [];
-  try {
-    media = ((await client.call("media.list", {})) || {}).items || [];
-  } catch {
-    // A core with no library still has sources to choose from.
+  if (!document.querySelector('link[href$="/scenes/green-screen.css"]')) {
+    document.head.appendChild(el("link", { rel: "stylesheet", href: new URL("./green-screen.css", import.meta.url).href }));
   }
+  const listed = async (method, params) => {
+    try {
+      return ((await client.call(method, params)) || {}).items || [];
+    } catch {
+      return []; // A core with no library or gallery still has its sources.
+    }
+  };
+  const [media, gallery] = await Promise.all([listed("media.list", {}), listed("gallery.list", { limit: 500 })]);
   const sources = client.state.sources || [];
-  const background = select("Background", choices(media, sources));
-  const presenter = select("Presenter", choices([], sources));
-  presenter.value = likelyPresenter(sources);
+  const picture = (id) => (client.snapshotUrl ? `${client.snapshotUrl(id, 240)}&force=true` : undefined);
+  const people = [...sources].sort((a, b) => (b.id === likelyPresenter(sources)) - (a.id === likelyPresenter(sources)));
+  const presenter = tileGroup("Presenter", people.map((s) => ({ value: s.id, label: s.name || s.id, img: picture(s.id) })), likelyPresenter(sources));
+  const screen = tileGroup("Behind the presenter", SCREENS.map(([value, label, swatch]) => ({ value, label, swatch, note: value === "none" ? "Cut out automatically" : "Keyed out" })), "none");
+  const options = backgrounds(client, gallery, media);
+  const background = tileGroup("Background", options, options[0] ? options[0].value : "");
+  const file = el("input", { type: "file", accept: "image/*,video/*", hidden: true });
+  const uploadTile = el("button.gs-tile.gs-upload", { type: "button", onclick: () => file.click() }, [el("span.gs-face.gs-none", { text: "+" }), el("span.gs-label", { text: "Upload your own" })]);
+  background.insertBefore(uploadTile, background.firstChild);
+  on(file, "change", async () => {
+    const f = file.files[0];
+    if (!f) return;
+    uploadTile.disabled = true;
+    try {
+      const { upload } = await import("../graphics/actions.js");
+      const done = await upload(client, f);
+      const ids = (done.added || []).map((a) => (typeof a === "string" ? a : a.id));
+      const fresh = (await listed("gallery.list", { limit: 500 })).find((i) => ids.includes(i.id) && i.uri);
+      const o = fresh ? { value: fresh.uri, label: fresh.name, img: previewUrl(client, fresh, 240) } : null;
+      if (o) {
+        background.add(o, true);
+        background.insertBefore(uploadTile, background.firstChild);
+        background.value = o.value;
+      }
+    } catch (e) {
+      errorToast(e, "Upload");
+    }
+    uploadTile.disabled = false;
+  });
   const foreground = select("Foreground", choices(media, sources, { none: "Nothing in front" }));
-  const screen = select("Behind the presenter", SCREENS.map(([value, label]) => ({ value, label })));
   const name = el("input", { type: "text", placeholder: "Presenter", "aria-label": "Scene name" });
   const make = el("button.btn.primary", { text: "Make the scene" });
-  const body = el("div.col", {}, [
-    el("p.sm.dim", { text: "The presenter stands in front of the background. With a screen behind them the key colour is found from the camera; with none, a model cuts them out. Fine tune either in the composer." }),
-    field("Behind the presenter", screen, "No screen uses the bundled person cutout. A GPU is optional."),
-    field("Background", background, "A picture or a looping clip. Upload it in the Media tab first."),
-    field("Presenter", presenter, "The camera showing the person. An ordinary room is fine."),
-    field("Foreground", foreground, "A transparent PNG drawn in front of the presenter, such as a desk."),
-    field("Name", name),
+  const body = el("div.col.gs-body", {}, [
+    step(1, "Who is presenting?", "The camera pointed at the person."),
+    presenter,
+    step(2, "What is behind them now?", "Most people have no screen. That is fine."),
+    screen,
+    step(3, "Pick the new background", "A picture, a clip or a studio page."),
+    background,
+    file,
+    el("details.gs-advanced", {}, [el("summary.sm", { text: "Advanced: something in front, and the scene's name" }), field("Foreground", foreground, "A transparent PNG drawn in front of the presenter, such as a desk."), field("Name", name)]),
   ]);
-  const dialog = modal({ title: "New scene: presenter in front of a new background", body, footer: [el("span.grow"), el("button.btn", { text: "Cancel", onclick: () => dialog.close() }), make] });
+  const dialog = modal({ title: "Put a presenter in front of a new background", body, footer: [el("span.grow"), el("button.btn", { text: "Cancel", onclick: () => dialog.close() }), make] });
   make.onclick = async () => {
     make.disabled = true;
     try {
-      const answer = await client.call("scene.create_from", request({
-        background: background.value, presenter: presenter.value, foreground: foreground.value, name: name.value, screen: screen.value,
-      }));
+      // A studio set is placed, which makes the scene with its own desk and
+      // the presenter where the set puts them.
+      const set = background.value.startsWith("set:") ? background.value.slice(4) : null;
+      const answer = set
+        ? await client.call("gallery.place", { id: set, camera: presenter.value, screen: screen.value })
+        : await client.call("scene.create_from", request({
+          background: background.value, presenter: presenter.value, foreground: foreground.value, name: name.value, screen: screen.value,
+        }));
       dialog.close();
       const how = screen.value === "none" ? "the presenter cut out by a model" : answer.key_from === "guessed" ? `keyed on ${answer.key}, found in the camera` : answer.key_from === "given" ? `keyed on ${answer.key}` : "the key finds its colour on air";
-      toast({ text: `Made "${answer.name}", ${how}.` });
+      toast({ text: `Made "${answer.scene || answer.name}", ${how}.` });
       if (opts.scenes && opts.scenes.refresh) await opts.scenes.refresh();
       if (opts.onMade) opts.onMade(answer);
     } catch (e) {
