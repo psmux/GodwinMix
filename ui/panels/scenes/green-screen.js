@@ -35,9 +35,9 @@ export function request(picked) {
 
 /** What can be behind the presenter. */
 export const SCREENS = [
+  ["none", "No screen: cut the person out"],
   ["green", "A green screen"],
   ["blue", "A blue screen"],
-  ["none", "No screen: cut the person out"],
 ];
 
 function select(label, options) {
@@ -70,9 +70,9 @@ export async function openGreenScreen(opts) {
   const make = el("button.btn.primary", { text: "Make the scene" });
   const body = el("div.col", {}, [
     el("p.sm.dim", { text: "The presenter stands in front of the background. With a screen behind them the key colour is found from the camera; with none, a model cuts them out. Fine tune either in the composer." }),
-    field("Behind the presenter", screen, "No screen works anywhere; a screen gives the cleanest edge."),
+    field("Behind the presenter", screen, "No screen uses the bundled person cutout. A GPU is optional."),
     field("Background", background, "A picture or a looping clip. Upload it in the Media tab first."),
-    field("Presenter", presenter, "The camera in front of the green or blue screen."),
+    field("Presenter", presenter, "The camera showing the person. An ordinary room is fine."),
     field("Foreground", foreground, "A transparent PNG drawn in front of the presenter, such as a desk."),
     field("Name", name),
   ]);

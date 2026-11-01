@@ -18,7 +18,7 @@ desktop app, the release binaries and the container image all are.
 | `device` | `auto`, `gpu`, `cpu` | `auto` | Where the model runs. `gpu` is refused on a machine with no GPU accelerator; `auto` falls back to the CPU. |
 | `cutoff` | 0 to 1 | 0.5 | Where the edge sits in the model's answer. |
 | `softness` | 0 to 1 | 0.3 | The width of the ramp across the edge. 0 is a hard edge. |
-| `steady` | 0 to 0.95 | 0.5 | How much of the last mask carries into the next. |
+| `steady` | 0 to 0.95 | 0.5 | How much small changes carry into the next mask. Large changes follow the new mask immediately. |
 | `feather` | 0 to 20 pixels | 0 | Softens the edge inwards by about this many pixels. |
 | `matte_left`, `matte_right`, `matte_top`, `matte_bottom` | 0 to 0.98 each | 0 | The fraction of the picture cut away from each edge, whatever the model says. Each opposite pair must add up to less than 0.98. |
 
@@ -30,11 +30,13 @@ A value outside its range is refused with the field named and its range.
 ONNX Runtime, in order: `ORT_DYLIB_PATH`; beside the mixer (`onnxruntime.dll`
 and `onnxruntime/` on Windows, `Resources/onnxruntime/` in a macOS app,
 `lib/GodwinMix/onnxruntime/` and `lib/godwinmix/` on Linux); a checkout's
-`target/onnxruntime/`; then the system's own search. Version 1.20 or newer.
+`target/onnxruntime/`; on macOS the installed
+`/Applications/GodwinMix.app/Contents/Resources/onnxruntime/`; then the system's own search. Version 1.20 or newer.
 
-Models, in order: `GODWINMIX_MODELS_DIR`; `~/.godwinmix/models`; `models/`
+Models, in order: `GODWINMIX_MODELS_DIR`; `~/.godwinmix/models`; `~/.cache/gmx-models`; `models/`
 beside the mixer; `share/godwinmix/models`; a macOS app's
-`Resources/models`; `lib/GodwinMix/models`; a checkout's `models/`. The first
+`Resources/models`; `lib/GodwinMix/models`; a checkout's `models/`; on macOS the installed
+`/Applications/GodwinMix.app/Contents/Resources/models`. The first
 folder holding the file wins, so a model you add replaces one that shipped.
 
 `dev/fetch-models.sh` puts both in place for a checkout, an installer or a
