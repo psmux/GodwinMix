@@ -2372,6 +2372,80 @@ export interface LookRequest {
   mirror?: boolean | null;
 }
 
+/** One LUT the library has. */
+export interface LutEntry {
+  about?: string;
+  group: string;
+  name: string;
+  size: number;
+  title: string;
+}
+
+/** `lut.import`: a file on the mixer's machine. */
+export interface LutImportRequest {
+  name?: string | null;
+  path: string;
+  title?: string | null;
+}
+
+export interface LutImported {
+  lut: LutEntry;
+}
+
+export interface LutList {
+  errors?: string[];
+  formats: string[];
+  luts: LutEntry[];
+  presets: LutPreset[];
+}
+
+/** `lut.list`. */
+export interface LutListRequest {
+  group?: string | null;
+}
+
+/** `lut.remove` and `lut.preset.remove`. */
+export interface LutNameRequest {
+  name: string;
+}
+
+/**
+ * A saved look: a LUT, how much of it, and a colour correction before it.
+ * Anything left out is the filter's default.
+ */
+export interface LutPreset {
+  amount?: number | null;
+  brightness?: number | null;
+  contrast?: number | null;
+  gamma?: number | null;
+  hue_shift?: number | null;
+  lut?: string | null;
+  name: string;
+  saturation?: number | null;
+  title?: string;
+}
+
+export interface LutPreview {
+  image: string;
+  kind: string;
+  name: string;
+}
+
+/** `lut.preview`: small pictures of looks, on a source or on a test card. */
+export interface LutPreviewRequest {
+  amount?: number | null;
+  luts?: string[] | null;
+  presets?: string[];
+  source?: string | null;
+  width?: number | null;
+}
+
+export interface LutPreviews {
+  original: string;
+  previews: LutPreview[];
+  source?: string | null;
+}
+
 /** `machine.status`'s answer: the box, not one process. */
 export interface MachineStatus {
   cores: number;
@@ -4812,6 +4886,12 @@ export interface MethodParams {
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
+  "lut.import": LutImportRequest;
+  "lut.list": LutListRequest;
+  "lut.preset.remove": LutNameRequest;
+  "lut.preset.save": LutPreset;
+  "lut.preview": LutPreviewRequest;
+  "lut.remove": LutNameRequest;
   "machine.status": Record<string, never>;
   "media.convert": NameRequest;
   "media.folder.add": MediaFolderAddRequest;
@@ -5104,6 +5184,12 @@ export interface MethodResults {
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
+  "lut.import": LutImported;
+  "lut.list": LutList;
+  "lut.preset.remove": Record<string, unknown>;
+  "lut.preset.save": LutPreset;
+  "lut.preview": LutPreviews;
+  "lut.remove": Record<string, unknown>;
   "machine.status": MachineStatus;
   "media.convert": ConversionState;
   "media.folder.add": Record<string, unknown>;
@@ -5454,6 +5540,12 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
+  { name: "lut.import", summary: "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/lut/import" } },
+  { name: "lut.list", summary: "Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/lut/list" } },
+  { name: "lut.preset.remove", summary: "Delete a saved preset.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/lut/preset/remove" } },
+  { name: "lut.preset.save", summary: "Save a look under a name: a LUT, how much of it, and a colour correction before it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/lut/preset/save" } },
+  { name: "lut.preview", summary: "Small JPEG pictures of looks on a source, or on a test card, for a picker.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/lut/preview" } },
+  { name: "lut.remove", summary: "Delete an imported LUT. The built in ones cannot be deleted.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/lut/remove" } },
   { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/machine/status" } },
   { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/convert" } },
   { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/folder/add" } },
@@ -6212,6 +6304,36 @@ export class GeneratedMethods {
   /** Change one instance's or one module's log level while the mixer runs. */
   logSet(params: LogSetRequest): Promise<Record<string, unknown>> {
     return this._call("log.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library. */
+  lutImport(params: LutImportRequest): Promise<LutImported> {
+    return this._call("lut.import", params as unknown as Record<string, unknown>) as Promise<LutImported>;
+  }
+
+  /** Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets. */
+  lutList(params: LutListRequest = {}): Promise<LutList> {
+    return this._call("lut.list", params as unknown as Record<string, unknown>) as Promise<LutList>;
+  }
+
+  /** Delete a saved preset. */
+  lutPresetRemove(params: LutNameRequest): Promise<Record<string, unknown>> {
+    return this._call("lut.preset.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Save a look under a name: a LUT, how much of it, and a colour correction before it. */
+  lutPresetSave(params: LutPreset): Promise<LutPreset> {
+    return this._call("lut.preset.save", params as unknown as Record<string, unknown>) as Promise<LutPreset>;
+  }
+
+  /** Small JPEG pictures of looks on a source, or on a test card, for a picker. */
+  lutPreview(params: LutPreviewRequest = {}): Promise<LutPreviews> {
+    return this._call("lut.preview", params as unknown as Record<string, unknown>) as Promise<LutPreviews>;
+  }
+
+  /** Delete an imported LUT. The built in ones cannot be deleted. */
+  lutRemove(params: LutNameRequest): Promise<Record<string, unknown>> {
+    return this._call("lut.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. */

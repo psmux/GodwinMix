@@ -4395,6 +4395,146 @@ pub struct LookRequest {
     pub mirror: Option<bool>,
 }
 
+/// One LUT the library has.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutEntry {
+    /// For a built in, what it is for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
+    /// `camera` for a log to Rec.709 conversion, `look` for a built in grade,
+    /// `imported` for one brought in with `lut.import`.
+    pub group: String,
+    /// The slug a filter names it by: `lut = "teal-orange"`.
+    pub name: String,
+    /// Points a side of its cube, or the length of a 1D table.
+    pub size: i64,
+    pub title: String,
+}
+
+/// `lut.import`: a file on the mixer's machine.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutImportRequest {
+    /// The slug to keep it under. Taken from the file name when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// An absolute path, or a name in the media library (where `media.upload`
+    /// puts a file): a `.cube`, a `.3dl` or a `.png`.
+    pub path: String,
+    /// What the UI calls it. The file's own title, or its name, when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutImported {
+    pub lut: LutEntry,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutList {
+    /// Files in the library that would not read, each with the reason.
+    pub errors: Vec<String>,
+    /// What `lut.import` reads.
+    pub formats: Vec<String>,
+    pub luts: Vec<LutEntry>,
+    pub presets: Vec<LutPreset>,
+}
+
+/// `lut.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutListRequest {
+    /// `camera`, `look` or `imported` to see only those.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+/// `lut.remove` and `lut.preset.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutNameRequest {
+    pub name: String,
+}
+
+/// A saved look: a LUT, how much of it, and a colour correction before it.
+/// Anything left out is the filter's default.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreset {
+    /// 0 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    /// -1 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<f64>,
+    /// -4 to 4.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contrast: Option<f64>,
+    /// -3 to 3.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamma: Option<f64>,
+    /// -180 to 180.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hue_shift: Option<f64>,
+    /// The LUT, by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lut: Option<String>,
+    /// A slug, made from what is given: "Church Warm" is kept as `church-warm`.
+    pub name: String,
+    /// -1 to 5.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub saturation: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreview {
+    /// A JPEG as a data URL, ready for an `<img src>`.
+    pub image: String,
+    /// `lut` or `preset`.
+    pub kind: String,
+    /// The LUT or preset name.
+    pub name: String,
+}
+
+/// `lut.preview`: small pictures of looks, on a source or on a test card.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreviewRequest {
+    /// The amount each LUT is shown at, 0 to 1. 1 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    /// LUT names. Every LUT in the library when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub luts: Option<Vec<String>>,
+    /// Preset names, previewed after the LUTs.
+    pub presets: Vec<String>,
+    /// The source to show them on. A test card of skin, sky, foliage and
+    /// greys when absent or when the source has no picture yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Width of each picture in pixels, 64 to 640. 240 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreviews {
+    /// The picture with no look, to compare against.
+    pub original: String,
+    pub previews: Vec<LutPreview>,
+    /// The source the pictures show, or absent for the test card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
 /// `machine.status`'s answer: the box, not one process.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8556,7 +8696,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 288] = [
+pub const METHODS: [MethodInfo; 294] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8657,6 +8797,12 @@ pub const METHODS: [MethodInfo; 288] = [
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
+    MethodInfo { name: "lut.import", summary: "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/lut/import")) },
+    MethodInfo { name: "lut.list", summary: "Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/lut/list")) },
+    MethodInfo { name: "lut.preset.remove", summary: "Delete a saved preset.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/lut/preset/remove")) },
+    MethodInfo { name: "lut.preset.save", summary: "Save a look under a name: a LUT, how much of it, and a colour correction before it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/lut/preset/save")) },
+    MethodInfo { name: "lut.preview", summary: "Small JPEG pictures of looks on a source, or on a test card, for a picker.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/lut/preview")) },
+    MethodInfo { name: "lut.remove", summary: "Delete an imported LUT. The built in ones cannot be deleted.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/lut/remove")) },
     MethodInfo { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/machine/status")) },
     MethodInfo { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/convert")) },
     MethodInfo { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/folder/add")) },
@@ -9707,6 +9853,36 @@ impl Client {
     /// Change one instance's or one module's log level while the mixer runs.
     pub async fn log_set(&self, params: &LogSetRequest) -> Result<BTreeMap<String, Value>> {
         self.call("log.set", params).await
+    }
+
+    /// Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.
+    pub async fn lut_import(&self, params: &LutImportRequest) -> Result<LutImported> {
+        self.call("lut.import", params).await
+    }
+
+    /// Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.
+    pub async fn lut_list(&self, params: &LutListRequest) -> Result<LutList> {
+        self.call("lut.list", params).await
+    }
+
+    /// Delete a saved preset.
+    pub async fn lut_preset_remove(&self, params: &LutNameRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("lut.preset.remove", params).await
+    }
+
+    /// Save a look under a name: a LUT, how much of it, and a colour correction before it.
+    pub async fn lut_preset_save(&self, params: &LutPreset) -> Result<LutPreset> {
+        self.call("lut.preset.save", params).await
+    }
+
+    /// Small JPEG pictures of looks on a source, or on a test card, for a picker.
+    pub async fn lut_preview(&self, params: &LutPreviewRequest) -> Result<LutPreviews> {
+        self.call("lut.preview", params).await
+    }
+
+    /// Delete an imported LUT. The built in ones cannot be deleted.
+    pub async fn lut_remove(&self, params: &LutNameRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("lut.remove", params).await
     }
 
     /// The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
