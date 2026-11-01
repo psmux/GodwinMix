@@ -33,6 +33,7 @@ pub fn router(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
         // An fx item's preview strip, and a pack dropped on the picker.
         .route("/api/v1/fx/{name}/preview.jpg", get(super::fx_rest::preview))
         .route("/api/v1/fx/upload", post(super::fx_rest::upload).layer(DefaultBodyLimit::max(max_upload)))
+        .route("/api/v1/luts/upload", post(super::lut_rest::upload).layer(DefaultBodyLimit::max(max_upload)))
         // The gallery's bytes: a card's picture, an item's own files, a
         // file dropped on the gallery, and an export to download.
         .route("/api/v1/gallery/{id}/preview.jpg", get(gallery_preview))
