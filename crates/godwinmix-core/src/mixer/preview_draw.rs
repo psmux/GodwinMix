@@ -48,6 +48,7 @@ impl Mixer {
         let pool = &self.preview_build.pool;
         let needs: Vec<_> = mv.preview_needs(&cells).into_iter().filter(|(k, w)| !pool.has(k, w)).collect();
         if !needs.is_empty() {
+            mv.preview_filters_pending();
             if !self.preview_build.out {
                 self.preview_build.out = true;
                 debug!(chains = needs.len(), "building the preview's filters off the loop");

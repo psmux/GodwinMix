@@ -168,6 +168,10 @@ struct Shared {
     /// The programme's board, so the scene preview can draw a transparent
     /// source's real picture rather than its grey carrier. Set by the mixer.
     overlay: Mutex<Option<Arc<crate::overlay::Board>>>,
+    /// The preview's keyed filters once the armed scene is drawn with every
+    /// filter in place, `None` while it is not yet (a build off the loop, a
+    /// new preview). Read by a still that waits for the filters to draw.
+    preview_filters: Mutex<Option<Vec<crate::plugin::filter::BoardHook>>>,
     /// Stable across rebuilds, so a client holding a receiver keeps it when
     /// the mosaic is torn down and built again at another size.
     frames: broadcast::Sender<Arc<[u8]>>,
@@ -338,6 +342,14 @@ impl MultiviewHandle {
         *self.shared.overlay.lock() = Some(board);
     }
 
+    /// True once the armed scene is drawn in the preview with all its
+    /// filters, and every one drawn on the board (a key, a cutout) has handed
+    /// it a picture. A still of a filtered scene waits for this.
+    pub fn preview_filters_drawn(&self) -> bool {
+        let filters = self.shared.preview_filters.lock();
+        filters.as_ref().is_some_and(|hooks| hooks.iter().all(|h| !h.layer.active() || h.layer.picture().is_some()))
+    }
+
     pub fn detached(cfg: MultiviewConfig, rt: tokio::runtime::Handle) -> Self {
         Self::with_sink(cfg, rt, None)
     }
@@ -353,6 +365,7 @@ impl MultiviewHandle {
             shared: Arc::new(Shared {
                 cfg,
                 overlay: Mutex::new(None),
+                preview_filters: Mutex::new(None),
                 frames,
                 preview_frames,
                 preview_subs: Mutex::new(Vec::new()),
@@ -1030,6 +1043,7 @@ impl Multiview {
             return Ok(());
         }
         self.preview_off();
+        self.preview_filters_pending();
         let mut built =
             preview::ScenePreview::build(&self.pipeline, shape, publish, self.cfg.jpeg_quality as i32)?;
         built.borrow_layers(self.shared.overlay.lock().clone());
@@ -1120,9 +1134,16 @@ impl Multiview {
             .filter_map(|t| t.source.clone().map(|id| (id, t.tee.clone())))
             .collect();
         let Some(preview) = self.preview.as_mut() else { return Ok(()) };
-        preview.apply(canvas, cells, built, |source| {
+        let drawn = preview.apply(canvas, cells, built, |source| {
             tiles.iter().find(|(id, _)| id == source).map(|(_, tee)| tee.clone())
-        })
+        });
+        *self.shared.preview_filters.lock() = Some(preview.keyed_hooks());
+        drawn
+    }
+
+    /// The preview is about to be drawn again, with filters still building.
+    pub fn preview_filters_pending(&self) {
+        *self.shared.preview_filters.lock() = None;
     }
 
     /// What the preview is composited at, or `None` when there is none.

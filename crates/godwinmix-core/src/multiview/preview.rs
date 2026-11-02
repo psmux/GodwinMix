@@ -298,6 +298,11 @@ impl ScenePreview {
         Ok(())
     }
 
+    /// The board hooks of every keyed filter drawn now.
+    pub fn keyed_hooks(&self) -> Vec<crate::plugin::filter::BoardHook> {
+        self.slots.iter().flat_map(|s| s.chain.hooks()).collect()
+    }
+
     /// The cells of `cells` an apply would make new slots for, and so build
     /// new filter chains for: their pictures and their filters, to be built
     /// off the loop. A cell with no filters costs nothing to bind and is not

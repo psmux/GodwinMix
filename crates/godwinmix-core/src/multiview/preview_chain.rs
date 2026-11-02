@@ -145,6 +145,11 @@ impl Chain {
         self.shared_as = key.to_string();
     }
 
+    /// The hooks of the filters drawn by the board.
+    pub fn hooks(&self) -> impl Iterator<Item = crate::plugin::filter::BoardHook> + '_ {
+        self.keyed.iter().map(|(_, h)| h.clone())
+    }
+
     /// The bins, downstream last, for the slot to start and stop with its own.
     pub fn elements(&self) -> Vec<gst::Element> {
         self.filters.iter().map(|f| f.bin.clone()).collect()

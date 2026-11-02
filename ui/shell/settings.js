@@ -63,6 +63,7 @@ export function settings() {
 export function setSetting(key, value) {
   if (key === "producer") settings().studioChosen = true;
   if (key === "multiviewFps") settings().fpsChosen = true;
+  if (key === "afterTake") settings().afterTakeChosen = true;
   settings()[key] = value;
   try {
     localStorage.setItem(KEY, JSON.stringify(state));

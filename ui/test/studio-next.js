@@ -73,6 +73,20 @@ export async function studioNextTests(test, eq, ok) {
     resolve(pane, { scene: 'Camera', preview: 'Two shot' });
     eq(asked, [], 'a Stream Deck took Camera by name');
   });
+  test('a source armed here and taken is forgotten once something else goes on air', () => {
+    const k = Object.assign(kit(null), { supported: true });
+    const pane = { sceneSession: { scenes: k } };
+    document.body.dataset.armed = 'cam-wide';
+    eq(resolve(pane, { program: 'cam-wide', scene: null }).kind, 'source', 'the camera taken stays in Preview');
+    k.live = () => 'two';
+    resolve(pane, { program: 'cam-wide', scene: 'Two shot' });
+    eq(document.body.dataset.armed, undefined, 'a Stream Deck took Two shot and the camera stayed armed');
+    document.body.dataset.armed = 'cam-late';
+    k.live = () => 'wide';
+    resolve(pane, { scene: 'Wide' });
+    eq(document.body.dataset.armed, 'cam-late', 'a camera armed to go next is kept through a take of something else');
+    delete document.body.dataset.armed;
+  });
   test('a source armed here is held until it goes on air itself', () => {
     const s = { scene: 'Two shot', sources: [{ id: 'cam-wide', name: 'Wide camera' }] };
     eq(nextUp(panel, s, kit('two'), 'cam-wide', null, 'swap').kind, 'source');

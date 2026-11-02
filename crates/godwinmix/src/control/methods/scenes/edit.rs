@@ -216,9 +216,15 @@ fn preview(reg: &mut Registry<Call>) {
             "scene.preview.set",
             Scope::Operate,
             "Arm a scene. The armed scene is the preview, and program.take with no argument \
-             takes it.",
+             takes it. after_take sets what is armed after a take, for every client.",
             handler(|call: Call, params| async move {
                 let req: PreviewRequest = call.params(&params)?;
+                if let Some(mode) = req.after_take {
+                    server(&call).set_after_take(mode);
+                    if req.scene.is_none() && req.draft.is_none() {
+                        return body(json!({ "preview": server(&call).armed(), "after_take": mode }));
+                    }
+                }
                 if let Some(draft) = req.draft.as_deref().map(str::trim) {
                     let shown = (!draft.is_empty()).then_some(draft);
                     // Remembered with who asked, so a page that closes
@@ -228,8 +234,9 @@ fn preview(reg: &mut Registry<Call>) {
                     push_preview(&call);
                     return body(json!({ "preview": server(&call).armed(), "draft": shown }));
                 }
+                let by = client(&call);
                 let armed = server(&call)
-                    .arm(req.scene.as_deref())
+                    .arm_for(req.scene.as_deref(), by.as_deref())
                     .map_err(|e| scene_error(&call, e))?;
                 // Nothing is composited for a preview until a client asks for
                 // one with ext.preview, so arming costs one message and a
@@ -392,7 +399,7 @@ async fn still(call: &Call, req: &PreviewFrameRequest) -> Result<Value, RpcError
         .with("retryable", true));
     };
     let filtered = layout.cells.iter().any(|c| !c.filters.is_empty());
-    let jpeg = if filtered { super::settle::settle(&mut sub, jpeg).await } else { jpeg };
+    let jpeg = if filtered { super::settle::settle(&call.app.multiview, &mut sub, jpeg).await } else { jpeg };
     use base64::Engine;
     let shape = call.app.multiview.preview_built();
     Ok(json!({
