@@ -3,7 +3,7 @@
 use super::check::Refusal;
 use super::desk::Desk;
 use super::device::{self, DevicePlayer};
-use super::encode::BusEncoder;
+use super::encode::{BusEncoder, EncoderFailed, Place};
 use super::DeviceFound;
 use gstreamer as gst;
 
@@ -33,7 +33,7 @@ impl Desk {
         };
         let spawned = std::thread::Builder::new().name("bus-device".into()).spawn(move || {
             let sink = device::sink_for(&wanted);
-            notify(DeviceFound { bus, ticket, sink });
+            notify(super::AudioCall::DeviceFound(DeviceFound { bus, ticket, sink }));
         });
         if spawned.is_err() {
             tracing::warn!("no thread to look for a sound card on");
@@ -64,12 +64,23 @@ impl Desk {
     /// The encoded sound of `bus`, for `output`, built if this is the first.
     pub fn encoder_for(&mut self, bus: &str, output: &str) -> Result<gst::Element, Refusal> {
         let pos = self.live.iter().position(|l| l.graph.id == bus).ok_or_else(|| self.no_bus(bus))?;
-        let live = &mut self.live[pos];
-        if live.encoder.is_none() {
-            let enc = BusEncoder::start(&self.pipeline, &live.graph.tee, bus, &self.encode)
-                .map_err(|e| Refusal::Failed(format!("bus {bus} could not be encoded for an output: {e:#}")))?;
-            live.encoder = Some(enc);
+        if self.live[pos].encoder.is_none() {
+            self.tickets += 1;
+            let at = Place {
+                pipeline: &self.pipeline,
+                from: &self.live[pos].graph.tee,
+                bus,
+                ticket: self.tickets,
+                notify: self.notify.clone(),
+            };
+            let enc = BusEncoder::start(at, &self.encode).map_err(|e| {
+                Refusal::Failed(format!(
+                    "bus {bus} could not be encoded for an output, and nothing was added: {e:#}. Add it without `audio` to send the programme's sound instead"
+                ))
+            })?;
+            self.live[pos].encoder = Some(enc);
         }
+        let live = &mut self.live[pos];
         let enc = live.encoder.as_mut().expect("just made");
         if !enc.users.iter().any(|u| u == output) {
             enc.users.push(output.to_string());
@@ -88,6 +99,16 @@ impl Desk {
                 }
             }
         }
+    }
+
+    /// The encoder `failed` names came down, if it is still the bus's: the
+    /// outputs that were on it, which the mixer takes off the air.
+    pub fn encoder_failed(&mut self, failed: &EncoderFailed) -> Vec<String> {
+        let Some(live) = self.live.iter_mut().find(|l| l.graph.id == failed.bus) else { return Vec::new() };
+        let Some(enc) = live.encoder.take_if(|e| e.ticket == failed.ticket) else { return Vec::new() };
+        let users = enc.users.clone();
+        enc.stop();
+        users
     }
 
     /// The raw sound of a bus, for a monitoring tap.
