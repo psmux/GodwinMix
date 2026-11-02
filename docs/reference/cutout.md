@@ -99,6 +99,20 @@ The board draws a cutout in stacking order with every other item. Where
 nothing can draw it (a source's input side, or a programme composited on a
 GPU), the cutout is written into the frame over black.
 
+## In Preview
+
+A cutout on an item of the armed scene is drawn in Preview too, on the
+preview's own copy of the item at thumbnail size, by the preview's board. It
+exists only while somebody watches Preview and that scene is armed.
+
+When the same camera is cut out on air at the same time, with the same
+quality, device and steady settings, the two copies share one model. The
+programme's copy feeds it; the preview's copy only reads the newest mask,
+which fits any frame size because a mask is at the model's size. With the
+scene armed and not on air, the preview's frames feed the model on their own.
+Different edge, softness, feather or matte settings still share, because those
+are laid on per copy. `PREVIEW_COST` 
+
 ## Refusals
 
 | When | The message says |
