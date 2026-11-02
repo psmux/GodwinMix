@@ -30,6 +30,7 @@ mod preview_cells;
 mod shown;
 mod keys;
 pub use keys::KeyOnAir;
+pub use after_take::AfterTake;
 mod stale;
 pub mod find;
 pub mod graphics;
@@ -104,6 +105,8 @@ struct Inner {
     /// has it open, and the client that asked. See `shown.rs`.
     preview_draft: Option<Id>,
     preview_draft_by: Option<String>,
+    /// What Preview holds after a Take. See `after_take`.
+    after_take: AfterTake,
 }
 
 impl SceneServer {
@@ -127,6 +130,7 @@ impl SceneServer {
                 preview: None,
                 preview_draft: None,
                 preview_draft_by: None,
+                after_take: AfterTake::default(),
             }),
             patches: broadcast::channel(PATCH_QUEUE).0,
             seq: AtomicU64::new(0),
@@ -238,17 +242,29 @@ impl SceneServer {
     /// Arm a scene. The armed scene is the preview, and nothing is composited
     /// for it until a client subscribes with `ext.preview`.
     pub fn arm(&self, which: Option<&str>) -> Result<Option<SceneSummary>> {
+        self.arm_for(which, None)
+    }
+
+    /// The same, by `client`. A draft shown in Preview by that client, or by
+    /// nobody known, gives way: arming is that designer's newer instruction.
+    /// A draft another client is showing stays drawn, because a designer is
+    /// looking at it; it ends when they Discard, Apply or leave (`shown.rs`).
+    pub fn arm_for(&self, which: Option<&str>, client: Option<&str>) -> Result<Option<SceneSummary>> {
         let mut inner = self.inner.lock();
         let armed = match which {
             Some(which) => Some(find::scene(&inner.doc, which)?.id),
             None => None,
         };
         inner.preview = armed;
-        // Arming is the newer instruction about what Preview shows, so a
-        // draft shown in its place gives way. A designer whose page closed
-        // without a Discard used to hold Preview on that draft for everyone.
-        inner.preview_draft = None;
-        inner.preview_draft_by = None;
+        let someone_else = match (&inner.preview_draft_by, client) {
+            (Some(by), Some(me)) => by != me,
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
+        if !someone_else {
+            inner.preview_draft = None;
+            inner.preview_draft_by = None;
+        }
         drop(inner);
         Ok(armed.and_then(|id| self.list().into_iter().find(|s| s.id == id)))
     }

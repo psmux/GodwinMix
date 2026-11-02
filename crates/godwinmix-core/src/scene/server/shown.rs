@@ -9,7 +9,8 @@
 //! That hold on Preview is everybody's Preview, so it has to end when the
 //! designer has gone as well as when they press Discard. It ends when the
 //! draft is applied or discarded (the layout then finds no draft), when
-//! anybody arms a scene (`SceneServer::arm`), when anybody asks
+//! the designer arms a scene, or anybody arms one while nobody known is
+//! showing it (`SceneServer::arm_for`), when anybody asks
 //! `scene.preview.set {"draft": ""}`, and when the client that asked leaves
 //! with no other connection left open (`client_left`). The draft itself is
 //! kept: it is a working copy, and the designer can open it again.
@@ -114,6 +115,19 @@ mod tests {
         s.arm(Some("one")).unwrap();
         assert_eq!(s.preview_layout(320, 180).unwrap().cells.len(), 1, "the armed scene is drawn, not the draft");
         assert!(s.draft_shown_by().is_none());
+    }
+
+    /// Another operator arming the next shot does not take Preview off a
+    /// draft a designer is laying out; the designer arming one does.
+    #[test]
+    fn another_operator_arming_leaves_a_designers_draft_shown() {
+        let s = server_with_scene();
+        let draft = s.edit_begin(None, "one", false).unwrap().id.to_string();
+        s.show_draft_for(Some(&draft), Some("laptop")).unwrap();
+        s.arm_for(Some("one"), Some("phone")).unwrap();
+        assert_eq!(s.draft_shown_by().as_deref(), Some("laptop"), "the phone's arm took the designer's draft away");
+        s.arm_for(Some("one"), Some("laptop")).unwrap();
+        assert!(s.draft_shown_by().is_none(), "the designer's own arm leaves the draft shown");
     }
 
     #[test]

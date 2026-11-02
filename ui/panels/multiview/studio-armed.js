@@ -34,10 +34,18 @@ export function resolve(panel, s) {
   const was = panel.onAirKey;
   follow(panel, s, kit);
   const after = settings().afterTake;
-  // A take by name arms the scene taken on the core when Preview was
-  // following the programme (scene/server/after_take.rs), so every page and
-  // the Companion path agree without this page arming anything.
-  if (was !== undefined && was !== panel.onAirKey) delete document.body.dataset.chosen;
+  // The core arms what follows a take by its own after take setting, which
+  // this page's choice sets (shell/after-take.js, scene/server/after_take.rs),
+  // so every page and the Companion path agree without this page arming
+  // anything.
+  if (was !== undefined && was !== panel.onAirKey) {
+    delete document.body.dataset.chosen;
+    // A source armed here and then taken was Preview following the
+    // programme. Once something else is on air it is forgotten, so Preview
+    // follows the programme on, as the core does for scenes; held, it stayed
+    // on that camera for the rest of the show.
+    if (document.body.dataset.armed && was === `source:${document.body.dataset.armed}`) delete document.body.dataset.armed;
+  }
   const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null, after);
   panel.next = next;
   // Kept for whoever reads the old names: the take target and the armed scene.

@@ -3660,6 +3660,8 @@ class PreviewOpenRequest(TypedDict, total=False):
 class PreviewRequest(TypedDict, total=False):
     """`scene.preview.set`."""
 
+    after_take: Union[AfterTake, None]
+    # What Preview holds after a Take, for every client of this core: `same` (the default) keeps the scene just taken, `swap` arms the scene it replaced when the armed scene is taken. `program.take {}` takes what this leaves armed. Sent alone it changes the setting and nothing else; nothing is disarmed.
     draft: Optional[str]
     # A draft from `scene.edit.begin` for the preview to draw in place of the armed scene, which is how a designer sees what it is laying out. What is armed is left as it is, and `scene` is ignored. An empty string goes back to the armed scene; so does applying or discarding the draft.
     scene: Optional[str]
@@ -5427,6 +5429,9 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+# What Preview holds after a Take. See the module.
+AfterTake = Literal['same', 'swap']
+
 # What an alarm is about.
 AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
 
@@ -5884,7 +5889,7 @@ METHODS = (
     {"name": "scene.params.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/params/get"), "summary": "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it."},
     {"name": "scene.params.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/params/set"), "summary": "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it."},
     {"name": "scene.preview.frame", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/preview/frame"), "summary": 'A still of the armed scene as base64 JPEG, the floor every client has.'},
-    {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it.'},
+    {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.'},
     {"name": "scene.redo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/redo"), "summary": 'Put back what your undo took away.'},
     {"name": "scene.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/scenes/{id}"), "summary": 'Delete a scene. What is on air is not touched.'},
     {"name": "scene.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/rename"), "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones."},
@@ -9422,11 +9427,14 @@ class GeneratedMethods:
     async def scene_preview_set(
         self,
         *,
+        after_take: Optional[Union[AfterTake, None]] = None,
         draft: Optional[str] = None,
         scene: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Arm a scene. The armed scene is the preview, and program.take with no argument takes it."""
+        """Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client."""
         params: Dict[str, Any] = {}
+        if after_take is not None:
+            params["after_take"] = after_take
         if draft is not None:
             params["draft"] = draft
         if scene is not None:

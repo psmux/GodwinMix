@@ -108,6 +108,9 @@ export interface AddSourceRequest {
   [key: string]: unknown;
 }
 
+/** What Preview holds after a Take. See the module. */
+export type AfterTake = "same" | "swap";
+
 /** `ext.agent`. `true` takes the default thresholds; an object moves them. */
 export type AgentExt = boolean | {
   black?: number | null;
@@ -3224,6 +3227,7 @@ export interface PreviewOpenRequest {
 
 /** `scene.preview.set`. */
 export interface PreviewRequest {
+  after_take?: AfterTake | null;
   draft?: string | null;
   scene?: string | null;
 }
@@ -5676,7 +5680,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/params/get" } },
   { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
   { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/preview/frame" } },
-  { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
+  { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
   { name: "scene.redo", summary: "Put back what your undo took away.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/redo" } },
   { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/scenes/{id}" } },
   { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/rename" } },
@@ -6974,7 +6978,7 @@ export class GeneratedMethods {
     return this._call("scene.preview.frame", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** Arm a scene. The armed scene is the preview, and program.take with no argument takes it. */
+  /** Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client. */
   scenePreviewSet(params: PreviewRequest = {}): Promise<Record<string, unknown>> {
     return this._call("scene.preview.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
