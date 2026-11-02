@@ -20,6 +20,9 @@ const DEFAULTS = {
   snapshotSecs: 0,
   // Studio mode: Preview beside Programme, and Take between them.
   producer: true,
+  // After Take, Preview keeps the scene just taken ("same"), or shows the
+  // one that was on air before ("swap").
+  afterTake: "same",
   meters: true,
   faders: true,
   lanes: true,

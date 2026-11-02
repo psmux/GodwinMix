@@ -10,6 +10,7 @@
 import { fillNote, sceneNotRunning } from "../scenes/fix-note.js";
 import { sceneKit, armedScene as armedName, follow, nextUp, whyText } from "./studio-next.js";
 import { paintSlots } from "./studio-slots.js";
+import { settings } from "../../shell/settings.js";
 
 export { sceneKit };
 
@@ -32,13 +33,31 @@ export function resolve(panel, s) {
   // the programme, so Preview goes back to suggesting the next shot.
   const was = panel.onAirKey;
   follow(panel, s, kit);
-  if (was !== undefined && was !== panel.onAirKey) delete document.body.dataset.chosen;
-  const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null);
+  const after = settings().afterTake;
+  if (was !== undefined && was !== panel.onAirKey) {
+    delete document.body.dataset.chosen;
+    if (after !== "swap") keepTaken(panel, s, kit, scene);
+  }
+  const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null, after);
   panel.next = next;
   // Kept for whoever reads the old names: the take target and the armed scene.
   panel.armed = next ? next.id : null;
   panel.armedScene = next && next.kind === "scene" && next.why === "armed" ? next.name : null;
   return next;
+}
+
+/**
+ * A take moved the programme: Preview keeps what was taken. A source armed
+ * here gives way, and a scene put on air that is not the armed one (a take by
+ * name, from a Stream Deck or another desk) is armed, so the core draws it
+ * with its filters. Every page in this mode asks for the same thing.
+ */
+function keepTaken(panel, s, kit, armed) {
+  const live = panel.onAirLive;
+  if (document.body.dataset.armed && document.body.dataset.armed !== s.program) delete document.body.dataset.armed;
+  const summary = live && kit ? kit.summary(live) : null;
+  if (!summary || (armed && kit.summary(armed) && kit.summary(armed).id === summary.id)) return;
+  if (panel.client && panel.client.call) panel.client.call("scene.preview.set", { scene: summary.id }).catch(() => {});
 }
 
 /** The pane drawn for what is in preview. */

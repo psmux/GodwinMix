@@ -20,16 +20,16 @@ export async function studioNextTests(test, eq, ok) {
   const panel = {};
   test('with nothing armed and nothing on air, Preview suggests the first scene', () => {
     follow(panel, {}, kit(null));
-    eq(nextUp(panel, {}, kit(null), null), { kind: 'scene', id: 'wide', name: 'Wide', why: 'next' });
+    eq(nextUp(panel, {}, kit(null), null, null, 'swap'), { kind: 'scene', id: 'wide', name: 'Wide', why: 'next' });
   });
   test('an armed scene that is not on air is what Preview holds', () => {
-    eq(nextUp(panel, { preview: 'Two shot', scene: 'Wide' }, kit('wide'), null), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, { preview: 'Two shot', scene: 'Wide' }, kit('wide'), null, null, 'swap'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
   });
   // Somebody else takes Two shot while Wide is on air: an agent, another desk.
   follow(panel, { scene: 'Wide' }, kit('wide'));
   follow(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'));
-  test('a take from anywhere leaves Preview on where the show came from, not on black or the same shot twice', () => {
-    const next = nextUp(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'), null);
+  test('with After Take set to swap, a take leaves Preview on where the show came from', () => {
+    const next = nextUp(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'), null, null, 'swap');
     eq(next, { kind: 'scene', id: 'wide', name: 'Wide', why: 'before' });
     eq(whyText(next), 'Suggested: on air before this');
   });
@@ -37,8 +37,18 @@ export async function studioNextTests(test, eq, ok) {
   // for it, so Preview holds it and Take sends it, rather than a suggestion.
   test('the scene on air, picked on this page, is what Preview holds', () => {
     const s = { scene: 'Two shot', preview: 'Two shot' };
-    eq(nextUp(panel, s, kit('two'), null, 'two'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
-    eq(nextUp(panel, s, kit('two'), null, 'wide').why, 'before', 'a pick of another scene says nothing about this one');
+    eq(nextUp(panel, s, kit('two'), null, 'two', 'swap'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, s, kit('two'), null, 'wide', 'swap').why, 'before', 'a pick of another scene says nothing about this one');
+  });
+  // The default since the owner's ruling: Preview keeps what was just taken.
+  test('by default a take leaves Preview on the scene just taken, as Programme shows it', () => {
+    eq(nextUp(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'), null), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, { scene: 'Two shot' }, kit('two'), null), { kind: 'scene', id: 'two', name: 'Two shot', why: 'live' });
+    eq(whyText({ kind: 'scene', id: 'two', name: 'Two shot', why: 'live' }), '');
+  });
+  test('by default a source taken on its own stays in Preview, and nothing on air shows the first scene', () => {
+    eq(nextUp(panel, { program: 'cam-wide', scene: null, sources: [{ id: 'cam-wide', name: 'Wide camera' }] }, kit(null), null), { kind: 'source', id: 'cam-wide', name: 'Wide camera', why: 'live' });
+    eq(nextUp(panel, {}, kit(null), null).id, 'wide');
   });
   const { resolve } = await import('../panels/multiview/studio-armed.js');
   test('a take forgets the pick made on this page', () => {
@@ -52,13 +62,27 @@ export async function studioNextTests(test, eq, ok) {
     eq(next, { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' }, 'what is armed and not on air is still held');
     delete document.body.dataset.chosen;
   });
+  test('by default a take of a scene that was not armed arms it, so the core draws it with its filters', () => {
+    const k = Object.assign(kit('wide'), { supported: true });
+    const asked = [];
+    const pane = { sceneSession: { scenes: k }, client: { call: async (m, p) => { asked.push([m, p]); } } };
+    resolve(pane, { scene: 'Wide', preview: 'Two shot' });
+    k.live = () => 'cam';
+    resolve(pane, { scene: 'Camera', preview: 'Two shot' });
+    eq(asked, [['scene.preview.set', { scene: 'cam' }]], 'a Stream Deck took Camera by name');
+    k.live = () => 'two';
+    resolve(pane, { scene: 'Two shot', preview: 'Two shot' });
+    eq(asked.length, 1, 'the armed scene taken is armed already; nothing is asked');
+  });
   test('a source armed here is held until it goes on air itself', () => {
     const s = { scene: 'Two shot', sources: [{ id: 'cam-wide', name: 'Wide camera' }] };
-    eq(nextUp(panel, s, kit('two'), 'cam-wide').kind, 'source');
-    eq(nextUp(panel, { program: 'cam-wide', scene: null }, kit(null), 'cam-wide').kind, 'scene');
+    eq(nextUp(panel, s, kit('two'), 'cam-wide', null, 'swap').kind, 'source');
+    eq(nextUp(panel, { program: 'cam-wide', scene: null }, kit(null), 'cam-wide', null, 'swap').kind, 'scene');
+    eq(nextUp(panel, { program: 'cam-wide', scene: null }, kit(null), 'cam-wide').kind, 'source', 'by default it stays once taken');
   });
   test('with no scenes at all there is nothing to suggest', () => {
     const empty = { scenes: () => [], summary: () => null, live: () => null, armed: () => null };
+    eq(nextUp({}, {}, empty, null, null, 'swap'), null);
     eq(nextUp({}, {}, empty, null), null);
   });
 
