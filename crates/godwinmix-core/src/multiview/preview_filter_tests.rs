@@ -288,26 +288,3 @@ device = \"cpu\"";
     assert_eq!(wide, 1, "the wide shot on air and in Preview ran {wide} models, not one");
     assert_eq!(narrow, 1, "the cropped shot on air and in Preview ran {narrow} models, not one");
 }
-
-/// A chain whose second filter will not go in leaves the item drawn clean:
-/// the first filter's bin comes out again and the flip is linked straight to
-/// the pad. It used to leave the slot linked to nothing, so the item fell
-/// out of Preview and the mosaic's bus reported a not linked flow.
-#[tokio::test(flavor = "multi_thread")]
-async fn a_chain_that_fails_halfway_leaves_the_item_drawn_clean() {
-    let _ = gst::init();
-    let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg(&[("cam1", "test://smpte")])).unwrap();
-    mix.start().unwrap();
-    let (mv, preview) = (mix.multiview_handle(), mix.preview_handle());
-    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
-    let grey = filter("color/filter", "saturation = -1.0");
-    preview.set_scene(vec![full("cam1", vec![grey, filter("no-such/filter", "")])]);
-    let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
-    let (bars, last) = until(&mut sub, Duration::from_secs(10), |img| colourful(img) > 0.4).await;
-    let bins = preview_filter_bins(&mv);
-    drop(sub);
-    let _ = handle.send(Command::Shutdown);
-    tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
-    assert!(bars, "the item was not drawn clean: {:?} colourful", last.map(|i| colourful(&i)));
-    assert_eq!(bins, 0, "the filter that did go in was left in the pipeline");
-}

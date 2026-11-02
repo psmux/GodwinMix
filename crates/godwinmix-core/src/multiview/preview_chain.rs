@@ -272,3 +272,7 @@ impl Prebuilt {
         self.ready.is_empty()
     }
 }
+
+#[cfg(test)]
+#[path = "preview_chain_tests.rs"]
+mod tests;
