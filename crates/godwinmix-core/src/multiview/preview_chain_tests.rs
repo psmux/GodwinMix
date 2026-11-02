@@ -8,6 +8,9 @@ use super::*;
 use crate::config::Params;
 use crate::plugin::filter::Filter;
 use crate::plugin::Manifest;
+use crate::caps::CanvasCaps;
+use crate::plugin::filter::FilterSpec;
+use crate::plugin::FilterSide;
 
 /// Builds a bin with a sink and no src, which no link can get through.
 struct NoWayOut;

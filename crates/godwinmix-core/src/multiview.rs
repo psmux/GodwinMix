@@ -53,6 +53,7 @@ mod drawn;
 mod early;
 pub mod preview;
 pub mod preview_chain;
+mod preview_prebuilt;
 mod transparent;
 
 use crate::caps::{CanvasCaps, Grid};
