@@ -15,8 +15,7 @@ class AudioPanel extends HTMLElement {
     this.peak = el('span.num.sm.dim');
     this.list = el('div.audio-channels');
     this.empty = el('p.pad.dim', { text: 'Add a microphone or a source with audio to mix its level here.' });
-    // FX on the Programme row is the programme's own sound filters, the
-    // loudness target among them, which no other row reaches.
+    // The programme's own sound filters, such as a loudness target.
     const fx = el('button.btn.sm', { text: 'FX', 'aria-label': 'Sound filters for the programme',
       onclick: () => import('./chain.js').then(m => m.openChain(this.client, m.PROGRAMME)).catch(e => errorToast(e, 'FX')) });
     this.replaceChildren(el('div.audio-master', {}, [el('strong', { text: 'Programme' }), this.master, this.peak, fx]), this.list, this.empty);

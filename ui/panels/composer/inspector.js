@@ -43,7 +43,10 @@ export class Inspector {
     // and the half typed word with it. The core's echo of their own edit is
     // exactly when that would happen, so the same item with the hand still in
     // it is left alone.
-    if (record && record.id === this.showing && this.el.contains(document.activeElement)) return;
+    // An added or removed filter is drawn although its menu keeps the focus.
+    const restack = this.restack;
+    this.restack = false;
+    if (!restack && record && record.id === this.showing && this.el.contains(document.activeElement)) return;
     clear(this.el);
     if (!record) {
       this.showing = null;
@@ -285,7 +288,7 @@ export class Inspector {
           el("button.btn.icon", {
             text: "×",
             title: "Remove this filter",
-            onclick: () => api.remove(filter.name || filter.type || i).then((a) => this.changed(a)).catch((e) => errorToast(e, "Filter")),
+            onclick: () => api.remove(filter.name || filter.type || i).then((a) => this.changed(a, true)).catch((e) => errorToast(e, "Filter")),
           }),
         ])
       );
@@ -326,7 +329,7 @@ export class Inspector {
       if (!type) return;
       try {
         // Redraw from the answer: the composer's own copy has no new filter.
-        this.changed(await api.add(type, {}));
+        this.changed(await api.add(type, {}), true);
       } catch (e) {
         errorToast(e, "Filter");
       }
@@ -335,7 +338,9 @@ export class Inspector {
     return el("div.col", {}, [el("div.row.pad", {}, [el("strong.sm.grow", { text: "Filters" }), picker]), list]);
   }
 
-  changed(answer) {
+  /** Pass an answer on. `restack` when the list of filters changed. */
+  changed(answer, restack = false) {
+    if (restack) this.restack = true;
     if (this.o.onChanged) this.o.onChanged(answer);
   }
 }
