@@ -305,9 +305,14 @@ impl ScenePreview {
 
     /// Take a branch off a tile's tee and give it a pad on the preview.
     fn bind(&mut self, source: &SourceId, tee: &gst::Element, filters: &[crate::mixer::slots::ItemFilter], canvas: &CanvasCaps) -> Result<usize> {
-        let queue = gstutil::queue_preview(&format!("pv-q-{source}"))?;
-        let crop = gstutil::make("videocrop", &format!("pv-crop-{source}"))?;
-        let flip = gstutil::make("videoflip", &format!("pv-flip-{source}"))?;
+        // Numbered, because one source can be drawn twice, and a slot being
+        // replaced (its item's filters changed) is still there while the new
+        // one is built: two elements of one name and the second is refused.
+        self.serial += 1;
+        let n = self.serial;
+        let queue = gstutil::queue_preview(&format!("pv-q-{source}-{n}"))?;
+        let crop = gstutil::make("videocrop", &format!("pv-crop-{source}-{n}"))?;
+        let flip = gstutil::make("videoflip", &format!("pv-flip-{source}-{n}"))?;
         self.pipeline.add_many([&queue, &crop, &flip]).context("adding a preview slot")?;
         gst::Element::link_many([&queue, &crop, &flip]).context("linking a preview slot")?;
         let tee_pad = tee
@@ -324,8 +329,7 @@ impl ScenePreview {
             .context("a preview flip has no src pad")?
             .link(&pad)
             .context("linking a preview slot into the compositor")?;
-        self.serial += 1;
-        let at = super::preview_chain::At { pipeline: &self.pipeline, flip: &flip, pad: &pad, source, serial: self.serial, canvas };
+        let at = super::preview_chain::At { pipeline: &self.pipeline, flip: &flip, pad: &pad, source, serial: n, canvas };
         let mut chain = super::preview_chain::Chain::build(&at, filters, &self.transparent);
         // Consumers first, as everywhere in this branch.
         for el in chain.elements().iter().rev().chain([&flip, &crop, &queue]) {
