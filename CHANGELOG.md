@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.25 (2026-11-02)
+
+* The Mac app's mixer starts on macOS 26. The app is signed ad hoc, and the bundler also turned on the hardened runtime, which brings library validation with it: macOS then refused every GStreamer library inside the app ("different Team IDs"), so the desktop app opened with no mixer behind it and `godwinmix` from the app did not start at all. The build machine did not enforce it, so the release's own launch check passed. The hardened runtime is off (`bundle.macOS.hardenedRuntime` in `tauri-app/tauri.conf.json`), and the release now fails if any program in the app is signed with it.
+
 ## 0.3.24 (2026-11-02)
 
 Fixes found while filming the 0.3.23 features: a look on a presenter in a studio set, and a filter added in the composer.
