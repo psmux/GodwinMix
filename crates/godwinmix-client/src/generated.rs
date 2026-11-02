@@ -239,6 +239,11 @@ pub struct AddSourceRequest {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// What Preview holds after a Take. See the module.
+pub type AfterTake = String;
+/// The values api_level 1 knows for [`AfterTake`].
+pub const AFTER_TAKE_VALUES: &[&str] = &["same", "swap"];
+
 /// `ext.agent`. `true` takes the default thresholds; an object moves them.
 pub type AgentExt = Value;
 
@@ -5838,6 +5843,13 @@ pub struct PreviewOpenRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PreviewRequest {
+    /// What Preview holds after a Take, for every client of this core:
+    /// `same` (the default) keeps the scene just taken, `swap` arms the scene
+    /// it replaced when the armed scene is taken. `program.take {}` takes
+    /// what this leaves armed. Sent alone it changes the setting and nothing
+    /// else; nothing is disarmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_take: Option<AfterTake>,
     /// A draft from `scene.edit.begin` for the preview to draw in place of
     /// the armed scene, which is how a designer sees what it is laying out.
     /// What is armed is left as it is, and `scene` is ignored. An empty string
@@ -8941,7 +8953,7 @@ pub const METHODS: [MethodInfo; 294] = [
     MethodInfo { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/params/get")) },
     MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
     MethodInfo { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/preview/frame")) },
-    MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
+    MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
     MethodInfo { name: "scene.redo", summary: "Put back what your undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
     MethodInfo { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/scenes/{id}")) },
     MethodInfo { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/rename")) },
@@ -10531,7 +10543,7 @@ impl Client {
         self.call("scene.preview.frame", params).await
     }
 
-    /// Arm a scene. The armed scene is the preview, and program.take with no argument takes it.
+    /// Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.
     pub async fn scene_preview_set(&self, params: &PreviewRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.preview.set", params).await
     }

@@ -99,6 +99,41 @@ The board draws a cutout in stacking order with every other item. Where
 nothing can draw it (a source's input side, or a programme composited on a
 GPU), the cutout is written into the frame over black.
 
+## In Preview
+
+A cutout on an item of the armed scene is drawn in Preview too, on the
+preview's own copy of the item at thumbnail size, by the preview's board. It
+exists only while somebody watches Preview and that scene is armed.
+
+When the same picture is cut out on air at the same time, with the same
+quality, device and steady settings, the two copies share one model. The same
+picture means the same camera with the same crop and the same quarter turn,
+because those change what the model sees: the same camera wide and cropped in
+one scene, or on both sides of a transition, runs one model for each. Two
+copies of one picture on air at once (one camera twice with the same crop)
+share a model too, and one of them feeds it. The
+programme's copy feeds it; the preview's copy only reads the newest mask,
+which fits any frame size because a mask is at the model's size. With the
+scene armed and not on air, the preview's frames feed the model on their own.
+Different edge, softness, feather or matte settings still share, because those
+are laid on per copy.
+
+A change to quality, device or steady on an item cut out on air and in
+Preview reaches both copies, and they end on one model whichever is told
+first. While a new model loads, the cutout on air keeps drawing its last mask
+rather than the whole camera.
+
+A cutout feeds its model only while its item can be seen. A cutout scene
+taken off air used to keep its model running on a camera nobody saw.
+
+Measured on an M4 Pro with the fine model on CoreML, a 1080p presenter clip,
+counting model runs over a minute in each state: nothing on air or in Preview
+with a cutout, 0 a second; the cutout scene only in Preview, about 5 a second
+(the preview's rate); on air with nobody watching Preview, about 15 a second
+(as fast as the model answers); on air and in Preview at once, the same 15
+and one model, not two; taken off air again, 0. Before this, the scene taken
+off air went on at 15 a second.
+
 ## Refusals
 
 | When | The message says |

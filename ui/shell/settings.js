@@ -20,6 +20,7 @@ const DEFAULTS = {
   snapshotSecs: 0,
   // Studio mode: Preview beside Programme, and Take between them.
   producer: true,
+  afterTake: "same",
   meters: true,
   faders: true,
   lanes: true,
@@ -62,6 +63,7 @@ export function settings() {
 export function setSetting(key, value) {
   if (key === "producer") settings().studioChosen = true;
   if (key === "multiviewFps") settings().fpsChosen = true;
+  if (key === "afterTake") settings().afterTakeChosen = true;
   settings()[key] = value;
   try {
     localStorage.setItem(KEY, JSON.stringify(state));

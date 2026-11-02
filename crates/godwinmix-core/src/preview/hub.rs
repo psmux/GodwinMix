@@ -39,6 +39,10 @@ pub enum PreviewDemand {
     /// subscribes with `ext.preview`; the mixer holds it whether or not a
     /// preview exists, so arming one before anybody is watching costs a `Vec`.
     Scene { cells: Vec<crate::multiview::preview::Cell> },
+    /// Filter chains for the armed scene's preview, built off the mixer loop
+    /// by a worker. The mixer's own, sent back to itself; see
+    /// `mixer::preview_draw`.
+    Built { built: crate::multiview::preview_chain::Prebuilt },
     /// Put the programme thumbnail branch on the raw tee, or take it off.
     /// Sent by [`super::thumb::ProgrammeThumb`] on the first ask after a
     /// quiet spell and when asks stop.
@@ -65,6 +69,7 @@ impl std::fmt::Debug for PreviewDemand {
             Self::OpenLocal { target, .. } => write!(f, "OpenLocal({target})"),
             Self::CloseLocal { target } => write!(f, "CloseLocal({target})"),
             Self::Scene { cells } => write!(f, "Scene({} items)", cells.len()),
+            Self::Built { built } => write!(f, "Built({} chains)", built.len()),
             Self::Thumb(on) => write!(f, "Thumb({on})"),
             Self::Feed(shape) => write!(f, "Feed({shape:?})"),
             Self::HasSource { id, .. } => write!(f, "HasSource({id})"),

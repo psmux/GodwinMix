@@ -115,6 +115,27 @@ pub trait Filter: Send {
     fn board(&self) -> Option<BoardHook> {
         None
     }
+
+    /// Say whose picture this filter works on, so a filter with costly work
+    /// of its own can share it with another instance on the same picture.
+    /// `key` is `share_key`: the source, and the crop and turn in front of the
+    /// filter. `lead` is true on the programme, whose frames are the ones the
+    /// shared work follows. Said before the filter is built, and again
+    /// whenever the key changes. The preview's copy of an item's cutout is
+    /// the case this exists for: one model run serves both. Most filters have
+    /// nothing to share and ignore it.
+    fn share_as(&mut self, _key: &str, _lead: bool) {}
+}
+
+/// The picture an item's filters see, as `Filter::share_as` names it: the
+/// source, the crop and the quarter turns. Two items on one camera with
+/// different crops are different pictures; the same crop on the programme's
+/// full frame and the preview's thumbnail is the same picture. The crop is
+/// rounded to a thousandth, finer than any slider moves it.
+pub fn share_key(source: &str, crop: (f64, f64, f64, f64), rotation: f64) -> String {
+    let q = |v: f64| (v.clamp(0.0, 1.0) * 1000.0).round() as u32;
+    let turns = (rotation.rem_euclid(360.0) / 90.0).round() as i64 % 4;
+    format!("{source} crop {} {} {} {} turn {turns}", q(crop.0), q(crop.1), q(crop.2), q(crop.3))
 }
 
 /// What a filter with alpha shares with whoever places it.
@@ -228,6 +249,11 @@ impl FilterSlot {
         self.filter.board()
     }
 
+    /// Tell the filter its picture changed. See `Filter::share_as`.
+    pub fn share_as(&mut self, key: &str, lead: bool) {
+        self.filter.share_as(key, lead);
+    }
+
     /// Change the keys `params` names and keep the rest, as `filter.set`
     /// promises: a compressor told `ratio = 6` keeps its threshold.
     pub fn configure(&mut self, params: &Params) -> Result<Configure> {
@@ -314,15 +340,37 @@ impl<'a> Insertion<'a> {
 pub fn insert(
     at: Insertion<'_>,
     spec: FilterSpec,
-    mut filter: Box<dyn Filter>,
+    filter: Box<dyn Filter>,
     canvas: &CanvasCaps,
     live: bool,
 ) -> Result<FilterSlot> {
+    place(at, Built::new(spec, filter, canvas)?, live)
+}
+
+/// A filter built and not yet in any pipeline: the slow half of `insert`.
+/// A LUT file read, a cutout's worker started, an element factory looked
+/// up; none of it touches a pipeline, so it can be done on any thread and
+/// handed to the one that places it.
+pub struct Built {
+    pub spec: FilterSpec,
+    pub filter: Box<dyn Filter>,
+    bin: gst::Element,
+}
+
+impl Built {
+    pub fn new(spec: FilterSpec, mut filter: Box<dyn Filter>, canvas: &CanvasCaps) -> Result<Built> {
+        let bin = filter.build(canvas, &spec.params)?;
+        Ok(Built { spec, filter, bin })
+    }
+}
+
+/// Put a built filter between `upstream` and `downstream`. See `insert`.
+pub fn place(at: Insertion<'_>, built: Built, live: bool) -> Result<FilterSlot> {
+    let Built { spec, filter, bin } = built;
     // A point that already holds filters takes the new one after the last of
     // them, so two filters on one microphone run one after the other.
     let end = chain_end(at.upstream);
     let at = Insertion { pipeline: at.pipeline, upstream: &end, downstream: at.downstream };
-    let bin = filter.build(canvas, &spec.params)?;
     at.pipeline.add(&bin).context("adding a filter to the pipeline")?;
     if live {
         let src = at
@@ -402,11 +450,17 @@ pub fn insert(
             let _ = at.pipeline.remove(&bin);
             return Err(e).with_context(|| format!("putting the filter {} in", spec.id));
         }
-    } else {
-        at.downstream.unlink_from(&src_at_build(at.upstream)?);
-        at.upstream.link(&bin).context("linking a filter to what is above it")?;
-        let out = bin.static_pad("src").context("the filter bin has no src pad")?;
-        at.downstream.link_from(&out).context("linking a filter to what is below it")?;
+    } else if let Err(e) = link_at_build(&at, &bin) {
+        // Back the way it was: the bin out, and what was above it linked to
+        // what was below, so the picture goes through clean.
+        let _ = bin.set_state(gst::State::Null);
+        let _ = at.pipeline.remove(&bin);
+        if let Ok(src) = src_at_build(at.upstream) {
+            if let Err(relink) = at.downstream.link_from(&src) {
+                tracing::error!(?relink, "could not relink around a filter that failed to go in");
+            }
+        }
+        return Err(e).with_context(|| format!("putting the filter {} in", spec.id));
     }
     tracing::info!(
         filter = %spec.id,
@@ -454,6 +508,32 @@ fn is_filter_bin(e: &gst::Element) -> bool {
 }
 
 /// The src pad of the element above an insertion point, at build time.
+/// Link `bin` between the two, which are linked to each other and not
+/// running. On failure the caller puts them back.
+fn link_at_build(at: &Insertion<'_>, bin: &gst::Element) -> Result<()> {
+    let src = src_at_build(at.upstream)?;
+    at.downstream.unlink_from(&src);
+    let sink = bin.static_pad("sink").context("the filter bin has no sink pad")?;
+    src.link(&sink).context("linking a filter to what is above it")?;
+    let out = bin.static_pad("src").context("the filter bin has no src pad")?;
+    if let Err(e) = at.downstream.link_from(&out) {
+        let _ = src.unlink(&sink);
+        return Err(e).context("linking a filter to what is below it");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn the_same_camera_cropped_is_another_picture_and_the_thumbnail_is_the_same_one() {
+    let wide = share_key("cam1", (0.0, 0.0, 0.0, 0.0), 0.0);
+    assert_ne!(wide, share_key("cam1", (0.25, 0.0, 0.25, 0.0), 0.0), "a crop changes what the model sees");
+    assert_ne!(wide, share_key("cam1", (0.0, 0.0, 0.0, 0.0), 90.0), "so does a turn");
+    assert_ne!(wide, share_key("cam2", (0.0, 0.0, 0.0, 0.0), 0.0));
+    assert_eq!(wide, share_key("cam1", (0.0, 0.0, 0.0, 0.0), 360.0));
+    assert_eq!(share_key("cam1", (0.25, 0.0, 0.25, 0.0), 0.0), share_key("cam1", (0.2500001, 0.0, 0.25, 0.0), 0.0));
+}
+
 fn src_at_build(upstream: &gst::Element) -> Result<gst::Pad> {
     upstream.static_pad("src").context("the element above a filter has no src pad")
 }

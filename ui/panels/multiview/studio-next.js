@@ -1,6 +1,7 @@
 // What Studio mode's preview holds, so it is never just black.
 //
-// In order:
+// By default (`afterTake` "same") Preview keeps the scene just taken; see
+// sameUp. With "swap", in order:
 //
 // 1. A scene armed on the core (scene.preview.set), unless it is the one on
 //    air already. The scene on air is held too when somebody on this page
@@ -11,9 +12,7 @@
 //    scene that is not on air. It is this page's guess and nobody else's: it
 //    is not armed on the core, and the label under PREVIEW says so.
 //
-// So after a take, from this page or from anyone else (an agent, another
-// operator), Preview shows where the show came from rather than the same
-// shot twice, which is what a vision mixer does when it swaps its buses.
+// A suggestion is drawn from the camera tiles, without the items' filters.
 
 /** The scene list, from this page's scene session or the Scenes panel. */
 export function sceneKit(panel) {
@@ -74,16 +73,14 @@ export function follow(panel, s, kit) {
  * armed scene that is on air is still what Preview holds when it is that one,
  * because the person asked for it; after a take it is a suggestion again.
  */
-export function nextUp(panel, s, kit, armedSource, chosen = null) {
+export function nextUp(panel, s, kit, armedSource, chosen = null, afterTake = "same") {
+  if (afterTake !== "swap") return sameUp(s, kit, armedSource);
   const live = liveScene(s, kit);
   const armed = armedScene(s, kit);
   if (armed && (idOf(kit, armed) !== live || (chosen && idOf(kit, chosen) === live))) {
     return { kind: "scene", id: idOf(kit, armed), name: armed, why: "armed" };
   }
-  if (armedSource && !(s.program === armedSource && !s.scene)) {
-    const known = (s.sources || []).find((x) => x.id === armedSource);
-    return { kind: "source", id: armedSource, name: (known && known.name) || armedSource, why: "armed" };
-  }
+  if (armedSource && !(s.program === armedSource && !s.scene)) return source(s, armedSource, "armed");
   const scenes = kit ? kit.scenes() : [];
   const exists = (id) => scenes.find((x) => x.id === id);
   const before = (panel.onAirBefore || []).find((id) => id !== live && exists(id));
@@ -92,8 +89,26 @@ export function nextUp(panel, s, kit, armedSource, chosen = null) {
   return { kind: "scene", id: pick.id, name: pick.name, why: before ? "before" : "next" };
 }
 
+/** A source armed here, the armed scene, what is on air, else the first scene. */
+function sameUp(s, kit, armedSource) {
+  if (armedSource) return source(s, armedSource, "armed");
+  const armed = armedScene(s, kit);
+  if (armed) return { kind: "scene", id: idOf(kit, armed), name: armed, why: "armed" };
+  const live = liveScene(s, kit);
+  const on = live && kit && kit.summary(live);
+  if (on) return { kind: "scene", id: on.id, name: on.name, why: "live" };
+  if (s.program) return source(s, s.program, "live");
+  const first = kit && kit.scenes()[0];
+  return first ? { kind: "scene", id: first.id, name: first.name, why: "next" } : null;
+}
+
+function source(s, id, why) {
+  const known = (s.sources || []).find((x) => x.id === id);
+  return { kind: "source", id, name: (known && known.name) || id, why };
+}
+
 /** The few words under PREVIEW that say why it holds what it holds. */
 export function whyText(next) {
-  if (!next || next.why === "armed") return "";
+  if (!next || next.why === "armed" || next.why === "live") return "";
   return next.why === "before" ? "Suggested: on air before this" : "Suggested: next scene";
 }

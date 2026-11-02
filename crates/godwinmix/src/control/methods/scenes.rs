@@ -32,6 +32,7 @@ pub(crate) mod layout;
 mod requests;
 mod from_sources;
 mod set_inputs;
+mod settle;
 mod share;
 mod whole_canvas;
 
