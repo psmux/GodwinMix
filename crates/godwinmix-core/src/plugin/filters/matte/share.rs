@@ -46,6 +46,13 @@ pub fn worker_for(key: Option<&str>, settings: &Settings) -> Arc<Worker> {
     worker
 }
 
+/// How many cutout models are running on `key`'s picture. One while a
+/// camera is cut out on air and in Preview at once is the point of this
+/// module; the test that says so reads it.
+pub fn workers_on(key: &str) -> usize {
+    POOL.lock().iter().filter(|(k, w)| k == key && w.strong_count() > 0).count()
+}
+
 impl Worker {
     /// Offer a frame, as the lead or as a follower. A follower's frame is
     /// dropped while the lead is feeding.

@@ -178,3 +178,59 @@ async fn a_look_on_an_item_reaches_the_preview_before_take() {
     tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
     assert!(seen, "the look did not reach the preview: {:?} colourful", last.map(|i| colourful(&i)));
 }
+
+/// The person cutout, with the real model: `test://smpte` has no person in
+/// it, so once the model answers the whole presenter is cut away and the set
+/// shows where the bars were. Then the same scene goes to air, and the
+/// programme and the preview share one model on the presenter's picture
+/// rather than running two. Skips on a machine with no runtime or models,
+/// as `tests/matte.rs` does.
+#[cfg(feature = "matte")]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cutout_reaches_the_preview_and_shares_its_model_with_the_programme() {
+    use crate::plugin::filters::matte;
+    let params = "quality = \"fast\"\ndevice = \"cpu\"";
+    if let Err(e) = matte::ready(&toml::from_str(params).unwrap()) {
+        eprintln!("skipped: {e:#}");
+        return;
+    }
+    let _ = gst::init();
+    let (mut mix, handle, cmd_rx, _bus_rx) =
+        crate::mixer::Mixer::build(cfg(&[("set", "test://blue"), ("cut-presenter", "test://smpte")])).unwrap();
+    mix.start().unwrap();
+    let (mv, preview, canvas) = (mix.multiview_handle(), mix.preview_handle(), mix.canvas().clone());
+    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+    let blue = |p: (u8, u8, u8)| p.2 > 160 && p.0 < 90 && p.1 < 90;
+    let cut = filter("matte/filter", params);
+    preview.set_scene(vec![full("set", Vec::new()), full("cut-presenter", vec![cut.clone()])]);
+    let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+    let white_bar = (0.5 / 7.0, 0.3);
+    let (gone, last) = until(&mut sub, Duration::from_secs(20), |img| blue(at(img, white_bar.0, white_bar.1))).await;
+    let armed_only = matte::workers_on("cut-presenter");
+
+    // On air as well: the programme's copy leads and the preview's follows.
+    let placement = |id: &str, filters: Vec<ItemFilter>| crate::mixer::slots::Placement {
+        sizing: crate::mixer::slots::Sizing::Fill,
+        filters,
+        ..crate::mixer::slots::Placement::full_canvas(id.into(), &canvas)
+    };
+    let scene = crate::mixer::ProgramScene {
+        name: "studio".into(),
+        placements: vec![placement("set", Vec::new()), placement("cut-presenter", vec![cut])],
+    };
+    handle
+        .request(|ack| Command::TakeScene { scene: Box::new(scene), at_running_time_ms: None, duration_ms: None, transition: None, ack: Some(ack) })
+        .await
+        .expect("take the scene");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let both = matte::workers_on("cut-presenter");
+    let (still_gone, _) = until(&mut sub, Duration::from_secs(5), |img| blue(at(img, white_bar.0, white_bar.1))).await;
+
+    drop(sub);
+    let _ = handle.send(Command::Shutdown);
+    tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    assert!(gone, "the cutout did not reach the preview: the white bar reads {:?}", last.map(|i| at(&i, white_bar.0, white_bar.1)));
+    assert_eq!(armed_only, 1, "one model for the armed presenter");
+    assert_eq!(both, 1, "the presenter on air and in Preview ran {both} models, not one");
+    assert!(still_gone, "the preview lost its cutout once the scene went to air");
+}
