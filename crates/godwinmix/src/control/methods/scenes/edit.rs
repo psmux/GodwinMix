@@ -391,6 +391,8 @@ async fn still(call: &Call, req: &PreviewFrameRequest) -> Result<Value, RpcError
         .with("scene", layout.name.clone())
         .with("retryable", true));
     };
+    let filtered = layout.cells.iter().any(|c| !c.filters.is_empty());
+    let jpeg = if filtered { super::settle::settle(&mut sub, jpeg).await } else { jpeg };
     use base64::Engine;
     let shape = call.app.multiview.preview_built();
     Ok(json!({
