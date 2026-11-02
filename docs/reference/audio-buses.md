@@ -56,6 +56,12 @@ Left out, the output has the programme's sound, as it always had. An output
 that asks for a rendition cannot take a bus yet; the add is refused and says
 so.
 
+The bus's encoder comes up after `output.add` has answered. One that cannot
+start takes every output on it off the air: each is listed with `state`
+`failed` and the reason in `shed`, an `alert` event carries the same sentence,
+and the output is tried again on the backoff an output that would not attach
+at start waits on.
+
 The master and the buses are saved in the runtime store
 (`godwinmix.runtime.toml`) whenever they change, and that copy is what the
 next start reads. The cue marks are not saved.

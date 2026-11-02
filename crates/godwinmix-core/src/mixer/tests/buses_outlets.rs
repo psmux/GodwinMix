@@ -55,6 +55,15 @@ async fn bad_ids_and_values_say_what_to_do() {
     rig.mix.shutdown();
 }
 
+/// The tee of the encoder on `bus`, whichever number it has.
+pub(super) fn bus_encoder(program: &gst::Pipeline, bus: &str) -> Option<gst::Element> {
+    let prefix = format!("bus-{bus}-enc");
+    program.iterate_elements().into_iter().flatten().find(|e| {
+        let name = e.name();
+        name.starts_with(&prefix) && name.ends_with("-tee")
+    })
+}
+
 /// The last buffer time seen on a pad, for comparing two timelines.
 fn last_pts(pad: &gst::Pad) -> Arc<AtomicU64> {
     let seen = Arc::new(AtomicU64::new(0));
@@ -89,11 +98,16 @@ async fn an_output_on_a_bus_is_fed_on_the_programme_timeline() {
     let (p, b) = (programme.load(Ordering::Relaxed) as i64, bus.load(Ordering::Relaxed) as i64);
     assert!(p > 0 && b > 0, "nothing flowed: programme {p}, bus {b}");
     assert!((p - b).abs() < 200_000_000, "the bus is {} ms off the programme", (b - p) / 1_000_000);
-    assert!(rig.mix.program.by_name("bus-recording-b-enc-tee").is_some(), "no encoder for the output");
+    assert!(bus_encoder(&rig.mix.program, "recording-b").is_some(), "no encoder for the output");
     let e = rig.call(AudioCall::Remove("recording-b".into())).expect_err("the bus is in use");
     assert!(matches!(e, Refusal::InUse { .. }));
     rig.mix.remove_output(&"iso".to_string()).expect("the output goes");
-    assert!(rig.mix.program.by_name("bus-recording-b-enc-tee").is_none(), "the encoder outlived its last output");
+    // Taken down on a thread of its own.
+    let until = Instant::now() + Duration::from_secs(5);
+    while bus_encoder(&rig.mix.program, "recording-b").is_some() && Instant::now() < until {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(bus_encoder(&rig.mix.program, "recording-b").is_none(), "the encoder outlived its last output");
     rig.mix.shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }

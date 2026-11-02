@@ -10,12 +10,18 @@ use godwinmix_protocol::buses::AudioStatus;
 use gstreamer as gst;
 use tokio::sync::oneshot;
 
+mod failed;
+
 /// The answer to an `audio.*` call: the whole desk, or why nothing moved.
 pub type AudioReply = oneshot::Sender<Result<AudioStatus, Refusal>>;
 
 impl Mixer {
     /// One `audio.*` call. Saved and broadcast when it changed something.
     pub(super) fn audio_call(&mut self, call: AudioCall, reply: Option<AudioReply>) {
+        let call = match call {
+            AudioCall::EncoderFailed(failed) => return self.bus_encoder_failed(failed),
+            call => call,
+        };
         let changes = !matches!(call, AudioCall::List);
         let saves = !matches!(
             call,
