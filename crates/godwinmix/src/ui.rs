@@ -1351,8 +1351,11 @@ mod tests {
         // Raised to 509 kB with the page's own budget, for the Replay panel's
         // entry and keys; the composer's files did not grow. Measured at
         // 520194 bytes. Raised to 510 kB with the page's, for the Guests and
-        // Replay entries landing together: measured at 521433 bytes.
-        assert!(bytes < 510 * 1024, "the page with the composer open is {bytes} bytes, over the 510 kB budget");
+        // Replay entries landing together: measured at 521433 bytes. Raised
+        // to 511 kB for the Programme row's FX button, the After Take choice
+        // in Settings, and a filter added in the composer showing at once:
+        // measured at 522924 bytes.
+        assert!(bytes < 511 * 1024, "the page with the composer open is {bytes} bytes, over the 511 kB budget");
     }
 
     #[test]
