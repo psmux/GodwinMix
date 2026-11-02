@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn a_follower_waits_while_the_lead_feeds() {
         gstreamer::init().unwrap();
-        let w = worker_for(Some("share-test-follow"), &Settings { quality: super::super::params::Quality::Named("nothing-here".into()), ..Settings::default() });
+        let w = worker_for(Some("share-test-follow"), &Settings { quality: crate::plugin::filters::matte::params::Quality::Named("nothing-here".into()), ..Settings::default() });
         let info = gstreamer_video::VideoInfo::builder(gstreamer_video::VideoFormat::I420, 16, 16).build().unwrap();
         let frame = gstreamer::Buffer::with_size(info.size()).unwrap();
         w.offer_as(&frame, &info, false);
