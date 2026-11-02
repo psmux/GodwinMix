@@ -4,6 +4,7 @@
 //! it all. No mocks: ICE, DTLS, SRTP, the bus and the WHEP output all run.
 
 mod core;
+mod late;
 mod rtc;
 
 use crate::core::Core;
