@@ -541,6 +541,14 @@ jobs:
           find "$app/Contents" -type f -perm -u+x -print0 | while IFS= read -r -d '' f; do
             case "$(head -c 4 "$f" | xxd -p)" in cffaedfe|cafebabe|feedfacf) ;; *) continue ;; esac
             codesign -v "$f" 2>/dev/null || { echo "::error::$f is not signed" >&2; exit 1; }
+            # An ad hoc signature with the hardened runtime turns on library
+            # validation, and a Mac on macOS 26 then refuses every GStreamer
+            # library the mixer links ("different Team IDs"). The 0.3.24 app
+            # shipped that way; the runner did not enforce it, so it is looked
+            # for here rather than trusted to the launch below.
+            if codesign -dv "$f" 2>&1 | grep -q 'flags=.*runtime'; then
+              echo "::error::$f is signed with the hardened runtime, which an ad hoc app cannot load its libraries under" >&2; exit 1
+            fi
           done
           # --headless-check asks the mixer it starts whether it loaded each
           # of them, which is the claim that matters.

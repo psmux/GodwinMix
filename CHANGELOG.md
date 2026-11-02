@@ -15,6 +15,10 @@ Preview shows what Take will put on air, filters and all.
 * A composer left open on a page that closed no longer holds Preview on its draft for everyone. Preview goes back to the armed scene when that page's last connection closes, and arming a scene from the composer's own page takes Preview back too. Another operator arming the next shot leaves the designer's draft on Preview. `scene.preview.set {"draft": ""}` lets go from a script.
 * The Programme row in the Audio panel has an FX button, for the sound filters on everything that goes out, such as a loudness target. They could be added from the config file and the API but not seen or changed in the page. See [Clean up a microphone](docs/how-to/clean-up-a-microphone.md).
 
+## 0.3.25 (2026-11-02)
+
+* The Mac app's mixer starts on macOS 26. The app is signed ad hoc, and the bundler also turned on the hardened runtime, which brings library validation with it: macOS then refused every GStreamer library inside the app ("different Team IDs"), so the desktop app opened with no mixer behind it and `godwinmix` from the app did not start at all. The build machine did not enforce it, so the release's own launch check passed. The hardened runtime is off (`bundle.macOS.hardenedRuntime` in `tauri-app/tauri.conf.json`), and the release now fails if any program in the app is signed with it.
+
 ## 0.3.24 (2026-11-02)
 
 Fixes found while filming the 0.3.23 features: a look on a presenter in a studio set, and a filter added in the composer.
