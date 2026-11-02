@@ -7,7 +7,7 @@
 
 import { buildForm, paintState, paintMutes, blocked } from "./form.js";
 import { secureProblem, remembered, remember } from "./devices.js";
-import { openKind, refreshDevices } from "./tracks.js";
+import { openKind, refreshDevices, preferRealCamera } from "./tracks.js";
 import { Session } from "./session.js";
 import { LevelMeter } from "./meter.js";
 import { StatsLine } from "./stats.js";
@@ -94,6 +94,7 @@ class Publisher {
 
   async open() {
     await openKind(this, "video", this.wanted.camera, false);
+    if (!this.wanted.camera) await preferRealCamera(this);
     await openKind(this, "audio", this.wanted.mic, false);
   }
 
