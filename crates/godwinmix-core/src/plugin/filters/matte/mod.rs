@@ -128,6 +128,10 @@ impl Filter for Cutout {
     fn share_as(&mut self, key: &str, lead: bool) {
         self.picture = Some(key.to_string());
         self.lead = lead;
+        // Said again once built, when the item's crop or turn changed.
+        if let Some(c) = &self.cutter {
+            c.reshare(key);
+        }
     }
 }
 

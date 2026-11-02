@@ -430,6 +430,7 @@ mod memwatch;
 mod motion;
 mod on_time;
 mod page;
+mod preview_draw;
 pub use page::PageCall;
 pub(crate) mod offload;
 mod patience;
@@ -1392,6 +1393,9 @@ pub struct Mixer {
     /// The armed scene, in canvas pixels, as the control plane last said. The
     /// preview compositor draws these when one exists.
     preview_cells: Vec<crate::multiview::preview::Cell>,
+    /// The preview's filter chains being built off the loop. See
+    /// `preview_draw`.
+    preview_build: preview_draw::Building,
     /// Which sources have a backup, and which backup is drawn in whose place
     /// now. Empty, and asked nothing, on a mixer with no `on_loss`. See
     /// `crate::failover` and `mixer::failover`.
@@ -2115,6 +2119,7 @@ impl Mixer {
             program_scene: None,
             ramp: None,
             preview_cells: Vec::new(),
+            preview_build: preview_draw::Building::default(),
             backups: Default::default(),
         };
         Ok((mixer, handle, rx, bus_rx))
@@ -5623,7 +5628,7 @@ impl Mixer {
     /// verb decided somewhere else a moment ago.
     fn preview_demand_now(&mut self) -> Result<()> {
         let wanted = self.mv.preview_wanted(&self.canvas);
-        let cells = self.preview_cells_now();
+        let cells = self.preview_cells.len();
         let Some(mv) = self.multiview.as_mut() else {
             // No mosaic, so there is nowhere for a preview to live. The demand
             // that built the mosaic is behind this one and will come back here.
@@ -5635,9 +5640,8 @@ impl Mixer {
                 mv.preview_on(shape, self.mv.preview_publisher())
                     .context("building the preview compositor")?;
                 self.mv.mark_preview_built(Some(shape));
-                mv.apply_preview(&self.canvas, &cells).context("drawing the armed scene")?;
-                info!(?shape, items = cells.len(), "preview composited for a subscriber");
-                self.show_held_clips_again();
+                info!(?shape, items = cells, "preview composited for a subscriber");
+                self.draw_preview();
             }
             None => {
                 mv.preview_off();
@@ -5655,17 +5659,7 @@ impl Mixer {
     /// `Vec` and nothing else.
     pub fn set_preview_cells(&mut self, cells: Vec<crate::multiview::preview::Cell>) {
         self.preview_cells = cells;
-        // Drawn as the programme would draw it: a source that is down shows
-        // its backup here too.
-        let cells = self.preview_cells_now();
-        if let Some(mv) = self.multiview.as_mut() {
-            if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
-                warn!(?e, "the armed scene could not be drawn in the preview");
-            }
-        }
-        if self.multiview.is_some() {
-            self.show_held_clips_again();
-        }
+        self.draw_preview();
     }
 
     /// What the control plane holds to open a preview or monitoring stream.
@@ -5701,6 +5695,7 @@ impl Mixer {
             }
             P::CloseLocal { target } => self.close_local_preview(&target),
             P::Scene { cells } => self.set_preview_cells(cells),
+            P::Built { built } => self.preview_built(built),
             P::Thumb(true) => {
                 if let Err(e) = self.thumb_branch.attach() {
                     warn!(?e, "the programme thumbnail branch could not be attached");

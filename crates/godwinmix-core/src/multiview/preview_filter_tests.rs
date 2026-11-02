@@ -206,7 +206,8 @@ async fn a_cutout_reaches_the_preview_and_shares_its_model_with_the_programme() 
     let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
     let white_bar = (0.5 / 7.0, 0.3);
     let (gone, last) = until(&mut sub, Duration::from_secs(20), |img| blue(at(img, white_bar.0, white_bar.1))).await;
-    let armed_only = matte::workers_on("cut-presenter");
+    let wide = crate::plugin::filter::share_key("cut-presenter", (0.0, 0.0, 0.0, 0.0), 0.0);
+    let armed_only = matte::workers_on(&wide);
 
     // On air as well: the programme's copy leads and the preview's follows.
     let placement = |id: &str, filters: Vec<ItemFilter>| crate::mixer::slots::Placement {
@@ -223,7 +224,7 @@ async fn a_cutout_reaches_the_preview_and_shares_its_model_with_the_programme() 
         .await
         .expect("take the scene");
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let both = matte::workers_on("cut-presenter");
+    let both = matte::workers_on(&wide);
     let (still_gone, _) = until(&mut sub, Duration::from_secs(5), |img| blue(at(img, white_bar.0, white_bar.1))).await;
 
     drop(sub);
@@ -233,4 +234,80 @@ async fn a_cutout_reaches_the_preview_and_shares_its_model_with_the_programme() 
     assert_eq!(armed_only, 1, "one model for the armed presenter");
     assert_eq!(both, 1, "the presenter on air and in Preview ran {both} models, not one");
     assert!(still_gone, "the preview lost its cutout once the scene went to air");
+}
+
+/// The review's case: the same camera wide and cropped in one scene, each
+/// with a cutout, on air and in Preview. Two pictures, so two models, one
+/// each, and neither copy reads the other's masks. Keyed by the source alone
+/// they shared one model and laid the wide shot's mask on the crop.
+#[cfg(feature = "matte")]
+#[tokio::test(flavor = "multi_thread")]
+async fn the_same_camera_wide_and_cropped_runs_one_model_per_picture() {
+    use crate::plugin::filter::share_key;
+    use crate::plugin::filters::matte;
+    let params = "quality = \"fast\"
+device = \"cpu\"";
+    if let Err(e) = matte::ready(&toml::from_str(params).unwrap()) {
+        eprintln!("skipped: {e:#}");
+        return;
+    }
+    let _ = gst::init();
+    let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg(&[("crop-cam", "test://smpte")])).unwrap();
+    mix.start().unwrap();
+    let (mv, preview, canvas) = (mix.multiview_handle(), mix.preview_handle(), mix.canvas().clone());
+    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+    let cut = filter("matte/filter", params);
+    let tight = (0.25, 0.0, 0.25, 0.0);
+    let cropped = preview::Cell { crop: tight, ..full("crop-cam", vec![cut.clone()]) };
+    preview.set_scene(vec![full("crop-cam", vec![cut.clone()]), cropped]);
+    let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+    let _ = until(&mut sub, Duration::from_secs(5), |_| false).await;
+    let placement = |crop, filters: Vec<ItemFilter>| crate::mixer::slots::Placement {
+        sizing: crate::mixer::slots::Sizing::Fill,
+        filters,
+        crop,
+        ..crate::mixer::slots::Placement::full_canvas("crop-cam".into(), &canvas)
+    };
+    let scene = crate::mixer::ProgramScene {
+        name: "two-shots".into(),
+        placements: vec![placement((0.0, 0.0, 0.0, 0.0), vec![cut.clone()]), placement(tight, vec![cut])],
+    };
+    handle
+        .request(|ack| Command::TakeScene { scene: Box::new(scene), at_running_time_ms: None, duration_ms: None, transition: None, ack: Some(ack) })
+        .await
+        .expect("take the scene");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let wide = matte::workers_on(&share_key("crop-cam", (0.0, 0.0, 0.0, 0.0), 0.0));
+    let narrow = matte::workers_on(&share_key("crop-cam", tight, 0.0));
+    let bins = preview_filter_bins(&mv);
+
+    drop(sub);
+    let _ = handle.send(Command::Shutdown);
+    tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    assert_eq!(bins, 2, "both preview copies have their cutout");
+    assert_eq!(wide, 1, "the wide shot on air and in Preview ran {wide} models, not one");
+    assert_eq!(narrow, 1, "the cropped shot on air and in Preview ran {narrow} models, not one");
+}
+
+/// A chain whose second filter will not go in leaves the item drawn clean:
+/// the first filter's bin comes out again and the flip is linked straight to
+/// the pad. It used to leave the slot linked to nothing, so the item fell
+/// out of Preview and the mosaic's bus reported a not linked flow.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chain_that_fails_halfway_leaves_the_item_drawn_clean() {
+    let _ = gst::init();
+    let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg(&[("cam1", "test://smpte")])).unwrap();
+    mix.start().unwrap();
+    let (mv, preview) = (mix.multiview_handle(), mix.preview_handle());
+    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+    let grey = filter("color/filter", "saturation = -1.0");
+    preview.set_scene(vec![full("cam1", vec![grey, filter("no-such/filter", "")])]);
+    let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+    let (bars, last) = until(&mut sub, Duration::from_secs(10), |img| colourful(img) > 0.4).await;
+    let bins = preview_filter_bins(&mv);
+    drop(sub);
+    let _ = handle.send(Command::Shutdown);
+    tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    assert!(bars, "the item was not drawn clean: {:?} colourful", last.map(|i| colourful(&i)));
+    assert_eq!(bins, 0, "the filter that did go in was left in the pipeline");
 }

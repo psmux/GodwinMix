@@ -42,8 +42,8 @@ struct Shared {
     /// The last reason the model could not start, so it is logged once.
     error: Mutex<Option<String>>,
     stop: AtomicBool,
-    /// When the programme's copy last offered a frame. See `offer`.
-    lead_at: Mutex<Option<Instant>>,
+    /// Which lead last offered a frame, and when. See `share::offer_as`.
+    lead_at: Mutex<Option<(u64, Instant)>>,
 }
 
 pub struct Worker {
