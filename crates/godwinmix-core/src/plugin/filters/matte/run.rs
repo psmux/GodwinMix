@@ -78,9 +78,15 @@ impl Cutter {
         let mut st = self.state.lock();
         let Some(vinfo) = st.video_info(pad) else { return gst::PadProbeReturn::Ok };
         let frame = buffer.clone();
+        // A cutout drawn by the board on pads nobody can see (an item off
+        // air whose slot is kept, a scene armed but faded out) feeds the model
+        // nothing: it used to run flat out on a camera that was not on screen.
+        let wanted = !self.hook.layer.active() || self.hook.seen();
         let mask = {
             let worker = self.worker.lock();
-            worker.offer_as(&frame, &vinfo, self.lead);
+            if wanted {
+                worker.offer_as(&frame, &vinfo, self.lead);
+            }
             worker.latest()
         };
         if self.hook.layer.active() {
