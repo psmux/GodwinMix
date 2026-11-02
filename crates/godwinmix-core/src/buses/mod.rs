@@ -43,6 +43,9 @@ pub enum AudioCall {
     Cue(CueSetRequest),
     /// A sound card was looked for off the mixer thread. Never from the API.
     DeviceFound(DeviceFound),
+    /// A bus encoder would not come up on its thread. Never from the API: the
+    /// mixer takes the outputs on it off the air and tries them again.
+    EncoderFailed(encode::EncoderFailed),
     /// A bus for a guest's return, built like `Add` and never saved. Never
     /// from the API: the guests module adds and removes these.
     AddGuest(BusConfig),
@@ -68,8 +71,9 @@ impl std::fmt::Debug for DeviceFound {
     }
 }
 
-/// How a desk hands a finished device search back to the mixer queue.
-pub type Notify = std::sync::Arc<dyn Fn(DeviceFound) + Send + Sync>;
+/// How a desk hands work finished off the mixer thread back to its queue: a
+/// device search, or a bus encoder that would not come up.
+pub type Notify = std::sync::Arc<dyn Fn(AudioCall) + Send + Sync>;
 
 /// The audio monitoring target for a bus: `/pcm/bus:monitor`.
 pub fn listen_target(bus: &str) -> String {

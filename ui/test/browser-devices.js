@@ -5,7 +5,7 @@
 
 import { orderCodecs, WhipError } from "../join/whip.js";
 import { Session, backoff, isFinal } from "../join/session.js";
-import { audioConstraints, videoConstraints, remembered, remember, secureProblem, mediaErrorText } from "../join/devices.js";
+import { audioConstraints, videoConstraints, remembered, remember, secureProblem, mediaErrorText, isVirtualCamera, realCameraFor } from "../join/devices.js";
 import { levelOf } from "../join/meter.js";
 import { summarise, statsText } from "../join/stats.js";
 import { parseLink, guestUrls } from "../join/page.js";
@@ -57,6 +57,18 @@ export async function browserDeviceTests(test, eq, ok) {
     eq(order[0], "video/H264 packetization-mode=1;profile-level-id=42e01f");
     eq(order[1], "video/H264 packetization-mode=1;profile-level-id=640c1f");
     eq(order.slice(3), ["video/VP8", "video/rtx"], "the rest keep the browser's order");
+  });
+
+  test("a program posing as a camera gives way to a real one, and only when nobody chose it", () => {
+    ok(isVirtualCamera("DroidCam Source 3"), "DroidCam");
+    ok(isVirtualCamera("OBS Virtual Camera"), "OBS");
+    ok(!isVirtualCamera("OBSBOT Tiny 2 StreamCam"), "an OBSBOT is a webcam");
+    ok(!isVirtualCamera("Integrated Webcam"), "a laptop's own");
+    const cams = [{ id: "d", label: "DroidCam Source 3" }, { id: "o", label: "OBS Virtual Camera" }, { id: "w", label: "HD Pro Webcam C920" }];
+    eq(realCameraFor("d", cams), "w");
+    eq(realCameraFor("w", cams), "", "a real camera stays");
+    eq(realCameraFor("d", cams.slice(0, 2)), "", "with nothing real to go to, the virtual one stays");
+    eq(realCameraFor("", cams), "", "no labels yet: nothing to go on");
   });
 
   test("reconnecting waits 1, 2, 4, 8 seconds and then 15 each time", () => {
