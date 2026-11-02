@@ -50,7 +50,7 @@ An agent has `create_guest_invite` and `list_guests` behind `search_tools`.
 They open the link. The page is called **Join the show as Ana Lopez**. They
 allow the camera and the microphone, pick others if they like, and press
 **Join the show**. Once they are live, **The show** appears under their own
-picture, with the programme and its sound. Headphones are best: the page
+picture, with the programme and its sound, within a second or two. Headphones are best: the page
 cancels the echo of the show from their microphone, but headphones mean there
 is none to cancel.
 
@@ -105,6 +105,10 @@ From then on `producer-mic` is the talkback source and is kept off air.
   over UDP, on ports the system picks. Allow inbound UDP for GodwinMix in the
   mixer machine's firewall (on macOS, allow it when the system asks), and keep
   the guest off a guest Wi-Fi that keeps devices apart.
+* **The show under their picture stays black and silent, though the page says
+  Live.** That is a mixer from 0.3.21 to 0.3.24: the return waited as long as
+  the show had been running before it sent anything, so it only worked on a
+  mixer started a moment before. Update the mixer.
 * **This show already has its 8 guests on.** Revoke one who has finished.
 
 ## What it costs
