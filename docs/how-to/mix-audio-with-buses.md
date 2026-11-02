@@ -79,6 +79,13 @@ The output gets the programme's picture and the bus's sound. A bus that an
 output reads cannot be removed until the output is pointed back at the
 programme or removed, and the refusal says so.
 
+The bus's sound is encoded on its own thread once the first output asks for
+it, so the add answers straight away. If the encoder cannot start, the outputs
+on that bus come off the air: Outputs shows them as failed with the reason,
+an alert says the same, and the mixer tries them again by itself. If it keeps
+failing, remove the output and add it again without `audio` to send it the
+programme's sound.
+
 One bus per guest: add `guest-2-return` with `minus = "guest-2"`, and so on.
 
 ## Headphones with cue and solo
