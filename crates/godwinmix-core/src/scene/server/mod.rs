@@ -26,6 +26,7 @@ pub mod compose;
 pub mod conflict;
 mod drafts;
 mod preview_cells;
+mod shown;
 mod keys;
 pub use keys::KeyOnAir;
 mod stale;
@@ -99,8 +100,9 @@ struct Inner {
     /// The scene that is armed. `program.take {}` with no argument takes it.
     preview: Option<Id>,
     /// A draft the preview draws in place of the armed scene, while a designer
-    /// has it open. See `SceneServer::show_draft`.
+    /// has it open, and the client that asked. See `shown.rs`.
     preview_draft: Option<Id>,
+    preview_draft_by: Option<String>,
 }
 
 impl SceneServer {
@@ -123,6 +125,7 @@ impl SceneServer {
                 drafts: Vec::new(),
                 preview: None,
                 preview_draft: None,
+                preview_draft_by: None,
             }),
             patches: broadcast::channel(PATCH_QUEUE).0,
             seq: AtomicU64::new(0),
@@ -240,6 +243,11 @@ impl SceneServer {
             None => None,
         };
         inner.preview = armed;
+        // Arming is the newer instruction about what Preview shows, so a
+        // draft shown in its place gives way. A designer whose page closed
+        // without a Discard used to hold Preview on that draft for everyone.
+        inner.preview_draft = None;
+        inner.preview_draft_by = None;
         drop(inner);
         Ok(armed.and_then(|id| self.list().into_iter().find(|s| s.id == id)))
     }
@@ -284,28 +292,6 @@ impl SceneServer {
         let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
         let cells = preview_cells::cells(compose::placements(&inner.doc, scene, &inner.canvas), sx, sy);
         Some(PreviewLayout { scene: id, name: scene.name.clone(), width, height, cells })
-    }
-
-    /// Have the preview draw a draft in place of the armed scene, or stop.
-    ///
-    /// A designer moves boxes on a draft, and a draft is in no picture the
-    /// core makes: the armed scene's preview shows the scene as saved and the
-    /// programme shows what is on air, so the boxes moved and the video under
-    /// them stayed where it was, and nobody could lay a scene out by eye. This
-    /// points the one preview compositor at the draft, through the same
-    /// placements the programme would get, so what is seen is what Apply
-    /// gives.
-    ///
-    /// What is armed is left alone, because `program.take` with no argument
-    /// takes it and a designer opening must not change what a take does. The
-    /// draft going, applied or discarded, ends this by itself.
-    pub fn show_draft(&self, draft: Option<&str>) -> Result<()> {
-        let mut inner = self.inner.lock();
-        inner.preview_draft = match draft {
-            Some(id) => Some(drafts::find_draft(&inner.drafts, id)?.id),
-            None => None,
-        };
-        Ok(())
     }
 
     /// The draft the preview is showing, laid out, when there is one.

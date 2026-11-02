@@ -221,7 +221,10 @@ fn preview(reg: &mut Registry<Call>) {
                 let req: PreviewRequest = call.params(&params)?;
                 if let Some(draft) = req.draft.as_deref().map(str::trim) {
                     let shown = (!draft.is_empty()).then_some(draft);
-                    server(&call).show_draft(shown).map_err(|e| scene_error(&call, e))?;
+                    // Remembered with who asked, so a page that closes
+                    // without a Discard does not hold everybody's Preview.
+                    let by = client(&call);
+                    server(&call).show_draft_for(shown, by.as_deref()).map_err(|e| scene_error(&call, e))?;
                     push_preview(&call);
                     return body(json!({ "preview": server(&call).armed(), "draft": shown }));
                 }

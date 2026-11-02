@@ -120,7 +120,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // A device token's label, so the others see "Sam's phone" rather than
     // the token's slug.
     let label = ctx.app.tokens.devices().and_then(|d| d.list().into_iter().find(|t| t.id == token.id)).map(|t| t.label);
-    let _here = ctx.app.presence.join(&client_id, &token, label, who.user_agent.as_deref());
+    let here = ctx.app.presence.join(&client_id, &token, label, who.user_agent.as_deref());
     let mut conn = Connection {
         tx,
         ctx,
@@ -368,6 +368,14 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // Info rather than debug: a page that says it is disconnected while the
     // mixer is up is a support call, and this is the line that answers it.
     info!(client = %conn.client_id, why, "rpc client disconnected");
+    // The seat goes first, so the question below is about the connections
+    // left. A composer whose page closed without a Discard held everybody's
+    // Preview on its draft; it lets go once its client has no page open.
+    drop(here);
+    let app = &conn.ctx.app;
+    if !app.presence.present(&conn.client_id) && app.scenes.client_left(&conn.client_id) {
+        crate::control::push_preview(app);
+    }
 }
 
 impl Connection {
