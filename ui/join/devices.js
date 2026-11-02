@@ -56,6 +56,30 @@ export async function listDevices(md = navigator.mediaDevices) {
 }
 
 /**
+ * Programs that pose as a camera. A browser asked for "a camera" takes the
+ * system's first, and on a laptop with DroidCam or OBS installed that is
+ * often the program rather than the webcam: the guest then joined showing
+ * DroidCam's "not connected" card.
+ */
+const VIRTUAL = /droidcam|\bobs[- ](virtual )?cam|virtual|manycam|snap camera|xsplit|vcam|nvidia broadcast|\bcamo\b|mmhmm|iriun|epoccam|ivcam|e2esoft|splitcam|youcam|vmix|\bndi\b|camera hub/i;
+
+export function isVirtualCamera(label) {
+  return VIRTUAL.test(label || "");
+}
+
+/**
+ * The camera to use in place of `current` when nobody chose one: the first
+ * real camera when `current` is a virtual one, or "" to keep it. Labels are
+ * only there once the browser has been allowed a camera.
+ */
+export function realCameraFor(current, cameras) {
+  const now = cameras.find((c) => c.id === current);
+  if (!now || !isVirtualCamera(now.label)) return "";
+  const real = cameras.find((c) => !isVirtualCamera(c.label));
+  return real ? real.id : "";
+}
+
+/**
  * Is this a phone or a tablet held upright? A touch screen taller than it is
  * wide. A narrow window on a laptop is not: its webcam still sends a wide picture.
  */
