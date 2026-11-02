@@ -31,6 +31,7 @@ mod sample;
 mod worker;
 
 pub use params::Settings;
+pub use worker::share::workers_on;
 
 use crate::caps::CanvasCaps;
 use crate::config::Params;
