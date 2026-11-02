@@ -34,25 +34,16 @@ export function resolve(panel, s) {
   const was = panel.onAirKey;
   follow(panel, s, kit);
   const after = settings().afterTake;
-  if (was !== undefined && was !== panel.onAirKey) {
-    delete document.body.dataset.chosen;
-    if (after !== "swap") keepTaken(panel, s, kit, scene);
-  }
+  // A take by name arms the scene taken on the core when Preview was
+  // following the programme (scene/server/after_take.rs), so every page and
+  // the Companion path agree without this page arming anything.
+  if (was !== undefined && was !== panel.onAirKey) delete document.body.dataset.chosen;
   const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null, after);
   panel.next = next;
   // Kept for whoever reads the old names: the take target and the armed scene.
   panel.armed = next ? next.id : null;
   panel.armedScene = next && next.kind === "scene" && next.why === "armed" ? next.name : null;
   return next;
-}
-
-/** After a take, arm a scene taken by name, so the core draws it with its filters. */
-function keepTaken(panel, s, kit, armed) {
-  const live = panel.onAirLive;
-  if (document.body.dataset.armed && document.body.dataset.armed !== s.program) delete document.body.dataset.armed;
-  const summary = live && kit ? kit.summary(live) : null;
-  if (!summary || (armed && kit.summary(armed) && kit.summary(armed).id === summary.id)) return;
-  if (panel.client && panel.client.call) panel.client.call("scene.preview.set", { scene: summary.id }).catch(() => {});
 }
 
 /** The pane drawn for what is in preview. */

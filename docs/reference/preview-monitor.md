@@ -56,9 +56,12 @@ In this mode Preview holds, in order: a source put in Preview on this page,
 the armed scene, the scene on air, the source on air, and with nothing on air
 the first scene. When a take puts a scene on air that is not the armed one
 (a take by name from a Stream Deck, Companion, an agent or another desk),
-the page arms it with `scene.preview.set {scene}`, so the core draws it with
-its filters; every page in this mode asks for the same scene. `program.take
-{}` takes the armed scene, which stays armed after it goes on air. Take and
+the core arms it itself when Preview was following the programme: nothing was
+armed, or the armed scene was the one on air before the take. Every page then
+hears `event/preview.changed` and draws it with its filters, and this holds
+with no page open at all. A scene somebody armed to go next is left armed.
+`program.take {}` takes the armed scene, which stays armed after it goes on
+air. Take and
 Cut with the scene on air in Preview take it again, which changes nothing on
 air. Space, the Take button and the phone layout all take what Preview holds.
 

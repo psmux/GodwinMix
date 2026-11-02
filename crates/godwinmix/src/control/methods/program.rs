@@ -330,6 +330,7 @@ async fn take_scene(
     // the names have been checked and before the pipeline is touched.
     call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
     call.app.history.expect(&call.token.id);
+    let was_on_air = on_air_scene(call).await;
     call.app
         .mixer
         .request(|ack| Command::TakeScene {
@@ -347,10 +348,25 @@ async fn take_scene(
     // Only once the mixer has taken it, exactly as `cut` does: a take the
     // pipeline refused must not start the hold on the next one.
     call.app.safety.record(&call.token.id);
+    keep_in_preview(call, &name, was_on_air);
     if !absent.is_empty() {
         missing::alert(call, &name, &missing::names(call, &absent).await);
     }
     body(state(call).await?)
+}
+
+/// The id of the scene on air now, if a scene is.
+async fn on_air_scene(call: &Call) -> Option<godwinmix_core::scene::id::Id> {
+    let status = call.app.mixer.status().await.ok()?;
+    call.app.scenes.scene(status.scene.as_deref()?).ok().map(|s| s.id)
+}
+
+/// Preview keeps the scene just taken when it was following the programme
+/// (`scene::server::after_take`), and every page hears it as an arm.
+fn keep_in_preview(call: &Call, taken: &str, was_on_air: Option<godwinmix_core::scene::id::Id>) {
+    let Some(armed) = call.app.scenes.follow_take(taken, was_on_air) else { return };
+    call.app.mixer.emit(godwinmix_protocol::types::Event::PreviewChanged { scene: Some(armed) });
+    crate::control::push_preview(&call.app);
 }
 
 async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {
