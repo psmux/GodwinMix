@@ -30,12 +30,16 @@ pub struct Raise {
 
 impl Raise {
     /// Unlocked, then up to the pipeline's state, tail first, so everything
-    /// downstream of the encoder is ready before the encoder is.
-    pub fn run(&self) -> Result<()> {
+    /// downstream of the encoder is ready before the encoder is. Stops
+    /// between elements once `cancel` is set.
+    pub fn run(&self, cancel: &AtomicBool) -> Result<()> {
         for el in &self.chain {
             el.set_locked_state(false);
         }
         for el in self.chain.iter().rev() {
+            if cancel.load(Ordering::SeqCst) {
+                return Ok(());
+            }
             el.sync_state_with_parent()
                 .with_context(|| format!("{} encode chain would not start", self.tag))?;
         }
@@ -47,10 +51,22 @@ impl Raise {
 #[derive(Default)]
 pub struct Starting {
     done: AtomicBool,
+    cancel: AtomicBool,
     failed: Mutex<Option<String>>,
 }
 
 impl Starting {
+    /// For shutdown: stop at the next element, and wait up to `within` for
+    /// the element in hand. True when the start has finished.
+    pub fn cancel(&self, within: std::time::Duration) -> bool {
+        self.cancel.store(true, Ordering::SeqCst);
+        let until = std::time::Instant::now() + within;
+        while !self.finished() && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        self.finished()
+    }
+
     pub fn finished(&self) -> bool {
         self.done.load(Ordering::SeqCst)
     }
@@ -70,7 +86,7 @@ where
     let starting = Arc::new(Starting::default());
     let state = starting.clone();
     let started = crate::mixer::offload::run("encoder-start", "programme", move || {
-        if let Some(e) = raises.iter().map(Raise::run).find_map(Result::err) {
+        if let Some(e) = raises.iter().map(|r| r.run(&state.cancel)).find_map(Result::err) {
             *state.failed.lock() = Some(format!("{e:#}"));
         }
         state.done.store(true, Ordering::SeqCst);

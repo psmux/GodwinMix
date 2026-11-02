@@ -9,14 +9,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /// How long the encoder takes to open. Longer than any answer accepted.
-const OPENING: Duration = Duration::from_secs(3);
+pub(super) const OPENING: Duration = Duration::from_secs(3);
 
 /// The longest the `output.add` that starts the encoder may take to answer.
 const ANSWERED: Duration = Duration::from_millis(500);
 
 /// Hold `el`'s state lock on a thread of its own for `OPENING`, as an encoder
 /// opening its session holds its own state change. Says once it has it.
-fn hold_state_lock(el: gst::Element) -> std::sync::mpsc::Receiver<()> {
+pub(super) fn hold_state_lock(el: gst::Element) -> std::sync::mpsc::Receiver<()> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let raw: *mut gst::ffi::GstElement = el.as_ptr();

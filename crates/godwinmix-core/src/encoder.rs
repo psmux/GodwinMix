@@ -54,6 +54,9 @@ use tracing::{debug, info, warn};
 mod raise;
 mod retire;
 
+/// How long shutdown waits for a start still opening the encoder.
+const SHUTDOWN_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// `[program] encoder`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EncoderPolicy {
@@ -361,7 +364,7 @@ impl EncodeChain {
         if self.pad.is_some() {
             return Ok(());
         }
-        self.raise().run()?;
+        self.raise().run(&AtomicBool::new(false))?;
         self.join()
     }
 
@@ -617,8 +620,18 @@ impl Encoder {
         info!("programme encoder stopping, nothing is reading it");
     }
 
-    /// Take everything down, for shutdown.
+    /// Take everything down, for shutdown. A start still running is told to
+    /// stop and waited for, a few seconds at most, so it is not bringing an
+    /// element up while this takes it down. One that does not stop in time
+    /// is left to the pipeline going to NULL, which waits for it anyway.
     pub fn shutdown(&mut self) {
+        if let Some(starting) = self.starting.take() {
+            if !starting.cancel(SHUTDOWN_WAIT) {
+                warn!(waited_ms = SHUTDOWN_WAIT.as_millis() as u64, "the programme encoder was still starting at shutdown; the pipeline going down takes it with it");
+                self.handle.mark_running(false);
+                return;
+            }
+        }
         self.video.detach();
         self.audio.detach();
         self.handle.mark_running(false);

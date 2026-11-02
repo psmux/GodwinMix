@@ -431,6 +431,12 @@ impl OutputSlot {
         Ok(())
     }
 
+    /// The output's own pipeline while it has one, for a test.
+    #[cfg(test)]
+    pub fn current_pipeline(&self) -> Option<gst::Pipeline> {
+        self.pipeline.lock().as_ref().map(|l| l.pipeline.clone())
+    }
+
     /// Bus messages from this output's pipeline carry this label.
     pub fn owns_pipeline(&self, owner: &BusOwner) -> bool {
         owner.output() == Some(self.cfg.id.as_str())
