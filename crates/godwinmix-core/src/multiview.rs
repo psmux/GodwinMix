@@ -54,6 +54,7 @@ mod early;
 pub mod preview;
 pub mod preview_chain;
 mod preview_prebuilt;
+mod preview_drawn;
 mod transparent;
 
 use crate::caps::{CanvasCaps, Grid};
@@ -172,7 +173,7 @@ struct Shared {
     /// The preview's keyed filters once the armed scene is drawn with every
     /// filter in place, `None` while it is not yet (a build off the loop, a
     /// new preview). Read by a still that waits for the filters to draw.
-    preview_filters: Mutex<Option<Vec<crate::plugin::filter::BoardHook>>>,
+    preview_filters: Mutex<Option<preview::Drawn>>,
     /// Stable across rebuilds, so a client holding a receiver keeps it when
     /// the mosaic is torn down and built again at another size.
     frames: broadcast::Sender<Arc<[u8]>>,
@@ -344,11 +345,11 @@ impl MultiviewHandle {
     }
 
     /// True once the armed scene is drawn in the preview with all its
-    /// filters, and every one drawn on the board (a key, a cutout) has handed
-    /// it a picture. A still of a filtered scene waits for this.
+    /// filters, every item has had a frame, and every filter drawn on the
+    /// board (a key, a cutout) has handed it a picture. A still of a
+    /// filtered scene waits for this.
     pub fn preview_filters_drawn(&self) -> bool {
-        let filters = self.shared.preview_filters.lock();
-        filters.as_ref().is_some_and(|hooks| hooks.iter().all(|h| !h.layer.active() || h.layer.picture().is_some()))
+        self.shared.preview_filters.lock().as_ref().is_some_and(preview::Drawn::now)
     }
 
     pub fn detached(cfg: MultiviewConfig, rt: tokio::runtime::Handle) -> Self {
@@ -1138,7 +1139,7 @@ impl Multiview {
         let drawn = preview.apply(canvas, cells, built, |source| {
             tiles.iter().find(|(id, _)| id == source).map(|(_, tee)| tee.clone())
         });
-        *self.shared.preview_filters.lock() = Some(preview.keyed_hooks());
+        *self.shared.preview_filters.lock() = Some(preview.in_picture());
         drawn
     }
 
