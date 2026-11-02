@@ -10,6 +10,7 @@
 import { fillNote, sceneNotRunning } from "../scenes/fix-note.js";
 import { sceneKit, armedScene as armedName, follow, nextUp, whyText } from "./studio-next.js";
 import { paintSlots } from "./studio-slots.js";
+import { settings } from "../../shell/settings.js";
 
 export { sceneKit };
 
@@ -32,8 +33,16 @@ export function resolve(panel, s) {
   // the programme, so Preview goes back to suggesting the next shot.
   const was = panel.onAirKey;
   follow(panel, s, kit);
-  if (was !== undefined && was !== panel.onAirKey) delete document.body.dataset.chosen;
-  const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null);
+  const after = settings().afterTake;
+  // The core arms what follows a take (scene/server/after_take.rs), so
+  // every page and Companion agree without this page arming anything.
+  if (was !== undefined && was !== panel.onAirKey) {
+    delete document.body.dataset.chosen;
+    // A source armed here and taken is forgotten once the programme moves
+    // on, as the core does for scenes.
+    if (document.body.dataset.armed && was === `source:${document.body.dataset.armed}`) delete document.body.dataset.armed;
+  }
+  const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null, after);
   panel.next = next;
   // Kept for whoever reads the old names: the take target and the armed scene.
   panel.armed = next ? next.id : null;

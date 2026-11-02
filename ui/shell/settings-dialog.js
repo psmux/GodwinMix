@@ -53,6 +53,13 @@ export function openSettingsDialog(client, opts = {}) {
     check("Studio mode: a click fills Preview, Take puts it on air", s.producer, (v) => setSetting("producer", v))
   );
 
+  simple.appendChild(
+    field(
+      "After Take, Preview shows",
+      select([["same", "The same scene"], ["swap", "The scene that was on air"]], s.afterTake, (v) => setSetting("afterTake", v))
+    )
+  );
+
   simple.appendChild(check("Show meters on tiles", s.meters, (v) => setSetting("meters", v)));
   simple.appendChild(check("Show faders on tiles", s.faders, (v) => setSetting("faders", v)));
   simple.appendChild(check("Show the scrubber on files", s.lanes, (v) => setSetting("lanes", v)));

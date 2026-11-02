@@ -44,10 +44,52 @@ calls `fx.fire {name}`; `fx.list {role: "effect"}` is asked once when Studio
 mode loads, and its first nine are registered as `fx.fire-1` to `fx.fire-9`
 on Alt+1 to Alt+9.
 
+### After Take
+
+After a take, Preview keeps the scene that was just taken, the same picture
+as Programme, until you pick another. That is the default, and what a browser
+that never chose gets. Every change to the armed scene (its layout, its
+items, a key, a cutout, a look, a colour correction) shows in Preview before
+Take, because the core composites the armed scene with each item's filters.
+
+In this mode Preview holds, in order: a source put in Preview on this page,
+the armed scene, the scene on air, the source on air, and with nothing on air
+the first scene. When a take puts a scene on air that is not the armed one
+(a take by name from a Stream Deck, Companion, an agent or another desk),
+the core arms it itself when Preview was following the programme: nothing was
+armed, or the armed scene was the one on air before the take. Every page then
+hears `event/preview.changed` and draws it with its filters, and this holds
+with no page open at all. A scene somebody armed to go next is left armed.
+`program.take {}` takes the armed scene, which stays armed after it goes on
+air. Take and
+Cut with the scene on air in Preview take it again, which changes nothing on
+air. Space, the Take button and the phone layout all take what Preview holds.
+
+What `program.take {}` takes, as a Stream Deck through Companion sends it,
+starting from Wide on air and Two armed:
+
+| After Take | `program.take {}` | then Close taken by name | then `program.take {}` |
+|---|---|---|---|
+| The same scene (`same`) | Two goes up and stays armed | Close goes up and is armed, since Preview held what was on air | Close again: nothing changes on air |
+| The scene that was on air (`swap`) | Two goes up, Wide is armed | Close goes up, Wide stays armed | Wide goes up, Close is armed |
+
+A scene somebody arms between a take and the core following it stays armed
+in both. Two takes by name at the same moment are followed in the order the
+mixer took them, each against what the one before it put on air.
+
+**Settings > After Take, Preview shows** chooses between **The same scene**
+and **The scene that was on air**. The setting is the core's, because
+`program.take {}` takes what the core leaves armed. A choice is sent with
+`scene.preview.set {"after_take": "same"}` or `"swap"` when it is made and
+again each time the page connects, so the last page to choose decides for
+every client. A page where nobody chose sends nothing, and a core that has
+heard nothing uses `same`. The page keeps its choice in `gmx.settings` as
+`afterTake`. The second is the suggestion below.
+
 ### The suggestion
 
-With no scene armed, or the armed scene on air, and no source armed on this
-page, Preview holds the scene most likely to be taken next: the newest scene
+With After Take set to the scene that was on air, and with no scene armed,
+or the armed scene on air, and no source armed on this page, Preview holds the scene most likely to be taken next: the newest scene
 this page saw on air before the one on air now, else the first scene in the
 list that is not on air. The page keeps that history from the status
 document's `scene` field, so a take by any client moves it. It reads the scene
@@ -58,8 +100,9 @@ A suggestion is not armed: nothing is called on the core to show it, and
 `program.take {}` from another client still takes whatever is armed there. Its
 picture is drawn on the page from the multiview mosaic the Programme monitor
 already receives, at the boxes `scene.get` answers for it, as the Scenes
-panel's pictures are, so the core composites nothing extra for it. Graphics
-and text are not in that picture; an armed scene's preview stream has them.
+panel's pictures are, so the core composites nothing extra for it. Graphics,
+text and the items' filters (a key, a cutout, a look) are not in that picture;
+an armed scene's preview stream has them.
 
 Over every picture, a scene item whose source is not `live` in the status
 document, has `has_video: false` or is not in the mixer is labelled on its own
@@ -72,8 +115,8 @@ see it. Putting a source in Preview disarms the scene with
 `scene.preview.set {}`, and arming a scene after that replaces the source, so
 there is one thing in Preview.
 
-An armed scene that is also on air counts as a suggestion, so Preview moves
-on after a take, except when it was picked in this page's Scenes panel since
+With After Take set to the scene that was on air, an armed scene that is also
+on air counts as a suggestion, so Preview moves on after a take, except when it was picked in this page's Scenes panel since
 the programme last changed. The Scenes panel marks that pick on
 `document.body.dataset.chosen`, and the Programme panel clears it when the
 scene on air changes (`ui/panels/multiview/studio-armed.js`).

@@ -491,6 +491,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
     ("shell/restart-bar.js", include_str!("../../../ui/shell/restart-bar.js")),
     ("shell/restart-check.js", include_str!("../../../ui/shell/restart-check.js")),
+    ("shell/after-take.js", include_str!("../../../ui/shell/after-take.js")),
     ("shell/scene-session.js", include_str!("../../../ui/shell/scene-session.js")),
     ("shell/source-files.js", include_str!("../../../ui/shell/source-files.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
@@ -1351,8 +1352,11 @@ mod tests {
         // Raised to 509 kB with the page's own budget, for the Replay panel's
         // entry and keys; the composer's files did not grow. Measured at
         // 520194 bytes. Raised to 510 kB with the page's, for the Guests and
-        // Replay entries landing together: measured at 521433 bytes.
-        assert!(bytes < 510 * 1024, "the page with the composer open is {bytes} bytes, over the 510 kB budget");
+        // Replay entries landing together: measured at 521433 bytes. Raised
+        // to 511 kB for the Programme row's FX button, the After Take choice
+        // in Settings, and a filter added in the composer showing at once:
+        // measured at 522924 bytes.
+        assert!(bytes < 511 * 1024, "the page with the composer open is {bytes} bytes, over the 511 kB budget");
     }
 
     #[test]
@@ -1520,6 +1524,9 @@ mod tests {
         // A source's sound filters, fetched when its FX button is first pressed.
         reachable.extend(closure_of("panels/audio/chain.js"));
         reachable.extend(closure_of("panels/multiview/backup-banner.js"));
+        // What Preview holds after a Take, sent to the core once somebody
+        // has chosen it in Settings.
+        reachable.extend(closure_of("shell/after-take.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
         // their buttons are pressed.

@@ -216,17 +216,27 @@ fn preview(reg: &mut Registry<Call>) {
             "scene.preview.set",
             Scope::Operate,
             "Arm a scene. The armed scene is the preview, and program.take with no argument \
-             takes it.",
+             takes it. after_take sets what is armed after a take, for every client.",
             handler(|call: Call, params| async move {
                 let req: PreviewRequest = call.params(&params)?;
+                if let Some(mode) = req.after_take {
+                    server(&call).set_after_take(mode);
+                    if req.scene.is_none() && req.draft.is_none() {
+                        return body(json!({ "preview": server(&call).armed(), "after_take": mode }));
+                    }
+                }
                 if let Some(draft) = req.draft.as_deref().map(str::trim) {
                     let shown = (!draft.is_empty()).then_some(draft);
-                    server(&call).show_draft(shown).map_err(|e| scene_error(&call, e))?;
+                    // Remembered with who asked, so a page that closes
+                    // without a Discard does not hold everybody's Preview.
+                    let by = client(&call);
+                    server(&call).show_draft_for(shown, by.as_deref()).map_err(|e| scene_error(&call, e))?;
                     push_preview(&call);
                     return body(json!({ "preview": server(&call).armed(), "draft": shown }));
                 }
+                let by = client(&call);
                 let armed = server(&call)
-                    .arm(req.scene.as_deref())
+                    .arm_for(req.scene.as_deref(), by.as_deref())
                     .map_err(|e| scene_error(&call, e))?;
                 // Nothing is composited for a preview until a client asks for
                 // one with ext.preview, so arming costs one message and a
@@ -313,6 +323,7 @@ pub(crate) fn push_preview_for(app: &crate::control::AppState) {
                     rotation: c.rotation,
                     crop: c.crop,
                     sizing: godwinmix_core::mixer::slots::Sizing::named(&c.fit),
+                    filters: c.filters,
                 })
                 .collect()
         })
@@ -387,6 +398,8 @@ async fn still(call: &Call, req: &PreviewFrameRequest) -> Result<Value, RpcError
         .with("scene", layout.name.clone())
         .with("retryable", true));
     };
+    let filtered = layout.cells.iter().any(|c| !c.filters.is_empty());
+    let jpeg = if filtered { super::settle::settle(&call.app.multiview, &mut sub, jpeg).await } else { jpeg };
     use base64::Engine;
     let shape = call.app.multiview.preview_built();
     Ok(json!({

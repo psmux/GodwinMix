@@ -23,6 +23,12 @@ late picture, noise suppression, a loudness target, and a plain gain. The settin
 Filters on one source run one after the other in the order they were added.
 They stay when the mixer restarts.
 
+The **Programme** row at the top of the panel has an **FX** button too. It
+holds the filters on everything that goes out, after the mix: a **Loudness
+target** that keeps the show at one level, or a **Limiter** as a ceiling. It
+lists only those, not the ones on each source, and has no **Voice**, which is
+for one microphone. It is the same as `attach = { programme = true }` below.
+
 ## Over the API
 
 `filter.add` puts a filter on a source, `filter.set` changes the settings it

@@ -54,6 +54,7 @@ async fn the_preview_path_adds_no_more_than_its_budget() {
         rotation: 0.0,
         crop: (0.0, 0.0, 0.0, 0.0),
         sizing: Default::default(),
+        filters: Vec::new(),
     }]);
     let slack = crate::plugin::harness::timing_slack();
     let source = wait_for_source(Duration::from_secs(10).mul_f64(slack)).await;

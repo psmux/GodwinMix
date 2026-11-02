@@ -413,6 +413,14 @@
       ],
       "type": "object"
     },
+    "AfterTake": {
+      "description": "What Preview holds after a Take. See the module.",
+      "enum": [
+        "same",
+        "swap"
+      ],
+      "type": "string"
+    },
     "AgentExt": {
       "anyOf": [
         {
@@ -13254,6 +13262,17 @@
     "PreviewRequest": {
       "description": "`scene.preview.set`.",
       "properties": {
+        "after_take": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AfterTake"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What Preview holds after a Take, for every client of this core:\n`same` (the default) keeps the scene just taken, `swap` arms the scene\nit replaced when the armed scene is taken. `program.take {}` takes\nwhat this leaves armed. Sent alone it changes the setting and nothing\nelse; nothing is disarmed."
+        },
         "draft": {
           "description": "A draft from `scene.edit.begin` for the preview to draw in place of\nthe armed scene, which is how a designer sees what it is laying out.\nWhat is armed is left as it is, and `scene` is ignored. An empty string\ngoes back to the armed scene; so does applying or discarding the draft.",
           "type": [
@@ -26318,7 +26337,7 @@
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Arm a scene. The armed scene is the preview, and program.take with no argument takes it."
+      "summary": "Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client."
     },
     {
       "destructive": false,

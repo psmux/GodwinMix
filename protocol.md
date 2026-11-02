@@ -267,7 +267,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.params.get` | `GET /api/v1/scenes/params/get` | read |  | 1 | The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it. |
 | `scene.params.set` | `POST /api/v1/scenes/params/set` | operate |  | 1 | Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it. |
 | `scene.preview.frame` | `GET /api/v1/scenes/preview/frame` | read |  | 1 | A still of the armed scene as base64 JPEG, the floor every client has. |
-| `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. |
+| `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client. |
 | `scene.redo` | `POST /api/v1/scenes/redo` | operate |  | 1 | Put back what your undo took away. |
 | `scene.remove` | `DELETE /api/v1/scenes/{id}` | operate | yes | 1 | Delete a scene. What is on air is not touched. |
 | `scene.rename` | `POST /api/v1/scenes/{id}/rename` | operate |  | 1 | Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones. |
@@ -4216,7 +4216,7 @@ MCP tool `preview_frame` in the `search` profile: readOnlyHint true, destructive
 
 #### `scene.preview.set`
 
-Arm a scene. The armed scene is the preview, and program.take with no argument takes it.
+Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.
 
 MCP tool `arm_preview` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 

@@ -76,6 +76,11 @@ impl Presence {
         found
     }
 
+    /// Whether any connection with this client id is open.
+    pub fn present(&self, client_id: &str) -> bool {
+        self.seats.lock().values().any(|s| s.client_id == client_id)
+    }
+
     /// How to name a client to a person, while it is connected.
     pub fn who(&self, client_id: &str) -> Option<String> {
         self.seats.lock().values().find(|s| s.client_id == client_id)?.name()

@@ -1,4 +1,6 @@
-// The sound filters on one source: add, set, bypass and remove, live.
+// The sound filters on one source, or on the programme: add, set, bypass
+// and remove, live. The programme's are the ones on everything that goes
+// out, such as a loudness target; `PROGRAMME` stands for it here.
 //
 // Every change goes through filter.add, filter.set and filter.remove, the
 // same methods an agent or a script uses. A slider sends its value at most
@@ -45,8 +47,14 @@ const VOICE = [
   ['limiter/filter', {}],
 ];
 
+// What the Programme row's FX opens, in place of a source id.
+export const PROGRAMME = null;
+
+// Where a filter goes, as filter.add takes it.
+const where = (source) => (source === PROGRAMME ? { programme: true } : { source });
+
 function freeId(taken, source, type) {
-  const base = `${source}-${type.split('/')[0]}`;
+  const base = `${source === PROGRAMME ? 'programme' : source}-${type.split('/')[0]}`;
   let id = base;
   for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
   taken.add(id);
@@ -55,7 +63,10 @@ function freeId(taken, source, type) {
 
 async function listFor(client, source) {
   const { filters = [] } = await client.call('filter.list', {});
-  return filters.filter(f => f.source === source && KINDS[f.type]);
+  // A programme filter has no source; one on a source's programme branch has
+  // no source in the list either, so the side tells the two apart.
+  const mine = source === PROGRAMME ? (f => !f.source && f.side === 'programme') : (f => f.source === source);
+  return filters.filter(f => mine(f) && KINDS[f.type]);
 }
 
 // A slider for one setting that sends while it moves, throttled.
@@ -100,12 +111,12 @@ function card(client, filter, redraw) {
 async function add(client, source, items) {
   const taken = new Set((await client.call('filter.list', {})).filters?.map(f => f.id) || []);
   for (const [type, params] of items) {
-    await client.call('filter.add', { id: freeId(taken, source, type), type, source, params });
+    await client.call('filter.add', { id: freeId(taken, source, type), type, ...where(source), params });
   }
 }
 
 export function openChain(client, id) {
-  const source = client.state.sources?.find(s => s.id === id) || { id };
+  const source = id === PROGRAMME ? { id, name: 'Programme' } : client.state.sources?.find(s => s.id === id) || { id };
   const name = source.name || source.id;
   const list = el('div.chain-list');
   const picker = el('select', { 'aria-label': 'Add a sound filter' }, [
@@ -117,7 +128,9 @@ export function openChain(client, id) {
       const filters = await listFor(client, source.id);
       list.replaceChildren(...(filters.length
         ? filters.map(f => card(client, f, redraw))
-        : [el('p.dim', { text: 'No sound filters yet. Voice adds a low cut, a gate, a compressor and a limiter.' })]));
+        : [el('p.dim', { text: id === PROGRAMME
+          ? 'No sound filters on the programme yet. A loudness target keeps what goes out at one level.'
+          : 'No sound filters yet. Voice adds a low cut, a gate, a compressor and a limiter.' })]));
     } catch (e) { errorToast(e, 'Sound filters'); }
   };
   picker.addEventListener('change', () => {
@@ -126,6 +139,8 @@ export function openChain(client, id) {
     if (type) add(client, source.id, [[type, {}]]).then(redraw).catch(e => errorToast(e, KINDS[type].name));
   });
   const voice = el('button.btn.sm', { text: 'Voice', onclick: () => add(client, source.id, VOICE).then(redraw).catch(e => errorToast(e, 'Voice')) });
-  modal({ title: `Sound filters: ${name}`, body: el('div.chain', {}, [el('div.row', {}, [picker, voice]), list]) });
+  // Voice is for a microphone; the programme has a mix of them.
+  const tools = id === PROGRAMME ? [picker] : [picker, voice];
+  modal({ title: `Sound filters: ${name}`, body: el('div.chain', {}, [el('div.row', {}, tools), list]) });
   redraw();
 }

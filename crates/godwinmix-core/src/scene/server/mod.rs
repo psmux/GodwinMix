@@ -21,12 +21,16 @@
 //! the patch is read off the result. No command describes its own change, so no
 //! command can describe it wrongly.
 
+mod after_take;
 mod clients;
 pub mod compose;
 pub mod conflict;
 mod drafts;
+mod preview_cells;
+mod shown;
 mod keys;
 pub use keys::KeyOnAir;
+pub use after_take::AfterTake;
 mod stale;
 pub mod find;
 pub mod graphics;
@@ -98,8 +102,11 @@ struct Inner {
     /// The scene that is armed. `program.take {}` with no argument takes it.
     preview: Option<Id>,
     /// A draft the preview draws in place of the armed scene, while a designer
-    /// has it open. See `SceneServer::show_draft`.
+    /// has it open, and the client that asked. See `shown.rs`.
     preview_draft: Option<Id>,
+    preview_draft_by: Option<String>,
+    /// What Preview holds after a Take. See `after_take`.
+    after_take: AfterTake,
 }
 
 impl SceneServer {
@@ -122,6 +129,8 @@ impl SceneServer {
                 drafts: Vec::new(),
                 preview: None,
                 preview_draft: None,
+                preview_draft_by: None,
+                after_take: AfterTake::default(),
             }),
             patches: broadcast::channel(PATCH_QUEUE).0,
             seq: AtomicU64::new(0),
@@ -233,12 +242,29 @@ impl SceneServer {
     /// Arm a scene. The armed scene is the preview, and nothing is composited
     /// for it until a client subscribes with `ext.preview`.
     pub fn arm(&self, which: Option<&str>) -> Result<Option<SceneSummary>> {
+        self.arm_for(which, None)
+    }
+
+    /// The same, by `client`. A draft shown in Preview by that client, or by
+    /// nobody known, gives way: arming is that designer's newer instruction.
+    /// A draft another client is showing stays drawn, because a designer is
+    /// looking at it; it ends when they Discard, Apply or leave (`shown.rs`).
+    pub fn arm_for(&self, which: Option<&str>, client: Option<&str>) -> Result<Option<SceneSummary>> {
         let mut inner = self.inner.lock();
         let armed = match which {
             Some(which) => Some(find::scene(&inner.doc, which)?.id),
             None => None,
         };
         inner.preview = armed;
+        let someone_else = match (&inner.preview_draft_by, client) {
+            (Some(by), Some(me)) => by != me,
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
+        if !someone_else {
+            inner.preview_draft = None;
+            inner.preview_draft_by = None;
+        }
         drop(inner);
         Ok(armed.and_then(|id| self.list().into_iter().find(|s| s.id == id)))
     }
@@ -281,43 +307,8 @@ impl SceneServer {
         let scene = inner.doc.scene(&id)?;
         let canvas = inner.doc.canvas;
         let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
-        let cells = compose::placements(&inner.doc, scene, &inner.canvas)
-            .into_iter()
-            .map(|p| PreviewCell {
-                source: p.source,
-                x: (p.xpos as f64 * sx).round() as i32,
-                y: (p.ypos as f64 * sy).round() as i32,
-                width: (p.width as f64 * sx).round() as i32,
-                height: (p.height as f64 * sy).round() as i32,
-                alpha: p.alpha,
-                rotation: p.rotation,
-                crop: p.crop,
-                fit: p.sizing.name().to_string(),
-            })
-            .collect();
+        let cells = preview_cells::cells(compose::placements(&inner.doc, scene, &inner.canvas), sx, sy);
         Some(PreviewLayout { scene: id, name: scene.name.clone(), width, height, cells })
-    }
-
-    /// Have the preview draw a draft in place of the armed scene, or stop.
-    ///
-    /// A designer moves boxes on a draft, and a draft is in no picture the
-    /// core makes: the armed scene's preview shows the scene as saved and the
-    /// programme shows what is on air, so the boxes moved and the video under
-    /// them stayed where it was, and nobody could lay a scene out by eye. This
-    /// points the one preview compositor at the draft, through the same
-    /// placements the programme would get, so what is seen is what Apply
-    /// gives.
-    ///
-    /// What is armed is left alone, because `program.take` with no argument
-    /// takes it and a designer opening must not change what a take does. The
-    /// draft going, applied or discarded, ends this by itself.
-    pub fn show_draft(&self, draft: Option<&str>) -> Result<()> {
-        let mut inner = self.inner.lock();
-        inner.preview_draft = match draft {
-            Some(id) => Some(drafts::find_draft(&inner.drafts, id)?.id),
-            None => None,
-        };
-        Ok(())
     }
 
     /// The draft the preview is showing, laid out, when there is one.
@@ -332,20 +323,7 @@ impl SceneServer {
         let scene = working.scene(&draft.of)?;
         let canvas = working.canvas;
         let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
-        let cells = compose::placements(&working, scene, &inner.canvas)
-            .into_iter()
-            .map(|p| PreviewCell {
-                source: p.source,
-                x: (p.xpos as f64 * sx).round() as i32,
-                y: (p.ypos as f64 * sy).round() as i32,
-                width: (p.width as f64 * sx).round() as i32,
-                height: (p.height as f64 * sy).round() as i32,
-                alpha: p.alpha,
-                rotation: p.rotation,
-                crop: p.crop,
-                fit: p.sizing.name().to_string(),
-            })
-            .collect();
+        let cells = preview_cells::cells(compose::placements(&working, scene, &inner.canvas), sx, sy);
         Some(PreviewLayout { scene: draft.of, name: draft.name.clone(), width, height, cells })
     }
 
@@ -490,6 +468,12 @@ pub struct PreviewCell {
     pub crop: (f64, f64, f64, f64),
     /// `fill`, `contain` or `cover`: how the picture sits in its box.
     pub fit: String,
+    /// The item's filters, innermost first, for the preview compositor to put
+    /// on the item's slot as the programme does. Not on the wire: a client
+    /// reads an item's filters off the document.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub filters: Vec<crate::mixer::slots::ItemFilter>,
 }
 
 impl Inner {

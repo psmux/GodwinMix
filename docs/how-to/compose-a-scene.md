@@ -124,10 +124,18 @@ What you see behind the handles is the draft you are editing, composited by the
 mixer and streamed at 960 wide: drag an item and the video moves with it, which
 is what makes this a place to design in. The composer asks the preview to draw
 its draft (`scene.preview.set` with `draft`), through the same placements the
-programme would get, so what you see is what Apply gives. What is armed stays
-armed, so a take with no argument does what it did, and applying or discarding
-the draft hands the preview back. It costs a preview compositor for as long as
-the composer is open and nothing after.
+programme would get, so what you see is what Apply gives. That includes the
+items' filters: add a chroma key, a background cutout, a look or a colour
+correction and the left monitor shows it at once, and a slider moved in the
+inspector moves the picture there too. What is armed stays armed, so a take
+with no argument does what it did, and applying or discarding the draft hands
+the preview back. It costs a preview compositor for as long as the composer is
+open and nothing after.
+
+Preview is shared by everybody on the mixer, so the composer gives it back
+when its page closes, even without Discard. Arming a scene from any page also
+takes Preview back to that scene. A script can let go of a draft held in
+Preview with `scene.preview.set {"draft": ""}`.
 
 On a mixer that cannot draw a draft, the composer falls back, in this order:
 

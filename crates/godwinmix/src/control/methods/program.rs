@@ -330,6 +330,11 @@ async fn take_scene(
     // the names have been checked and before the pipeline is touched.
     call.app.safety.check(&call.token).map_err(|r| call.safety_error(r))?;
     call.app.history.expect(&call.token.id);
+    // Held from reading what is on air to arming what follows it, so two
+    // takes by name at once are followed in the order the mixer took them
+    // and each reads what the one before it put up (`after_take`).
+    let turn = TAKE_TURN.lock().await;
+    let was_on_air = on_air_scene(call).await;
     call.app
         .mixer
         .request(|ack| Command::TakeScene {
@@ -347,10 +352,31 @@ async fn take_scene(
     // Only once the mixer has taken it, exactly as `cut` does: a take the
     // pipeline refused must not start the hold on the next one.
     call.app.safety.record(&call.token.id);
+    keep_in_preview(call, &name, was_on_air);
+    drop(turn);
     if !absent.is_empty() {
         missing::alert(call, &name, &missing::names(call, &absent).await);
     }
     body(state(call).await?)
+}
+
+/// One scene take at a time between reading what is on air and following
+/// it. A cut is a cut whatever was armed, so only scene takes wait here, and
+/// only for each other's mixer requests.
+static TAKE_TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// The id of the scene on air now, if a scene is.
+async fn on_air_scene(call: &Call) -> Option<godwinmix_core::scene::id::Id> {
+    let status = call.app.mixer.status().await.ok()?;
+    call.app.scenes.scene(status.scene.as_deref()?).ok().map(|s| s.id)
+}
+
+/// What is armed after a take, by the core's after take setting
+/// (`scene::server::after_take`), and every page hears it as an arm.
+fn keep_in_preview(call: &Call, taken: &str, was_on_air: Option<godwinmix_core::scene::id::Id>) {
+    let Some(armed) = call.app.scenes.follow_take(taken, was_on_air) else { return };
+    call.app.mixer.emit(godwinmix_protocol::types::Event::PreviewChanged { scene: Some(armed) });
+    crate::control::push_preview(&call.app);
 }
 
 async fn revert(call: Call, _params: Value) -> Result<Value, RpcError> {

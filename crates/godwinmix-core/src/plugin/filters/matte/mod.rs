@@ -31,6 +31,7 @@ mod sample;
 mod worker;
 
 pub use params::Settings;
+pub use worker::share::workers_on;
 
 use crate::caps::CanvasCaps;
 use crate::config::Params;
@@ -74,6 +75,9 @@ pub struct Cutout {
     hook: BoardHook,
     cutter: Option<Arc<Cutter>>,
     settings: Settings,
+    /// Whose picture this cuts out and whether it leads (`share_as`).
+    picture: Option<String>,
+    lead: bool,
 }
 
 impl Filter for Cutout {
@@ -83,7 +87,7 @@ impl Filter for Cutout {
 
     fn build(&mut self, _canvas: &CanvasCaps, params: &Params) -> Result<gst::Element> {
         self.settings = Settings::from_params(params)?;
-        let cutter = Cutter::new(self.settings.clone(), self.hook.clone());
+        let cutter = Cutter::new(self.settings.clone(), self.hook.clone(), self.picture.clone(), self.lead);
         static BUILT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = BUILT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let name = match params.get("id").and_then(|v| v.as_str()) {
@@ -119,6 +123,15 @@ impl Filter for Cutout {
 
     fn board(&self) -> Option<BoardHook> {
         Some(self.hook.clone())
+    }
+
+    fn share_as(&mut self, key: &str, lead: bool) {
+        self.picture = Some(key.to_string());
+        self.lead = lead;
+        // Said again once built, when the item's crop or turn changed.
+        if let Some(c) = &self.cutter {
+            c.reshare(key);
+        }
     }
 }
 
