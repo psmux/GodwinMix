@@ -51,6 +51,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+mod raise;
 mod retire;
 
 /// `[program] encoder`.
@@ -360,21 +361,26 @@ impl EncodeChain {
         if self.pad.is_some() {
             return Ok(());
         }
+        self.raise().run()?;
+        self.join()
+    }
+
+    /// The part of `attach` that waits, to run on another thread. See
+    /// `raise`.
+    fn raise(&self) -> raise::Raise {
+        raise::Raise { tag: self.tag, chain: self.chain.clone() }
+    }
+
+    /// The part that does not: a chain already up, joined to the tee.
+    fn join(&mut self) -> Result<()> {
+        if self.pad.is_some() {
+            return Ok(());
+        }
         let head = self
             .chain
             .first()
             .context("an encode chain with no elements cannot be attached")?;
         let sink = head.static_pad("sink").context("the head of the chain has no sink pad")?;
-        for el in &self.chain {
-            el.set_locked_state(false);
-        }
-        // Tail first, so every element downstream of the encoder is ready to
-        // take a buffer before the encoder can produce one, and all of it is
-        // up before the tee can hand the head a frame.
-        for el in self.chain.iter().rev() {
-            el.sync_state_with_parent()
-                .with_context(|| format!("{} encode chain would not start", self.tag))?;
-        }
         let pad = self
             .tee
             .request_pad_simple("src_%u")
@@ -434,11 +440,14 @@ pub struct Encoder {
     /// Set while the last stop is still taking the chains down on its own
     /// thread; true once it has.
     stopping: Option<Arc<AtomicBool>>,
+    /// Set while a start is bringing the chains up on its own thread, and
+    /// until the mixer thread has joined them or taken them down again.
+    starting: Option<Arc<raise::Starting>>,
 }
 
 impl Encoder {
     pub fn new(handle: EncoderHandle, video: EncodeChain, audio: EncodeChain) -> Self {
-        Self { handle, video, audio, stopping: None }
+        Self { handle, video, audio, stopping: None, starting: None }
     }
 
     pub fn handle(&self) -> EncoderHandle {
@@ -499,25 +508,74 @@ impl Encoder {
     }
 
     /// Make the chain match `wanted`, doing nothing when it already does.
+    ///
+    /// Never waits. A start brings the chains up on a thread of its own and
+    /// asks again when it is done; the answer to that is the join. See
+    /// `raise`.
     pub fn reconcile(&mut self, wanted: bool) -> Result<()> {
-        if wanted == self.video.is_attached() {
+        if self.stopping.as_ref().is_some_and(|done| !done.load(Ordering::SeqCst)) {
+            // Asked for again when the stop has finished: see `stop`.
+            debug!("the programme encoder is still stopping; it starts again once it has");
             return Ok(());
         }
-        if wanted {
-            if self.stopping.as_ref().is_some_and(|done| !done.load(Ordering::SeqCst)) {
-                // Asked for again when the stop has finished: see `stop`.
-                debug!("the programme encoder is still stopping; it starts again once it has");
-                return Ok(());
-            }
-            self.stopping = None;
-            self.video.attach()?;
-            self.audio.attach()?;
-            self.handle.mark_running(true);
-            info!("programme encoder started for its first consumer");
-        } else {
-            self.stop();
+        if self.starting.as_ref().is_some_and(|s| !s.finished()) {
+            // Asked for again when the chains are up: see `start`.
+            debug!("the programme encoder is still starting; it is joined once it is up");
+            return Ok(());
         }
+        let raised = self.starting.take();
+        if !wanted {
+            // Up and never joined counts too: nobody wants what was raised.
+            if self.video.is_attached() || raised.is_some() {
+                self.stop();
+            }
+            return Ok(());
+        }
+        if self.video.is_attached() {
+            return Ok(());
+        }
+        self.stopping = None;
+        match raised.map(|s| s.failure()) {
+            None => self.start(),
+            Some(None) => self.join(),
+            Some(Some(why)) => {
+                self.stop();
+                Err(anyhow::anyhow!(why))
+            }
+        }
+    }
+
+    /// Bring both chains up off the mixer thread, or here when there is no
+    /// thread to do it on.
+    fn start(&mut self) -> Result<()> {
+        let raises = vec![self.video.raise(), self.audio.raise()];
+        let handle = self.handle.clone();
+        match raise::start(raises, move || handle.shared.settle()) {
+            Some(starting) => {
+                self.starting = Some(starting);
+                debug!("programme encoder coming up on a thread of its own");
+                Ok(())
+            }
+            None => {
+                self.video.attach()?;
+                self.audio.attach()?;
+                self.mark_started();
+                Ok(())
+            }
+        }
+    }
+
+    /// Both chains are up: join them to the raw tees.
+    fn join(&mut self) -> Result<()> {
+        self.video.join()?;
+        self.audio.join()?;
+        self.mark_started();
         Ok(())
+    }
+
+    fn mark_started(&self) {
+        self.handle.mark_running(true);
+        info!("programme encoder started for its first consumer");
     }
 
     /// Unlinked here, taken down on a thread of its own. Taking an encoder to

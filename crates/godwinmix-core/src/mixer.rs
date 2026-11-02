@@ -5476,8 +5476,10 @@ impl Mixer {
     /// Take a lease for an output and act on it here and now.
     ///
     /// The lease also posts a `Command::Encoder` on the queue, which this
-    /// thread will read later and find nothing to do. Reconciling inline means
-    /// the chain is up before the output's first buffer could want it.
+    /// thread will read later and find nothing to do. Reconciling inline
+    /// starts the chain coming up now rather than after whatever is queued;
+    /// it comes up on a thread of its own (`encoder::raise`) and is joined to
+    /// the tee when it is, so this never waits on an encoder opening.
     fn hold_encoder_for(&mut self, id: &OutputId) {
         self.output_leases.insert(id.clone(), self.enc.lease("output"));
         self.sync_encoder();
@@ -6131,6 +6133,7 @@ mod tests {
     mod refused_output;
     mod replug;
     mod slow_output;
+    mod slow_encoder_start;
     mod stuck_detach;
     mod thumb;
     mod ts_beside_flv;
