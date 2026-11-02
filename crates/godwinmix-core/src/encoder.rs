@@ -573,6 +573,20 @@ impl Encoder {
         Ok(())
     }
 
+    /// For a test that drives the mixer without its command loop, where the
+    /// demand a finished start sends is never read: wait for the start, then
+    /// reconcile as that demand would.
+    #[cfg(test)]
+    pub fn finish_start(&mut self, wanted: bool) {
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while self.starting.as_ref().is_some_and(|s| !s.finished()) && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        if let Err(e) = self.reconcile(wanted) {
+            warn!(?e, "the programme encoder did not start");
+        }
+    }
+
     fn mark_started(&self) {
         self.handle.mark_running(true);
         info!("programme encoder started for its first consumer");
