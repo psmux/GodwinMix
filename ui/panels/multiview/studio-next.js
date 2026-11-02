@@ -1,6 +1,13 @@
 // What Studio mode's preview holds, so it is never just black.
 //
-// In order:
+// After a take, Preview keeps the scene that was just taken, the same as
+// Programme, until the operator picks another (`afterTake` "same", the
+// default). In order: a source armed on this page, the armed scene, the
+// scene on air, the source on air, and with nothing on air the first scene.
+// `studio-armed.js` arms the scene a take put on air, so the core draws it
+// with its filters, as it draws every armed scene.
+//
+// The old way is `afterTake` "swap", a choice in Settings. In order:
 //
 // 1. A scene armed on the core (scene.preview.set), unless it is the one on
 //    air already. The scene on air is held too when somebody on this page
@@ -12,8 +19,9 @@
 //    is not armed on the core, and the label under PREVIEW says so.
 //
 // So after a take, from this page or from anyone else (an agent, another
-// operator), Preview shows where the show came from rather than the same
-// shot twice, which is what a vision mixer does when it swaps its buses.
+// operator), Preview shows where the show came from, as a vision mixer does
+// when it swaps its buses. A suggestion is drawn on the page from the camera
+// tiles, so an item's filters are not in it until it is armed.
 
 /** The scene list, from this page's scene session or the Scenes panel. */
 export function sceneKit(panel) {
@@ -74,7 +82,8 @@ export function follow(panel, s, kit) {
  * armed scene that is on air is still what Preview holds when it is that one,
  * because the person asked for it; after a take it is a suggestion again.
  */
-export function nextUp(panel, s, kit, armedSource, chosen = null) {
+export function nextUp(panel, s, kit, armedSource, chosen = null, afterTake = "same") {
+  if (afterTake !== "swap") return sameUp(s, kit, armedSource);
   const live = liveScene(s, kit);
   const armed = armedScene(s, kit);
   if (armed && (idOf(kit, armed) !== live || (chosen && idOf(kit, chosen) === live))) {
@@ -92,8 +101,27 @@ export function nextUp(panel, s, kit, armedSource, chosen = null) {
   return { kind: "scene", id: pick.id, name: pick.name, why: before ? "before" : "next" };
 }
 
+/** Preview after a take keeps what was taken. See the top of this file. */
+function sameUp(s, kit, armedSource) {
+  if (armedSource) {
+    const known = (s.sources || []).find((x) => x.id === armedSource);
+    return { kind: "source", id: armedSource, name: (known && known.name) || armedSource, why: "armed" };
+  }
+  const armed = armedScene(s, kit);
+  if (armed) return { kind: "scene", id: idOf(kit, armed), name: armed, why: "armed" };
+  const live = liveScene(s, kit);
+  const summary = live && kit ? kit.summary(live) : null;
+  if (summary) return { kind: "scene", id: summary.id, name: summary.name, why: "live" };
+  if (s.program) {
+    const known = (s.sources || []).find((x) => x.id === s.program);
+    return { kind: "source", id: s.program, name: (known && known.name) || s.program, why: "live" };
+  }
+  const first = kit ? kit.scenes()[0] : null;
+  return first ? { kind: "scene", id: first.id, name: first.name, why: "next" } : null;
+}
+
 /** The few words under PREVIEW that say why it holds what it holds. */
 export function whyText(next) {
-  if (!next || next.why === "armed") return "";
+  if (!next || next.why === "armed" || next.why === "live") return "";
   return next.why === "before" ? "Suggested: on air before this" : "Suggested: next scene";
 }

@@ -44,10 +44,33 @@ calls `fx.fire {name}`; `fx.list {role: "effect"}` is asked once when Studio
 mode loads, and its first nine are registered as `fx.fire-1` to `fx.fire-9`
 on Alt+1 to Alt+9.
 
+### After Take
+
+After a take, Preview keeps the scene that was just taken, the same picture
+as Programme, until you pick another. That is the default, and what a browser
+that never chose gets. Every change to the armed scene (its layout, its
+items, a key, a cutout, a look, a colour correction) shows in Preview before
+Take, because the core composites the armed scene with each item's filters.
+
+In this mode Preview holds, in order: a source put in Preview on this page,
+the armed scene, the scene on air, the source on air, and with nothing on air
+the first scene. When a take puts a scene on air that is not the armed one
+(a take by name from a Stream Deck, Companion, an agent or another desk),
+the page arms it with `scene.preview.set {scene}`, so the core draws it with
+its filters; every page in this mode asks for the same scene. `program.take
+{}` takes the armed scene, which stays armed after it goes on air. Take and
+Cut with the scene on air in Preview take it again, which changes nothing on
+air. Space, the Take button and the phone layout all take what Preview holds.
+
+**Settings > After Take, Preview shows** chooses between **The same scene**
+and **The scene that was on air**. It is kept in this browser under
+`gmx.settings` as `afterTake` (`same` or `swap`), so each operator's page keeps
+its own choice. The second is the suggestion below.
+
 ### The suggestion
 
-With no scene armed, or the armed scene on air, and no source armed on this
-page, Preview holds the scene most likely to be taken next: the newest scene
+With After Take set to the scene that was on air, and with no scene armed,
+or the armed scene on air, and no source armed on this page, Preview holds the scene most likely to be taken next: the newest scene
 this page saw on air before the one on air now, else the first scene in the
 list that is not on air. The page keeps that history from the status
 document's `scene` field, so a take by any client moves it. It reads the scene
@@ -58,8 +81,9 @@ A suggestion is not armed: nothing is called on the core to show it, and
 `program.take {}` from another client still takes whatever is armed there. Its
 picture is drawn on the page from the multiview mosaic the Programme monitor
 already receives, at the boxes `scene.get` answers for it, as the Scenes
-panel's pictures are, so the core composites nothing extra for it. Graphics
-and text are not in that picture; an armed scene's preview stream has them.
+panel's pictures are, so the core composites nothing extra for it. Graphics,
+text and the items' filters (a key, a cutout, a look) are not in that picture;
+an armed scene's preview stream has them.
 
 Over every picture, a scene item whose source is not `live` in the status
 document, has `has_video: false` or is not in the mixer is labelled on its own
@@ -72,8 +96,8 @@ see it. Putting a source in Preview disarms the scene with
 `scene.preview.set {}`, and arming a scene after that replaces the source, so
 there is one thing in Preview.
 
-An armed scene that is also on air counts as a suggestion, so Preview moves
-on after a take, except when it was picked in this page's Scenes panel since
+With After Take set to the scene that was on air, an armed scene that is also
+on air counts as a suggestion, so Preview moves on after a take, except when it was picked in this page's Scenes panel since
 the programme last changed. The Scenes panel marks that pick on
 `document.body.dataset.chosen`, and the Programme panel clears it when the
 scene on air changes (`ui/panels/multiview/studio-armed.js`).
