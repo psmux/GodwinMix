@@ -3,7 +3,7 @@
 // open, `pub.session` the publish if there is one) and changes only those.
 
 import { fillSelect } from "./form.js";
-import { listDevices, openTrack, mediaErrorText } from "./devices.js";
+import { listDevices, openTrack, mediaErrorText, realCameraFor } from "./devices.js";
 
 const WHAT = { video: "camera", audio: "microphone" };
 
@@ -39,6 +39,23 @@ export async function install(pub, kind, track) {
   const sent = pub.sendable ? pub.sendable(kind, track) : track;
   if (pub.session) await pub.session.setTrack(kind, sent).catch(() => {});
   pub.paintTracks();
+}
+
+/**
+ * When nobody picked the camera and the browser's own choice was a program
+ * posing as one (DroidCam, OBS), open the first real camera instead. Not
+ * remembered: the person did not choose it, and their own pick always wins.
+ */
+export async function preferRealCamera(pub) {
+  const open = pub.tracks.video;
+  if (!open) return;
+  try {
+    const { cameras } = await listDevices();
+    const real = realCameraFor(open.getSettings?.().deviceId || "", cameras);
+    if (real) await openKind(pub, "video", real, true);
+  } catch {
+    // The camera already open stays; the list still offers the others.
+  }
 }
 
 /** Fill both device lists, keeping what is open chosen. */

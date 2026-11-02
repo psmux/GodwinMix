@@ -2034,8 +2034,8 @@ impl Mixer {
         );
         desk.set_notify({
             let h = handle.clone();
-            Arc::new(move |found| {
-                let _ = h.send(Command::Audio(crate::buses::AudioCall::DeviceFound(found), None));
+            Arc::new(move |call| {
+                let _ = h.send(Command::Audio(call, None));
             })
         });
 
@@ -2147,31 +2147,17 @@ impl Mixer {
     /// when the first client subscribes through `MultiviewHandle` and goes
     /// again when the last one leaves. See `multiview.rs`.
     pub fn start(&mut self) -> Result<()> {
-        for out in self.cfg.outputs.clone() {
-            if !out.enabled {
-                self.hold(&out);
-                continue;
-            }
-            match self.attach_output(&out) {
-                Ok(slot) => self.outputs.push(slot),
-                // Kept and tried again from the tick: a show started again
-                // on a busy machine can be refused a rendition for a few
-                // seconds, and the output must come back once there is room.
-                // See `mixer::unattached`.
-                Err(e) => {
-                    error!(output = %out.id, ?e, "failed to attach output; it is kept and tried again");
-                    self.keep_unattached(&out, &e);
-                }
-            }
-        }
-        self.note_on_air();
-
         self.watches
             .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
         self.program.set_state(gst::State::Playing).context("starting program pipeline")?;
         // The configured buses, before the sources: each source joins them as
         // it is added.
         self.desk.start();
+        // The configured outputs, once the programme is playing and the buses
+        // are built: an output takes the programme's clock and base time as
+        // it is built (`output::follow_programme_clock`), and there are none
+        // before PLAYING, and an output on a bus needs the bus.
+        self.start_configured_outputs();
         // Replay as the config sets it. Each source angle joins as its
         // source is added below.
         self.start_configured_replay();
@@ -2729,6 +2715,27 @@ impl Mixer {
     /// A filter's settings as the configured list holds them.
     fn configured_params(&self, id: &str) -> Option<crate::config::Params> {
         self.cfg.filters.iter().find(|f| f.id == id).map(|f| f.params.clone())
+    }
+
+    fn start_configured_outputs(&mut self) {
+        for out in self.cfg.outputs.clone() {
+            if !out.enabled {
+                self.hold(&out);
+                continue;
+            }
+            match self.attach_output(&out) {
+                Ok(slot) => self.outputs.push(slot),
+                // Kept and tried again from the tick: a show started again
+                // on a busy machine can be refused a rendition for a few
+                // seconds, and the output must come back once there is room.
+                // See `mixer::unattached`.
+                Err(e) => {
+                    error!(output = %out.id, ?e, "failed to attach output; it is kept and tried again");
+                    self.keep_unattached(&out, &e);
+                }
+            }
+        }
+        self.note_on_air();
     }
 
     /// Put a source pipeline on the programme's clock and base time.
@@ -5476,8 +5483,10 @@ impl Mixer {
     /// Take a lease for an output and act on it here and now.
     ///
     /// The lease also posts a `Command::Encoder` on the queue, which this
-    /// thread will read later and find nothing to do. Reconciling inline means
-    /// the chain is up before the output's first buffer could want it.
+    /// thread will read later and find nothing to do. Reconciling inline
+    /// starts the chain coming up now rather than after whatever is queued;
+    /// it comes up on a thread of its own (`encoder::raise`) and is joined to
+    /// the tee when it is, so this never waits on an encoder opening.
     fn hold_encoder_for(&mut self, id: &OutputId) {
         self.output_leases.insert(id.clone(), self.enc.lease("output"));
         self.sync_encoder();
@@ -5487,6 +5496,13 @@ impl Mixer {
         self.output_leases.remove(id);
         self.desk.release_output(id);
         self.sync_encoder();
+    }
+
+    /// See `Encoder::finish_start`.
+    #[cfg(test)]
+    pub(crate) fn finish_encoder_start(&mut self) {
+        let wanted = self.enc.wanted();
+        self.encoder.finish_start(wanted);
     }
 
     fn sync_encoder(&mut self) {
@@ -6122,6 +6138,7 @@ mod tests {
     mod slow_restart;
     mod buses;
     mod buses_outlets;
+    mod bus_encoder_start;
     mod buses_talk;
     mod sound_only;
     mod supervision;
@@ -6131,6 +6148,7 @@ mod tests {
     mod refused_output;
     mod replug;
     mod slow_output;
+    mod slow_encoder_start;
     mod stuck_detach;
     mod thumb;
     mod ts_beside_flv;

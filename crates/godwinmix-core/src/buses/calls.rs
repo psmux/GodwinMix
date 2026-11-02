@@ -46,6 +46,11 @@ impl Desk {
             AudioCall::Send(req) => self.send(req, around)?,
             AudioCall::Cue(req) => self.mark_cue(req, around)?,
             AudioCall::DeviceFound(found) => self.device_found(found),
+            // The mixer answers this one itself, for the outputs on it. Here
+            // only the encoder comes down.
+            AudioCall::EncoderFailed(failed) => {
+                self.encoder_failed(&failed);
+            }
             AudioCall::AddGuest(cfg) => {
                 let id = cfg.id.clone();
                 self.add(cfg, around)?;

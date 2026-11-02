@@ -76,6 +76,18 @@ impl Desk {
         self.notify = Some(notify);
     }
 
+    /// For a test: build bus encoders from `element` with `properties`, in
+    /// place of what the catalogue chose.
+    #[cfg(test)]
+    pub fn encode_with(&mut self, element: &str, properties: &[(&str, &str)]) {
+        self.encode.chosen.element = element.to_string();
+        self.encode.chosen.parser = None;
+        self.encode.chosen.properties = properties
+            .iter()
+            .map(|(k, v)| (k.to_string(), crate::catalogue::model::PropValue::Text(v.to_string())))
+            .collect();
+    }
+
     pub(super) fn apply_master(&self) {
         let m = self.config.master;
         self.master.set_property("volume", m.gain);
