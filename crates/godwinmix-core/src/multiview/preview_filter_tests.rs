@@ -147,7 +147,9 @@ async fn a_chroma_key_on_an_item_shows_the_set_through_the_screen_in_the_preview
         full("set", Vec::new()),
         full("presenter", vec![filter("chroma/filter", "color = \"#00c000\"")]),
     ]);
-    let (keyed, after) = until(&mut sub, Duration::from_secs(5), |img| blue(at(img, gx, gy))).await;
+    // Both in one frame: while the presenter's new slot waits for its first
+    // frame the set shows everywhere, which is blue at the green bar too.
+    let (keyed, after) = until(&mut sub, Duration::from_secs(5), |img| blue(at(img, gx, gy)) && white(at(img, wx, gy))).await;
     let presenter_kept = after.as_ref().map(|img| at(img, wx, gy));
 
     drop(sub);

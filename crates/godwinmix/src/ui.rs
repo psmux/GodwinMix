@@ -491,6 +491,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
     ("shell/restart-bar.js", include_str!("../../../ui/shell/restart-bar.js")),
     ("shell/restart-check.js", include_str!("../../../ui/shell/restart-check.js")),
+    ("shell/after-take.js", include_str!("../../../ui/shell/after-take.js")),
     ("shell/scene-session.js", include_str!("../../../ui/shell/scene-session.js")),
     ("shell/source-files.js", include_str!("../../../ui/shell/source-files.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
