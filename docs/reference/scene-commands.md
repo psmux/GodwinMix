@@ -306,7 +306,11 @@ canvas. `name: null` takes them out of the one they are in.
 ```
 
 `source` is shorthand for a one item full canvas scene and is taken exactly as
-it always was. With neither `scene` nor `source`, the armed scene goes on air.
+it always was. With neither `scene` nor `source`, the armed scene goes on air
+and stays armed. A scene taken by name is armed after it goes on air when
+Preview was following the programme (nothing armed, or the armed scene was
+the one on air before), and `event/preview.changed` says so; a scene armed to
+go next is left alone.
 
 `transition` is a name or an object:
 

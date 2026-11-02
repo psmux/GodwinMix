@@ -21,6 +21,7 @@
 //! the patch is read off the result. No command describes its own change, so no
 //! command can describe it wrongly.
 
+mod after_take;
 mod clients;
 pub mod compose;
 pub mod conflict;

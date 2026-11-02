@@ -5,8 +5,9 @@
 // own camera through the same table the frame goes through (a test card of
 // skin, sky and greys when there is no camera). Every change is
 // `scene.item.filter.set`, applied to the running filter in place, so the
-// programme changes as a look is picked. The composer's own canvas does not
-// run item filters; the grid is where the look is seen here.
+// programme changes as a look is picked. The composer's canvas shows the
+// draft through the preview, which draws item filters, so the look is seen
+// there too.
 
 import { el, on, clear } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";

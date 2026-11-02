@@ -62,17 +62,16 @@ export async function studioNextTests(test, eq, ok) {
     eq(next, { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' }, 'what is armed and not on air is still held');
     delete document.body.dataset.chosen;
   });
-  test('by default a take of a scene that was not armed arms it, so the core draws it with its filters', () => {
+  // The core arms a scene taken by name (scene/server/after_take.rs), once,
+  // for every page. A page that armed it as well raced the other operators.
+  test('a take by name arms nothing from the page; the core does it', () => {
     const k = Object.assign(kit('wide'), { supported: true });
     const asked = [];
     const pane = { sceneSession: { scenes: k }, client: { call: async (m, p) => { asked.push([m, p]); } } };
     resolve(pane, { scene: 'Wide', preview: 'Two shot' });
     k.live = () => 'cam';
     resolve(pane, { scene: 'Camera', preview: 'Two shot' });
-    eq(asked, [['scene.preview.set', { scene: 'cam' }]], 'a Stream Deck took Camera by name');
-    k.live = () => 'two';
-    resolve(pane, { scene: 'Two shot', preview: 'Two shot' });
-    eq(asked.length, 1, 'the armed scene taken is armed already; nothing is asked');
+    eq(asked, [], 'a Stream Deck took Camera by name');
   });
   test('a source armed here is held until it goes on air itself', () => {
     const s = { scene: 'Two shot', sources: [{ id: 'cam-wide', name: 'Wide camera' }] };
