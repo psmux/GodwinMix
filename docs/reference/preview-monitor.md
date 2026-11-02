@@ -65,10 +65,26 @@ air. Take and
 Cut with the scene on air in Preview take it again, which changes nothing on
 air. Space, the Take button and the phone layout all take what Preview holds.
 
+What `program.take {}` takes, as a Stream Deck through Companion sends it,
+starting from Wide on air and Two armed:
+
+| After Take | `program.take {}` | then Close taken by name | then `program.take {}` |
+|---|---|---|---|
+| The same scene (`same`) | Two goes up and stays armed | Close goes up and is armed, since Preview held what was on air | Close again: nothing changes on air |
+| The scene that was on air (`swap`) | Two goes up, Wide is armed | Close goes up, Wide stays armed | Wide goes up, Close is armed |
+
+A scene somebody arms between a take and the core following it stays armed
+in both. Two takes by name at the same moment are followed in the order the
+mixer took them, each against what the one before it put on air.
+
 **Settings > After Take, Preview shows** chooses between **The same scene**
-and **The scene that was on air**. It is kept in this browser under
-`gmx.settings` as `afterTake` (`same` or `swap`), so each operator's page keeps
-its own choice. The second is the suggestion below.
+and **The scene that was on air**. The setting is the core's, because
+`program.take {}` takes what the core leaves armed. A choice is sent with
+`scene.preview.set {"after_take": "same"}` or `"swap"` when it is made and
+again each time the page connects, so the last page to choose decides for
+every client. A page where nobody chose sends nothing, and a core that has
+heard nothing uses `same`. The page keeps its choice in `gmx.settings` as
+`afterTake`. The second is the suggestion below.
 
 ### The suggestion
 

@@ -307,10 +307,15 @@ canvas. `name: null` takes them out of the one they are in.
 
 `source` is shorthand for a one item full canvas scene and is taken exactly as
 it always was. With neither `scene` nor `source`, the armed scene goes on air
-and stays armed. A scene taken by name is armed after it goes on air when
-Preview was following the programme (nothing armed, or the armed scene was
-the one on air before), and `event/preview.changed` says so; a scene armed to
-go next is left alone.
+and stays armed. What is armed after a take follows the core's after take
+setting, `scene.preview.set {"after_take": "same"}` or `"swap"`. With `same`,
+the default, a scene taken by name is armed after it goes on air when Preview
+was following the programme (nothing armed, or the armed scene was the one on
+air before). With `swap`, a take of the armed scene arms the scene it
+replaced, and a take by name leaves what is armed alone. Either way
+`event/preview.changed` says what changed, and a scene armed to go next is
+left alone. [The Programme panel](preview-monitor.md#after-take) walks through
+both.
 
 `transition` is a name or an object:
 
@@ -333,9 +338,9 @@ type beside it, not a format name). Asking for it is what builds the preview:
 the compositor is up for the length of the call and gone after, unless
 something else is watching. `layout` comes back beside the picture, so a client
 drawing handles has the geometry without recomputing it. When an item in the
-scene has a filter, the call reads frames for up to 1.2 seconds after the
-first and answers with the newest, because a key or a cutout draws a frame or
-more after the preview is built.
+scene has a filter, the call reads frames until the filters are built and
+every key and cutout has drawn, then answers with the next frame. It stops
+waiting 1.2 seconds after the first frame and answers with the newest.
 
 `scene.preview.set` arms a scene and costs one message: nothing is composited
 for a preview until a client asks for one with `ext.preview`, opens
@@ -354,14 +359,18 @@ source's programme branch (`filter.add {side: "programme"}`).
 The filters run on the preview's own copy of each item, at thumbnail size
 (480 by 270), and only while somebody is watching the preview and the armed
 scene has a filtered item. A cutout is the costly one, because it runs a
-model. A cutout on a camera that is cut out on air as well does not run a
-second model: the preview's copy reads the masks the programme's copy is
-already making, and feeds the model its own frames only when the programme
-has offered none for a quarter of a second.
+model. A cutout on a camera that is cut out on air as well, with the same crop and
+turn, does not run a second model: the preview's copy reads the masks the
+programme's copy is already making, and feeds the model its own frames only
+when the programme has offered none for a quarter of a second. The filters
+are built off the mixer's command thread, so a take is not held up while the
+preview's are built, and the preview draws the change once they are. A
+filter that will not go in leaves its item drawn without filters.
 
 `scene.preview.set {draft}` is what the composer sends so its draft is what
 Preview shows. It ends on its own when the draft is applied or discarded,
-when anybody arms a scene or clears the armed one, when anybody sends
+when the client that showed it arms a scene or clears the armed one (another
+client arming leaves it shown), when anybody sends
 `draft: ""`, and when the page that asked has closed and its client has no
 other connection open. The draft itself is kept, and `scene.edit.discard`
 throws it away.
