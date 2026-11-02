@@ -1524,6 +1524,9 @@ mod tests {
         // A source's sound filters, fetched when its FX button is first pressed.
         reachable.extend(closure_of("panels/audio/chain.js"));
         reachable.extend(closure_of("panels/multiview/backup-banner.js"));
+        // What Preview holds after a Take, sent to the core once somebody
+        // has chosen it in Settings.
+        reachable.extend(closure_of("shell/after-take.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
         // their buttons are pressed.
