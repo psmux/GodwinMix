@@ -47,6 +47,8 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use std::sync::Arc;
+pub use super::preview_drawn::Drawn;
+use super::preview_drawn::fed_by;
 use tracing::{debug, info, warn};
 
 /// What the preview is composited at.
@@ -93,6 +95,9 @@ struct Slot {
     /// The item's own filters, between the flip and the pad (`preview_chain`).
     chain: super::preview_chain::Chain,
     pad: gst::Pad,
+    /// Raised by the first buffer to reach `pad`, so a still waits for the
+    /// item to be in the picture (`Drawn`).
+    fed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Slot {
@@ -298,9 +303,13 @@ impl ScenePreview {
         Ok(())
     }
 
-    /// The board hooks of every keyed filter drawn now.
-    pub fn keyed_hooks(&self) -> Vec<crate::plugin::filter::BoardHook> {
-        self.slots.iter().flat_map(|s| s.chain.hooks()).collect()
+    /// What says the armed scene is in the picture: every slot's fed flag
+    /// and every keyed filter's hook.
+    pub fn in_picture(&self) -> Drawn {
+        Drawn {
+            fed: self.slots.iter().map(|s| s.fed.clone()).collect(),
+            hooks: self.slots.iter().flat_map(|s| s.chain.hooks()).collect(),
+        }
     }
 
     /// The cells of `cells` an apply would make new slots for, and so build
@@ -389,6 +398,7 @@ impl ScenePreview {
             crop,
             flip,
             chain,
+            fed: fed_by(&pad),
             pad,
         });
         debug!(%source, "a source joined the preview");
@@ -600,3 +610,4 @@ mod tests {
         assert_eq!(PreviewShape::at(0, 0, 0).fps, 1);
     }
 }
+
