@@ -332,7 +332,10 @@ it, base64 JPEG under `image` (the field is `image` because it carries a media
 type beside it, not a format name). Asking for it is what builds the preview:
 the compositor is up for the length of the call and gone after, unless
 something else is watching. `layout` comes back beside the picture, so a client
-drawing handles has the geometry without recomputing it.
+drawing handles has the geometry without recomputing it. When an item in the
+scene has a filter, the call reads frames for up to 1.2 seconds after the
+first and answers with the newest, because a key or a cutout draws a frame or
+more after the preview is built.
 
 `scene.preview.set` arms a scene and costs one message: nothing is composited
 for a preview until a client asks for one with `ext.preview`, opens
