@@ -52,7 +52,7 @@ mod arrival;
 mod drawn;
 mod early;
 pub mod preview;
-mod preview_chain;
+pub mod preview_chain;
 mod transparent;
 
 use crate::caps::{CanvasCaps, Grid};
@@ -1103,13 +1103,24 @@ impl Multiview {
     /// Draw the armed scene. Nothing to draw is a black preview, not an error:
     /// disarming a scene is a thing an operator does.
     pub fn apply_preview(&mut self, canvas: &CanvasCaps, cells: &[preview::Cell]) -> Result<()> {
+        self.apply_preview_built(canvas, cells, preview_chain::Prebuilt::default())
+    }
+
+    /// The cells an apply would build new filter chains for. See
+    /// `ScenePreview::needs`.
+    pub fn preview_needs(&self, cells: &[preview::Cell]) -> Vec<(String, Vec<crate::mixer::slots::ItemFilter>)> {
+        self.preview.as_ref().map(|p| p.needs(cells)).unwrap_or_default()
+    }
+
+    /// `apply_preview` with the chains built already, off the loop.
+    pub fn apply_preview_built(&mut self, canvas: &CanvasCaps, cells: &[preview::Cell], built: preview_chain::Prebuilt) -> Result<()> {
         let tiles: Vec<(SourceId, gst::Element)> = self
             .tiles
             .iter()
             .filter_map(|t| t.source.clone().map(|id| (id, t.tee.clone())))
             .collect();
         let Some(preview) = self.preview.as_mut() else { return Ok(()) };
-        preview.apply(canvas, cells, |source| {
+        preview.apply(canvas, cells, built, |source| {
             tiles.iter().find(|(id, _)| id == source).map(|(_, tee)| tee.clone())
         })
     }

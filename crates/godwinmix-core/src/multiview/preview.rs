@@ -98,7 +98,7 @@ struct Slot {
 impl Slot {
     /// The trim and the turn a cell asks for. Written only when they change,
     /// because a crop written on every layout renegotiates the branch.
-    fn shape(&self, cell: &Cell) {
+    fn shape(&mut self, cell: &Cell) {
         let (w, h) = (crate::input::THUMB_WIDTH as f64, crate::input::THUMB_HEIGHT as f64);
         let (l, t, r, b) = cell.crop;
         for (name, px) in [("left", l * w), ("top", t * h), ("right", r * w), ("bottom", b * h)] {
@@ -115,6 +115,7 @@ impl Slot {
             _ => "none",
         };
         self.flip.set_property_from_str("method", method);
+        self.chain.reshare(&cell.share_key());
     }
 }
 
@@ -246,10 +247,15 @@ impl ScenePreview {
     /// here, so a caller never has to know what that is. `tee_for` hands back
     /// the tile tee of a source, or `None` for a source the mosaic does not
     /// carry, which is skipped rather than drawn as a black rectangle.
+    ///
+    /// `built` has the filter chains for the cells that need new slots, made
+    /// off the mixer loop (`needs` says which). A chain not in it is built
+    /// here.
     pub fn apply(
         &mut self,
         canvas: &CanvasCaps,
         cells: &[Cell],
+        mut built: super::preview_chain::Prebuilt,
         tee_for: impl Fn(&SourceId) -> Option<gst::Element>,
     ) -> Result<()> {
         let sx = self.shape.width as f64 / canvas.width.max(1) as f64;
@@ -263,7 +269,8 @@ impl ScenePreview {
                         debug!(source = %cell.source, "the mosaic has no tile for a previewed source");
                         continue;
                     };
-                    match self.bind(&cell.source, &tee, &cell.filters, canvas) {
+                    let chain = built.take(&cell.share_key(), &cell.filters, canvas);
+                    match self.bind(cell, &tee, chain) {
                         Ok(index) => index,
                         Err(e) => {
                             warn!(source = %cell.source, ?e, "could not draw a source in the preview");
@@ -291,6 +298,27 @@ impl ScenePreview {
         Ok(())
     }
 
+    /// The cells of `cells` an apply would make new slots for, and so build
+    /// new filter chains for: their pictures and their filters, to be built
+    /// off the loop. A cell with no filters costs nothing to bind and is not
+    /// in it.
+    pub fn needs(&self, cells: &[Cell]) -> Vec<(String, Vec<crate::mixer::slots::ItemFilter>)> {
+        let mut kept: Vec<usize> = Vec::new();
+        let mut out = Vec::new();
+        for cell in cells {
+            let found = (0..self.slots.len()).find(|&i| {
+                let s = &self.slots[i];
+                s.source == cell.source && !kept.contains(&i) && s.chain.same_kinds(&cell.filters)
+            });
+            match found {
+                Some(i) => kept.push(i),
+                None if !cell.filters.is_empty() => out.push((cell.share_key(), cell.filters.clone())),
+                None => {}
+            }
+        }
+        out
+    }
+
     /// A slot already drawing this cell's source with this cell's filters,
     /// their settings brought in line in place. None when there is no such
     /// slot, and a new one is bound: the slot it replaces is not kept, so it
@@ -304,7 +332,8 @@ impl ScenePreview {
     }
 
     /// Take a branch off a tile's tee and give it a pad on the preview.
-    fn bind(&mut self, source: &SourceId, tee: &gst::Element, filters: &[crate::mixer::slots::ItemFilter], canvas: &CanvasCaps) -> Result<usize> {
+    fn bind(&mut self, cell: &Cell, tee: &gst::Element, built: Result<Vec<crate::plugin::filter::Built>>) -> Result<usize> {
+        let (source, filters) = (&cell.source, &cell.filters);
         // Numbered, because one source can be drawn twice, and a slot being
         // replaced (its item's filters changed) is still there while the new
         // one is built: two elements of one name and the second is refused.
@@ -329,8 +358,8 @@ impl ScenePreview {
             .context("a preview flip has no src pad")?
             .link(&pad)
             .context("linking a preview slot into the compositor")?;
-        let at = super::preview_chain::At { pipeline: &self.pipeline, flip: &flip, pad: &pad, source, serial: n, canvas };
-        let mut chain = super::preview_chain::Chain::build(&at, filters, &self.transparent);
+        let at = super::preview_chain::At { pipeline: &self.pipeline, flip: &flip, pad: &pad, source, serial: n, key: cell.share_key() };
+        let mut chain = super::preview_chain::Chain::build(&at, filters, built, &self.transparent);
         // Consumers first, as everywhere in this branch.
         for el in chain.elements().iter().rev().chain([&flip, &crop, &queue]) {
             el.sync_state_with_parent().context("starting a preview slot")?;
@@ -458,6 +487,13 @@ pub struct Cell {
     /// The item's filters, innermost first, as the programme's slot carries
     /// them: a keyed presenter is keyed in the preview too.
     pub filters: Vec<crate::mixer::slots::ItemFilter>,
+}
+
+impl Cell {
+    /// The picture this cell's filters see. See `filter::share_key`.
+    pub fn share_key(&self) -> String {
+        crate::plugin::filter::share_key(&self.source, self.crop, self.rotation)
+    }
 }
 
 /// A tiny black source on a compositor pad of its own.

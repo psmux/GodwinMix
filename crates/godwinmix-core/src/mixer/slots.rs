@@ -383,6 +383,10 @@ pub struct Slot {
     /// What those filters were built from, for the comparison that decides
     /// whether to touch the graph at all.
     filter_shape: Vec<ItemFilter>,
+    /// The picture those filters were last told they work on
+    /// (`filter::share_key`), so a crop or a turn changed on air tells them
+    /// once.
+    shared_as: Option<String>,
     /// How the last placement drawn here trims and fits its picture, and the
     /// item's own motions, for a transition that has to reach them.
     look: Look,
@@ -778,6 +782,7 @@ impl SlotPool {
             drawn: None,
             filters: Vec::new(),
             filter_shape: Vec::new(),
+            shared_as: None,
             look: Look::default(),
         });
         Ok(self.slots.last_mut().expect("just pushed"))
@@ -975,7 +980,7 @@ impl SlotPool {
                     continue;
                 }
                 self.slots[index].open();
-                if let Err(e) = self.sync_filters(index, &p.filters) {
+                if let Err(e) = self.sync_filters(index, p) {
                     warn!(slot = index, ?e, "a group's filter could not go on");
                 }
                 ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
@@ -999,7 +1004,7 @@ impl SlotPool {
                 }
             };
             self.slots[index].open();
-            if let Err(e) = self.sync_filters(index, &p.filters) {
+            if let Err(e) = self.sync_filters(index, p) {
                 // The picture is still on air with whatever chain it had. A
                 // filter that will not build is a refused change, not a black
                 // frame, and the message names the item's own filter.
@@ -1103,7 +1108,28 @@ impl SlotPool {
     /// The comparison comes first and is the whole point: a scene reapplied
     /// twice a second by the visibility tick must not take a pad block twice a
     /// second. Only a chain that is actually different is built.
-    fn sync_filters(&mut self, index: usize, want: &[ItemFilter]) -> Result<()> {
+    fn sync_filters(&mut self, index: usize, p: &Placement) -> Result<()> {
+        let key = crate::plugin::filter::share_key(&p.source, p.crop, p.rotation);
+        self.build_filters(index, &p.filters, &key)?;
+        self.share_filters(index, key);
+        Ok(())
+    }
+
+    /// Tell a slot's filters whose picture they work on, when it changed
+    /// since they were last told. The programme's copy leads a cutout shared
+    /// with the preview's copy of the same item (`matte::share`).
+    fn share_filters(&mut self, index: usize, key: String) {
+        let slot = &mut self.slots[index];
+        if slot.shared_as.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        for f in &mut slot.filters {
+            f.share_as(&key, true);
+        }
+        slot.shared_as = Some(key);
+    }
+
+    fn build_filters(&mut self, index: usize, want: &[ItemFilter], key: &str) -> Result<()> {
         let same = self.slots[index].filter_shape.len() == want.len()
             && self
                 .slots[index]
@@ -1132,13 +1158,8 @@ impl SlotPool {
                 params: f.params.clone(),
             };
             let board = self.board.clone();
-            let picture = self.slots[index].source().cloned();
             let built = crate::plugin::filter::make(&f.type_id).and_then(|mut filter| {
-                // The programme's copy leads a cutout shared with the
-                // preview's copy of the same item (`matte::share`).
-                if let Some(picture) = &picture {
-                    filter.share_as(picture, true);
-                }
+                filter.share_as(key, true);
                 let pad = self.slots[index].pad.clone();
                 // Turned on before the first frame goes through, so a key
                 // never shows a frame flattened over black on its way in.
@@ -1162,6 +1183,7 @@ impl SlotPool {
             }
         }
         self.slots[index].filter_shape = want.to_vec();
+        self.slots[index].shared_as = Some(key.to_string());
         Ok(())
     }
 
@@ -1201,6 +1223,7 @@ impl SlotPool {
     fn clear_filters(&mut self, index: usize) {
         let filters = std::mem::take(&mut self.slots[index].filters);
         self.slots[index].filter_shape.clear();
+        self.slots[index].shared_as = None;
         for (n, f) in filters.iter().enumerate() {
             super::keyed::detach(self.board.as_ref(), f.board(), &board_key(index, n));
         }
