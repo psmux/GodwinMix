@@ -128,6 +128,8 @@ async fn a_rung_comes_and_goes_and_nothing_else_drops_a_buffer() {
     let mut mix = mixer(config()).await;
     mix.add_output(&output("plain", None)).unwrap();
     mix.add_output(&output("steady", Some(want(144, 400)))).unwrap();
+    // No command loop here to read the demand a finished start sends.
+    mix.finish_encoder_start();
     let programme = Arc::new(Gaps::default());
     programme.watch(&mix.venc_tee.static_pad("sink").unwrap());
     let steady_tee = mix.rendition_taps("steady")[0].video_tee.clone().unwrap();

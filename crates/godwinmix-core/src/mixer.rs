@@ -5491,6 +5491,13 @@ impl Mixer {
         self.sync_encoder();
     }
 
+    /// See `Encoder::finish_start`.
+    #[cfg(test)]
+    pub(crate) fn finish_encoder_start(&mut self) {
+        let wanted = self.enc.wanted();
+        self.encoder.finish_start(wanted);
+    }
+
     fn sync_encoder(&mut self) {
         let wanted = self.enc.wanted();
         if let Err(e) = self.encoder.reconcile(wanted) {
