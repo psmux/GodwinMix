@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* A guest's return plays. On 0.3.21 to 0.3.24 **The show** on a guest's page stayed black and silent: the connection came up and nothing arrived on it. Every output runs in a pipeline of its own, and those pipelines kept their own clock base, while what reaches them carries the programme's running time. The `webrtcbin` behind a WHEP viewer waits on the clock for each packet, so it held the first one for as long as the show had been up, which on a show that had been running an hour was an hour. The tests started the show a moment before the guest joined and never saw it. Every output pipeline now runs on the programme's clock and base time, and the return starts within a second or two of **Join the show**, after a take and after the guest leaves and joins again. A `whep/output` added to a show already running had the same delay and is fixed with it.
+* Adding an output no longer holds the mixer while an encoder opens. The first output on a show starts the programme encoder, and an output on a bus, as every guest's return is, starts that bus's encoder. Both were brought up on the mixer's own thread, and a hardware encoder opens its session on the way up: on a Windows laptop with Quick Sync and Media Foundation a guest's join held the mixer for more than five seconds, every call behind it answered that the mixer was busy, and the guest saw that once on **Join the show**. The encoders now come up on a thread of their own and are joined to the programme when they are up.
+
 ## 0.3.24 (2026-11-02)
 
 Fixes found while filming the 0.3.23 features: a look on a presenter in a studio set, and a filter added in the composer.
