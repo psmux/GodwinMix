@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+Preview shows what Take will put on air, filters and all.
+
+* An item's filters now show in Preview before the take. Preview drew each item from its camera's thumbnail with the item's place and size and nothing else, so a presenter with a background cutout stood in her own room on the left monitor while Programme showed her in the studio set, and a chroma key, a look or a colour correction only appeared after Take. Preview now runs the item's own filters on its copy of the item, and a change in the composer (a filter added, a slider moved) shows there at once. A group with a filter, which Preview left out altogether, is drawn as its children with the group's filter on each. The filters run at thumbnail size and only while somebody is watching Preview. A camera cut out on air and in Preview at once runs one cutout model, not two: the preview's copy reads the masks the programme's copy makes. Filters on the whole programme, and on a source's programme branch, are still not drawn in Preview. See [Compose a scene](docs/how-to/compose-a-scene.md) and [scene commands](docs/reference/scene-commands.md#preview-and-take).
+* One camera drawn twice in a scene shows twice in Preview. The second copy was refused for having the same element names as the first and left out.
+* A composer left open on a page that closed no longer holds Preview on its draft for everyone. Preview goes back to the armed scene when that page's last connection closes, and arming a scene from any page takes Preview back too. `scene.preview.set {"draft": ""}` lets go from a script.
+* The Programme row in the Audio panel has an FX button, for the sound filters on everything that goes out, such as a loudness target. They could be added from the config file and the API but not seen or changed in the page. See [Clean up a microphone](docs/how-to/clean-up-a-microphone.md).
+
 ## 0.3.24 (2026-11-02)
 
 Fixes found while filming the 0.3.23 features: a look on a presenter in a studio set, and a filter added in the composer.

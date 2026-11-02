@@ -297,6 +297,7 @@ canvas. `name: null` takes them out of the one they are in.
 | Method | What it does |
 |---|---|
 | `scene.preview.set {scene?}` | arm a scene, or clear it with no scene |
+| `scene.preview.set {draft}` | draw a draft in Preview in place of the armed scene; `draft: ""` stops |
 | `scene.preview.frame {width?}` | a still, base64 JPEG |
 | `program.take {scene?, source?, transition?, at_running_time_ms?}` | put it on air |
 
@@ -332,6 +333,31 @@ drawing handles has the geometry without recomputing it.
 `scene.preview.set` arms a scene and costs one message: nothing is composited
 for a preview until a client asks for one with `ext.preview`, opens
 `/mjpeg/preview`, or calls `scene.preview.frame`.
+
+The preview draws every item as the programme would draw it, filters
+included: a chroma key, a cutout, a look and a colour correction on an item
+are in Preview before the take, and a change to one (a slider in the
+composer, `scene.item.filter.set`) shows there as it is made. A group with a
+filter is drawn as its children, each with its own filters and then the
+group's. A disabled filter is drawn in neither. Two kinds of filter are not
+item filters and Preview does not draw them: one on the whole programme
+(`filter.add {programme: true}`), which is on whatever goes out, and one on a
+source's programme branch (`filter.add {side: "programme"}`).
+
+The filters run on the preview's own copy of each item, at thumbnail size
+(480 by 270), and only while somebody is watching the preview and the armed
+scene has a filtered item. A cutout is the costly one, because it runs a
+model. A cutout on a camera that is cut out on air as well does not run a
+second model: the preview's copy reads the masks the programme's copy is
+already making, and feeds the model its own frames only when the programme
+has offered none for a quarter of a second.
+
+`scene.preview.set {draft}` is what the composer sends so its draft is what
+Preview shows. It ends on its own when the draft is applied or discarded,
+when anybody arms a scene or clears the armed one, when anybody sends
+`draft: ""`, and when the page that asked has closed and its client has no
+other connection open. The draft itself is kept, and `scene.edit.discard`
+throws it away.
 
 ## Editing off air
 
