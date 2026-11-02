@@ -52,6 +52,7 @@ mod arrival;
 mod drawn;
 mod early;
 pub mod preview;
+mod preview_chain;
 mod transparent;
 
 use crate::caps::{CanvasCaps, Grid};
@@ -1407,7 +1408,7 @@ mod tests {
             width: 960,
             height: 540,
             alpha: 1.0,
-            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
         };
         mv.apply_preview(&canvas, &[cell("cam1", 0), cell("cam2", 960)]).unwrap();
         assert_eq!(mv.preview_drawn(), 2);
@@ -1445,7 +1446,7 @@ mod tests {
                 width: 1920,
                 height: 1080,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             }],
         )
         .unwrap();
@@ -2282,7 +2283,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
-            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
         }]);
 
         for round in 0..40u64 {
@@ -2355,7 +2356,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
             preview::Cell {
                 source: "cam2".into(),
@@ -2364,7 +2365,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
         ]);
 
@@ -2460,7 +2461,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
-            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
         }]);
         let asked = Instant::now();
         let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
