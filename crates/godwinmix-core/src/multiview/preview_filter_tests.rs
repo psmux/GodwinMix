@@ -158,3 +158,23 @@ async fn a_chroma_key_on_an_item_shows_the_set_through_the_screen_in_the_preview
     let kept = presenter_kept.unwrap();
     assert!(white(kept), "the key took the white bar away as well: {kept:?}");
 }
+
+/// A look from the LUT library, the composer's "Look" filter, on the armed
+/// item: Preview goes black and white before anything is taken.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_look_on_an_item_reaches_the_preview_before_take() {
+    let _ = gst::init();
+    let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg(&[("cam1", "test://smpte")])).unwrap();
+    mix.start().unwrap();
+    let (mv, preview) = (mix.multiview_handle(), mix.preview_handle());
+    let thread = crate::mixer::spawn(mix, cmd_rx, handle.clone());
+    preview.set_scene(vec![full("cam1", vec![filter("lut/filter", "lut = \"black-and-white\"")])]);
+    let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });
+    // Bright enough to be the bars, with no colour in them.
+    let graded = |img: &image::RgbImage| colourful(img) < 0.02 && at(img, 0.5 / 7.0, 0.3).0 > 120;
+    let (seen, last) = until(&mut sub, Duration::from_secs(10), graded).await;
+    drop(sub);
+    let _ = handle.send(Command::Shutdown);
+    tokio::task::spawn_blocking(move || thread.join()).await.unwrap().unwrap();
+    assert!(seen, "the look did not reach the preview: {:?} colourful", last.map(|i| colourful(&i)));
+}
