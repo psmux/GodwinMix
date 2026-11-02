@@ -90,6 +90,8 @@ struct Slot {
     /// picture through untouched until an item asks for either.
     crop: gst::Element,
     flip: gst::Element,
+    /// The item's own filters, between the flip and the pad (`preview_chain`).
+    chain: super::preview_chain::Chain,
     pad: gst::Pad,
 }
 
@@ -129,6 +131,8 @@ pub struct ScenePreview {
     tile_pad: Option<gst::Pad>,
     /// Transparent sources, drawn as the programme draws them (`transparent`).
     transparent: super::transparent::Transparent,
+    /// Numbers slots, so each one's filters have board names of their own.
+    serial: u64,
 }
 
 impl ScenePreview {
@@ -205,7 +209,7 @@ impl ScenePreview {
         }
         info!(?shape, "preview compositor built");
         let transparent = super::transparent::Transparent::new(&comp, (shape.width, shape.height));
-        Ok(ScenePreview { pipeline: pipeline.clone(), comp, chain, slots: Vec::new(), shape, tile_pad: None, transparent })
+        Ok(ScenePreview { pipeline: pipeline.clone(), comp, chain, slots: Vec::new(), shape, tile_pad: None, transparent, serial: 0 })
     }
 
     /// Draw transparent sources from the programme's board's layers.
@@ -252,14 +256,14 @@ impl ScenePreview {
         let sy = self.shape.height as f64 / canvas.height.max(1) as f64;
         let mut kept: Vec<usize> = Vec::with_capacity(cells.len());
         for (z, cell) in cells.iter().enumerate() {
-            let index = match self.pick(&cell.source, &kept) {
+            let index = match self.pick(cell, &kept) {
                 Some(index) => index,
                 None => {
                     let Some(tee) = tee_for(&cell.source) else {
                         debug!(source = %cell.source, "the mosaic has no tile for a previewed source");
                         continue;
                     };
-                    match self.bind(&cell.source, &tee) {
+                    match self.bind(&cell.source, &tee, &cell.filters, canvas) {
                         Ok(index) => index,
                         Err(e) => {
                             warn!(source = %cell.source, ?e, "could not draw a source in the preview");
@@ -287,18 +291,20 @@ impl ScenePreview {
         Ok(())
     }
 
-    fn pick(&self, source: &SourceId, kept: &[usize]) -> Option<usize> {
-        self.slots
-            .iter()
-            .position(|s| &s.source == source && !kept.contains(&self.index_of(s)))
-    }
-
-    fn index_of(&self, slot: &Slot) -> usize {
-        self.slots.iter().position(|s| s.pad == slot.pad).unwrap_or(usize::MAX)
+    /// A slot already drawing this cell's source with this cell's filters,
+    /// their settings brought in line in place. None when there is no such
+    /// slot, and a new one is bound: the slot it replaces is not kept, so it
+    /// goes at the end of the apply.
+    fn pick(&mut self, cell: &Cell, kept: &[usize]) -> Option<usize> {
+        let free = |i: usize, s: &Slot| s.source == cell.source && !kept.contains(&i);
+        let index = (0..self.slots.len())
+            .find(|&i| free(i, &self.slots[i]) && self.slots[i].chain.is(&cell.filters))
+            .or_else(|| (0..self.slots.len()).find(|&i| free(i, &self.slots[i]) && self.slots[i].chain.same_kinds(&cell.filters)))?;
+        self.slots[index].chain.configure(&cell.filters).then_some(index)
     }
 
     /// Take a branch off a tile's tee and give it a pad on the preview.
-    fn bind(&mut self, source: &SourceId, tee: &gst::Element) -> Result<usize> {
+    fn bind(&mut self, source: &SourceId, tee: &gst::Element, filters: &[crate::mixer::slots::ItemFilter], canvas: &CanvasCaps) -> Result<usize> {
         let queue = gstutil::queue_preview(&format!("pv-q-{source}"))?;
         let crop = gstutil::make("videocrop", &format!("pv-crop-{source}"))?;
         let flip = gstutil::make("videoflip", &format!("pv-flip-{source}"))?;
@@ -318,7 +324,11 @@ impl ScenePreview {
             .context("a preview flip has no src pad")?
             .link(&pad)
             .context("linking a preview slot into the compositor")?;
-        for el in [&flip, &crop, &queue] {
+        self.serial += 1;
+        let at = super::preview_chain::At { pipeline: &self.pipeline, flip: &flip, pad: &pad, source, serial: self.serial, canvas };
+        let mut chain = super::preview_chain::Chain::build(&at, filters, &self.transparent);
+        // Consumers first, as everywhere in this branch.
+        for el in chain.elements().iter().rev().chain([&flip, &crop, &queue]) {
             el.sync_state_with_parent().context("starting a preview slot")?;
         }
         if let Err(e) = tee_pad.link(&sink) {
@@ -329,6 +339,7 @@ impl ScenePreview {
                 let _ = el.set_state(gst::State::Null);
                 let _ = self.pipeline.remove(el);
             }
+            chain.teardown(&self.pipeline, &self.transparent);
             return Err(e.into());
         }
         self.transparent.bind(source, &pad);
@@ -339,6 +350,7 @@ impl ScenePreview {
             queue,
             crop,
             flip,
+            chain,
             pad,
         });
         debug!(%source, "a source joined the preview");
@@ -361,7 +373,7 @@ impl ScenePreview {
         if index >= self.slots.len() {
             return;
         }
-        let slot = self.slots.remove(index);
+        let mut slot = self.slots.remove(index);
         self.transparent.unbind(&slot.source);
         if let Some(sink) = slot.queue.static_pad("sink") {
             let _ = slot.tee_pad.unlink(&sink);
@@ -375,6 +387,7 @@ impl ScenePreview {
             let _ = el.set_state(gst::State::Null);
             let _ = self.pipeline.remove(el);
         }
+        slot.chain.teardown(&self.pipeline, &self.transparent);
         debug!(source = %slot.source, "a source left the preview");
     }
 
@@ -438,6 +451,9 @@ pub struct Cell {
     /// How the picture is fitted into its box: the programme's own setting,
     /// so Fit changes the picture a designer is looking at.
     pub sizing: crate::mixer::slots::Sizing,
+    /// The item's filters, innermost first, as the programme's slot carries
+    /// them: a keyed presenter is keyed in the preview too.
+    pub filters: Vec<crate::mixer::slots::ItemFilter>,
 }
 
 /// A tiny black source on a compositor pad of its own.

@@ -115,6 +115,14 @@ pub trait Filter: Send {
     fn board(&self) -> Option<BoardHook> {
         None
     }
+
+    /// Say whose picture this filter works on, before it is built, so a
+    /// filter with costly work of its own can share it with another instance
+    /// on the same picture. `key` names the source; `lead` is true on the
+    /// programme, whose frames are the ones the shared work follows. The
+    /// preview's copy of an item's cutout is the case this exists for: one
+    /// model run serves both. Most filters have nothing to share and ignore it.
+    fn share_as(&mut self, _key: &str, _lead: bool) {}
 }
 
 /// What a filter with alpha shares with whoever places it.

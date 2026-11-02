@@ -49,6 +49,7 @@ async fn a_clip_moves_at_the_mosaic_rate_in_its_tile_and_the_preview() {
         rotation: 0.0,
         crop: (0.0, 0.0, 0.0, 0.0),
         sizing: Default::default(),
+        filters: Vec::new(),
     }]);
     let slack = crate::plugin::harness::timing_slack();
     let source = super::wait_for_pipeline(CLIP, Duration::from_secs(10).mul_f64(slack)).await;

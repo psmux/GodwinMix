@@ -25,6 +25,7 @@ mod clients;
 pub mod compose;
 pub mod conflict;
 mod drafts;
+mod preview_cells;
 mod keys;
 pub use keys::KeyOnAir;
 mod stale;
@@ -281,20 +282,7 @@ impl SceneServer {
         let scene = inner.doc.scene(&id)?;
         let canvas = inner.doc.canvas;
         let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
-        let cells = compose::placements(&inner.doc, scene, &inner.canvas)
-            .into_iter()
-            .map(|p| PreviewCell {
-                source: p.source,
-                x: (p.xpos as f64 * sx).round() as i32,
-                y: (p.ypos as f64 * sy).round() as i32,
-                width: (p.width as f64 * sx).round() as i32,
-                height: (p.height as f64 * sy).round() as i32,
-                alpha: p.alpha,
-                rotation: p.rotation,
-                crop: p.crop,
-                fit: p.sizing.name().to_string(),
-            })
-            .collect();
+        let cells = preview_cells::cells(compose::placements(&inner.doc, scene, &inner.canvas), sx, sy);
         Some(PreviewLayout { scene: id, name: scene.name.clone(), width, height, cells })
     }
 
@@ -332,20 +320,7 @@ impl SceneServer {
         let scene = working.scene(&draft.of)?;
         let canvas = working.canvas;
         let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
-        let cells = compose::placements(&working, scene, &inner.canvas)
-            .into_iter()
-            .map(|p| PreviewCell {
-                source: p.source,
-                x: (p.xpos as f64 * sx).round() as i32,
-                y: (p.ypos as f64 * sy).round() as i32,
-                width: (p.width as f64 * sx).round() as i32,
-                height: (p.height as f64 * sy).round() as i32,
-                alpha: p.alpha,
-                rotation: p.rotation,
-                crop: p.crop,
-                fit: p.sizing.name().to_string(),
-            })
-            .collect();
+        let cells = preview_cells::cells(compose::placements(&working, scene, &inner.canvas), sx, sy);
         Some(PreviewLayout { scene: draft.of, name: draft.name.clone(), width, height, cells })
     }
 
@@ -490,6 +465,12 @@ pub struct PreviewCell {
     pub crop: (f64, f64, f64, f64),
     /// `fill`, `contain` or `cover`: how the picture sits in its box.
     pub fit: String,
+    /// The item's filters, innermost first, for the preview compositor to put
+    /// on the item's slot as the programme does. Not on the wire: a client
+    /// reads an item's filters off the document.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub filters: Vec<crate::mixer::slots::ItemFilter>,
 }
 
 impl Inner {

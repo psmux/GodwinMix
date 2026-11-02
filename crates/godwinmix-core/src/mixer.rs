@@ -7268,7 +7268,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height / 2,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
             crate::multiview::preview::Cell {
                 source: "cam2".into(),
@@ -7277,7 +7277,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height / 2,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
         ]);
         let drawn = mix.multiview.as_ref().map(|mv| mv.preview_drawn()).unwrap_or(0);

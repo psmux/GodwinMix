@@ -1132,7 +1132,13 @@ impl SlotPool {
                 params: f.params.clone(),
             };
             let board = self.board.clone();
-            let built = crate::plugin::filter::make(&f.type_id).and_then(|filter| {
+            let picture = self.slots[index].source().cloned();
+            let built = crate::plugin::filter::make(&f.type_id).and_then(|mut filter| {
+                // The programme's copy leads a cutout shared with the
+                // preview's copy of the same item (`matte::share`).
+                if let Some(picture) = &picture {
+                    filter.share_as(picture, true);
+                }
                 let pad = self.slots[index].pad.clone();
                 // Turned on before the first frame goes through, so a key
                 // never shows a frame flattened over black on its way in.

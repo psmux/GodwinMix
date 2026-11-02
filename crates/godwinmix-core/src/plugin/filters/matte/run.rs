@@ -10,7 +10,7 @@ use super::blocks;
 #[path = "picture.rs"]
 mod picture;
 use super::params::Settings;
-use super::worker::Worker;
+use super::worker::{share, Worker};
 use crate::overlay::keyed::Keyed;
 use crate::overlay::picture::{Area, Picture};
 use crate::plugin::filter::BoardHook;
@@ -24,7 +24,13 @@ use std::sync::Arc;
 
 pub struct Cutter {
     pub hook: BoardHook,
-    worker: Worker,
+    /// Shared with every other cutout on the same picture asking the same
+    /// masks (`share`), and swapped for another when a change of settings
+    /// means this one no longer does.
+    worker: Mutex<Arc<Worker>>,
+    /// Whose picture, and whether this copy leads. See `Filter::share_as`.
+    picture: Option<String>,
+    lead: bool,
     state: Mutex<State>,
 }
 
@@ -37,7 +43,7 @@ struct State {
 }
 
 impl Cutter {
-    pub fn new(settings: Settings, hook: BoardHook) -> Arc<Cutter> {
+    pub fn new(settings: Settings, hook: BoardHook, picture: Option<String>, lead: bool) -> Arc<Cutter> {
         let state = State {
             curve: settings.curve(),
             settings: settings.clone(),
@@ -45,11 +51,20 @@ impl Cutter {
             info: None,
             flat: Vec::new(),
         };
-        Arc::new(Cutter { hook, worker: Worker::start(settings), state: Mutex::new(state) })
+        let worker = Mutex::new(share::worker_for(picture.as_deref(), &settings));
+        Arc::new(Cutter { hook, worker, picture, lead, state: Mutex::new(state) })
     }
 
     pub fn set(&self, settings: Settings) {
-        self.worker.set(settings.clone());
+        {
+            let mut worker = self.worker.lock();
+            if Arc::strong_count(&worker) > 1 && !worker.answers_for(&settings) {
+                // Another cutout still wants the old masks: this one goes to
+                // a worker of its own rather than changing that one's.
+                *worker = share::worker_for(self.picture.as_deref(), &settings);
+            }
+            worker.set(settings.clone());
+        }
         let mut st = self.state.lock();
         st.curve = settings.curve();
         st.settings = settings;
@@ -63,8 +78,11 @@ impl Cutter {
         let mut st = self.state.lock();
         let Some(vinfo) = st.video_info(pad) else { return gst::PadProbeReturn::Ok };
         let frame = buffer.clone();
-        self.worker.offer(&frame, &vinfo);
-        let mask = self.worker.latest();
+        let mask = {
+            let worker = self.worker.lock();
+            worker.offer_as(&frame, &vinfo, self.lead);
+            worker.latest()
+        };
         if self.hook.layer.active() {
             *buffer = gap(&frame);
             if self.hook.seen() {

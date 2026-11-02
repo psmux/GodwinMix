@@ -24,6 +24,8 @@ use parking_lot::{Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+#[path = "share.rs"]
+pub mod share;
 
 /// One mask, a byte per pixel at the model's size.
 pub struct Mask {
@@ -40,6 +42,8 @@ struct Shared {
     /// The last reason the model could not start, so it is logged once.
     error: Mutex<Option<String>>,
     stop: AtomicBool,
+    /// When the programme's copy last offered a frame. See `offer`.
+    lead_at: Mutex<Option<Instant>>,
 }
 
 pub struct Worker {
@@ -55,6 +59,7 @@ impl Worker {
             settings: Mutex::new(settings),
             error: Mutex::new(None),
             stop: AtomicBool::new(false),
+            lead_at: Mutex::new(None),
         });
         let mine = shared.clone();
         let started = std::thread::Builder::new().name("gmx-cutout".into()).spawn(move || run(&mine));
@@ -65,8 +70,8 @@ impl Worker {
     }
 
     /// Hand over the newest frame. One waiting is enough: a newer frame
-    /// replaces it.
-    pub fn offer(&self, frame: &gst::Buffer, info: &gst_video::VideoInfo) {
+    /// replaces it. `share::offer_as` is the one that decides whether to.
+    fn offer(&self, frame: &gst::Buffer, info: &gst_video::VideoInfo) {
         *self.shared.job.lock() = Some((frame.clone(), info.clone()));
         self.shared.wake.notify_one();
     }
