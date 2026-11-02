@@ -46,12 +46,7 @@ export function resolve(panel, s) {
   return next;
 }
 
-/**
- * A take moved the programme: Preview keeps what was taken. A source armed
- * here gives way, and a scene put on air that is not the armed one (a take by
- * name, from a Stream Deck or another desk) is armed, so the core draws it
- * with its filters. Every page in this mode asks for the same thing.
- */
+/** After a take, arm a scene taken by name, so the core draws it with its filters. */
 function keepTaken(panel, s, kit, armed) {
   const live = panel.onAirLive;
   if (document.body.dataset.armed && document.body.dataset.armed !== s.program) delete document.body.dataset.armed;

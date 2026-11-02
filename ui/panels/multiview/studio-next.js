@@ -1,13 +1,7 @@
 // What Studio mode's preview holds, so it is never just black.
 //
-// After a take, Preview keeps the scene that was just taken, the same as
-// Programme, until the operator picks another (`afterTake` "same", the
-// default). In order: a source armed on this page, the armed scene, the
-// scene on air, the source on air, and with nothing on air the first scene.
-// `studio-armed.js` arms the scene a take put on air, so the core draws it
-// with its filters, as it draws every armed scene.
-//
-// The old way is `afterTake` "swap", a choice in Settings. In order:
+// By default (`afterTake` "same") Preview keeps the scene just taken; see
+// sameUp. With "swap", in order:
 //
 // 1. A scene armed on the core (scene.preview.set), unless it is the one on
 //    air already. The scene on air is held too when somebody on this page
@@ -18,10 +12,7 @@
 //    scene that is not on air. It is this page's guess and nobody else's: it
 //    is not armed on the core, and the label under PREVIEW says so.
 //
-// So after a take, from this page or from anyone else (an agent, another
-// operator), Preview shows where the show came from, as a vision mixer does
-// when it swaps its buses. A suggestion is drawn on the page from the camera
-// tiles, so an item's filters are not in it until it is armed.
+// A suggestion is drawn from the camera tiles, without the items' filters.
 
 /** The scene list, from this page's scene session or the Scenes panel. */
 export function sceneKit(panel) {
@@ -89,10 +80,7 @@ export function nextUp(panel, s, kit, armedSource, chosen = null, afterTake = "s
   if (armed && (idOf(kit, armed) !== live || (chosen && idOf(kit, chosen) === live))) {
     return { kind: "scene", id: idOf(kit, armed), name: armed, why: "armed" };
   }
-  if (armedSource && !(s.program === armedSource && !s.scene)) {
-    const known = (s.sources || []).find((x) => x.id === armedSource);
-    return { kind: "source", id: armedSource, name: (known && known.name) || armedSource, why: "armed" };
-  }
+  if (armedSource && !(s.program === armedSource && !s.scene)) return source(s, armedSource, "armed");
   const scenes = kit ? kit.scenes() : [];
   const exists = (id) => scenes.find((x) => x.id === id);
   const before = (panel.onAirBefore || []).find((id) => id !== live && exists(id));
@@ -101,23 +89,22 @@ export function nextUp(panel, s, kit, armedSource, chosen = null, afterTake = "s
   return { kind: "scene", id: pick.id, name: pick.name, why: before ? "before" : "next" };
 }
 
-/** Preview after a take keeps what was taken. See the top of this file. */
+/** A source armed here, the armed scene, what is on air, else the first scene. */
 function sameUp(s, kit, armedSource) {
-  if (armedSource) {
-    const known = (s.sources || []).find((x) => x.id === armedSource);
-    return { kind: "source", id: armedSource, name: (known && known.name) || armedSource, why: "armed" };
-  }
+  if (armedSource) return source(s, armedSource, "armed");
   const armed = armedScene(s, kit);
   if (armed) return { kind: "scene", id: idOf(kit, armed), name: armed, why: "armed" };
   const live = liveScene(s, kit);
-  const summary = live && kit ? kit.summary(live) : null;
-  if (summary) return { kind: "scene", id: summary.id, name: summary.name, why: "live" };
-  if (s.program) {
-    const known = (s.sources || []).find((x) => x.id === s.program);
-    return { kind: "source", id: s.program, name: (known && known.name) || s.program, why: "live" };
-  }
-  const first = kit ? kit.scenes()[0] : null;
+  const on = live && kit && kit.summary(live);
+  if (on) return { kind: "scene", id: on.id, name: on.name, why: "live" };
+  if (s.program) return source(s, s.program, "live");
+  const first = kit && kit.scenes()[0];
   return first ? { kind: "scene", id: first.id, name: first.name, why: "next" } : null;
+}
+
+function source(s, id, why) {
+  const known = (s.sources || []).find((x) => x.id === id);
+  return { kind: "source", id, name: (known && known.name) || id, why };
 }
 
 /** The few words under PREVIEW that say why it holds what it holds. */
