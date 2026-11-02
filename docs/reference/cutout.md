@@ -111,7 +111,18 @@ programme's copy feeds it; the preview's copy only reads the newest mask,
 which fits any frame size because a mask is at the model's size. With the
 scene armed and not on air, the preview's frames feed the model on their own.
 Different edge, softness, feather or matte settings still share, because those
-are laid on per copy. `PREVIEW_COST` 
+are laid on per copy.
+
+A cutout feeds its model only while its item can be seen. A cutout scene
+taken off air used to keep its model running on a camera nobody saw.
+
+Measured on an M4 Pro with the fine model on CoreML, a 1080p presenter clip,
+counting model runs over a minute in each state: nothing on air or in Preview
+with a cutout, 0 a second; the cutout scene only in Preview, about 5 a second
+(the preview's rate); on air with nobody watching Preview, about 15 a second
+(as fast as the model answers); on air and in Preview at once, the same 15
+and one model, not two; taken off air again, 0. Before this, the scene taken
+off air went on at 15 a second.
 
 ## Refusals
 
