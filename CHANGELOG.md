@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.25 (2026-11-03)
 
 Preview shows what Take will put on air, filters and all.
 
@@ -24,7 +24,7 @@ Guests see and hear the show again.
 * A guest's page opens a real camera when the guest has not picked one. A browser asked for any camera takes the system's first, and on a laptop with DroidCam or OBS installed that was the virtual one, so the guest joined showing DroidCam's card. The page now moves to the first camera that is not a program posing as one. A camera the guest picks is still kept, virtual or not.
 * [Invite a guest](docs/how-to/invite-a-guest.md) says what the guest sees on the mixer's self signed https link and what to do about it: click through once, install the mixer's authority for someone who joins often, or put the mixer behind a reverse proxy with a real certificate for a guest across the internet.
 
-## 0.3.25 (2026-11-02)
+The Mac app runs on macOS 26.
 
 * The Mac app's mixer starts on macOS 26. The app is signed ad hoc, and the bundler also turned on the hardened runtime, which brings library validation with it: macOS then refused every GStreamer library inside the app ("different Team IDs"), so the desktop app opened with no mixer behind it and `godwinmix` from the app did not start at all. The build machine did not enforce it, so the release's own launch check passed. The hardened runtime is off (`bundle.macOS.hardenedRuntime` in `tauri-app/tauri.conf.json`), and the release now fails if any program in the app is signed with it.
 
