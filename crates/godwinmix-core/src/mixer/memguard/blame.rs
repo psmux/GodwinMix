@@ -28,7 +28,7 @@ pub const AGAIN_AFTER: Duration = Duration::from_secs(300);
 /// The fullest queue that holds at least [`BLAME_BYTES`], is full by its
 /// backstop and belongs to a source `rested` allows, with that source.
 /// `queues` is fullest first.
-pub fn blame<'a>(queues: &'a [Held], rested: impl Fn(&str) -> bool) -> Option<(&'a Held, &'a str)> {
+pub fn blame(queues: &[Held], rested: impl Fn(&str) -> bool) -> Option<(&Held, &str)> {
     queues
         .iter()
         .take_while(|q| q.bytes >= BLAME_BYTES)
