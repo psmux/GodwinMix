@@ -23,6 +23,7 @@ import { render } from "./studio-armed.js";
 import { picker } from "./transition-picker.js";
 import { effects } from "./fx-gallery.js";
 import { rateMenu } from "./monitor-rate.js";
+import { onCutoutReadiness } from "../../shell/cutout-ready.js";
 
 export { retunePreview, releasePreview, render };
 
@@ -90,6 +91,8 @@ export function build(panel) {
     // A source tile armed in the Sources panel says so here at once, rather
     // than on the next state the core sends.
     on(document, "gmx-armed", () => panel.render(panel.client.state)),
+    // A cutout that finished opening takes its words off the picture.
+    onCutoutReadiness(() => panel.render(panel.client.state)),
     register({
       id: "program.take-armed",
       title: "Take the preview to programme",
