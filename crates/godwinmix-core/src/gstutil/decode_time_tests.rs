@@ -86,13 +86,12 @@ fn gap_then_wait(rig: &Rig) -> (u32, u32, u64, bool) {
             break;
         }
     }
-    let level = (
+    (
         q.property::<u32>("current-level-buffers"),
         q.property::<u32>("current-level-bytes"),
         q.property::<u64>("current-level-time"),
         by_backstop(q) && held_by_backstop(q),
-    );
-    level
+    )
 }
 
 fn finish(rig: Rig) {
