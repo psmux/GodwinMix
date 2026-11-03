@@ -175,8 +175,12 @@ gmx logs | grep -E "memory is past its guard|backstop"
 `the show's memory is past its guard's threshold` names the five fullest
 queues and the pipeline each is in. `this queue filled by its byte or buffer
 backstop` names a queue whose time limit stopped counting, and is the line to
-put in a bug report. The guard restarts the source whose queue holds the most;
-if the alarm is still up after that, take a support bundle while it is.
+put in a bug report. The guard restarts the source whose queue filled by its
+backstop and holds the most. When the error says `behind=true`, every full
+queue is full to its time limit instead: the programme is slower than its
+sources, nothing is restarted, and the cure is less work on air (a cutout
+fewer, a lower canvas). If the alarm is still up after that, take a support
+bundle while it is.
 
 To move the threshold, or switch the guard off with 0:
 
