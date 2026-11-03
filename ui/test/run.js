@@ -143,6 +143,18 @@ presenceTests(test, eq, ok);
 
 const ORDER = ["a", "b", "c", "d", "e"];
 
+test("a scene read again after a restart takes the restarted core's patches", () => {
+  const mirror = new SceneMirror({});
+  const scene = (id, name) => ({ id, kind: "scene", name, parent: null });
+  ok(mirror.applyPatch({ seq: 40, added: [scene("one", "One")] }).applied, "the first patch");
+  // The core restarted: the page reads the document again, and the patches
+  // that follow are numbered from one.
+  mirror.reset([]);
+  const after = mirror.applyPatch({ seq: 1, added: [scene("grey", "Grey")] });
+  ok(after.applied, "patch 1 after the restart was dropped as a duplicate of 40");
+  ok(mirror.record("grey"), "the scene made after the restart is in the mirror");
+});
+
 test("a plain click replaces the selection", () => {
   const s = new Selection();
   s.click("b", ORDER, {});
