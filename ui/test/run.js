@@ -2667,6 +2667,33 @@ async function liveSuite() {
     return;
   }
 
+  // A page that reconnects hears what is armed from the core, not from what
+  // it held before. After a restart one named the old scene over an empty
+  // Preview, because the snapshot has no field for it.
+  const armCheck = await panel.scenes.add("Armed check");
+  await panel.addSources(armCheck.id, [sources[0]]);
+  await client.call("scene.preview.set", { scene: armCheck.id });
+  client.store.patch({ preview: "a scene from before the restart" });
+  client.resubscribe();
+  await waitFor(() => client.state.preview === "Armed check", 4000, "the armed scene after a subscribe").catch(() => {});
+  test("a subscribe says what is armed, so a stale name is replaced", () => eq(client.state.preview, "Armed check"));
+  await client.call("scene.preview.set", {});
+  client.store.patch({ preview: "Armed check" });
+  client.resubscribe();
+  await waitFor(() => client.state.preview === null, 4000, "nothing armed after a subscribe").catch(() => {});
+  test("and says nothing is armed when nothing is", () => eq(client.state.preview, null));
+  // A one item scene names its source as well, and the scene is what was taken.
+  await client.call("program.take", { scene: armCheck.id });
+  const onAir = await client.call("program.get", {});
+  await waitFor(() => client.state.scene === "Armed check", 3000, "the take of a one item scene").catch(() => {});
+  test("a one item scene on air is named by the scene, in program.get and on the page", () => {
+    eq(onAir.on_air, "Armed check");
+    eq(programLabel(client.state), "Armed check");
+  });
+  await client.call("program.take", { source: "t-ball" });
+  await client.call("scene.preview.set", {});
+  await panel.scenes.remove(armCheck.id);
+
   const addCheck = await panel.scenes.add("Add source check");
   await panel.addSources(addCheck.id, [sources[0]]);
   const addedView = await client.call("scene.get", { scene: addCheck.id });

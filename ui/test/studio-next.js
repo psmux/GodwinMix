@@ -121,6 +121,38 @@ export async function studioNextTests(test, eq, ok) {
     eq(sourceTrouble({ sources: [{ id: 'clip', state: 'live', ended: true, has_video: true }] }, 'clip'), null);
   });
 
+  // A cutout whose model is still opening draws the camera whole, which
+  // looked as if nothing had happened for seven seconds.
+  const ready = await import('../shell/cutout-ready.js');
+  const { CUTOUT_PREPARING } = await import('../panels/multiview/studio-slots.js');
+  const { readinessText } = await import('../panels/composer/cutout.js');
+  const asked = [];
+  let answer = { preparing: 1, running: 0 };
+  const cutKit = kit('wide');
+  cutKit.mirror = { record: (item) => (item === 'w' ? { visible: true, filters: [{ type: 'matte/filter' }] } : { visible: true }) };
+  const cutHost = { previewSlots: layer, client: { call: async (method) => { asked.push(method); return answer; } } };
+  ready.resetCutoutReadiness();
+  paintSlots(cutHost, { sources, multiview: { enabled: true } }, cutKit, { kind: 'scene', id: 'wide', name: 'Wide', why: 'armed' });
+  await new Promise((r) => setTimeout(r, 50));
+  paintSlots(cutHost, { sources, multiview: { enabled: true } }, cutKit, { kind: 'scene', id: 'wide', name: 'Wide', why: 'armed' });
+  test('Preview says on the box that a cutout is preparing, and asks the core', () => {
+    eq(asked[0], 'filter.cutout');
+    ok(layer.textContent.includes(CUTOUT_PREPARING), layer.textContent);
+  });
+  test('the item says it too, and says nothing once the model answers', () => {
+    ok(readinessText({ preparing: 1, running: 0 }).startsWith('Preparing the cutout'));
+    eq(readinessText({ preparing: 0, running: 1 }), '');
+    eq(readinessText({ preparing: 1, running: 0 }, false), '', 'a cutout switched off is not preparing');
+    ok(readinessText({ preparing: 0, running: 0, error: 'no model' }).includes('no model'));
+  });
+  answer = { preparing: 0, running: 1 };
+  ready.resetCutoutReadiness();
+  test('with the cutout ready its box carries no words', () => {
+    paintSlots(cutHost, { sources, multiview: { enabled: true } }, cutKit, { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    ok(!layer.textContent.includes(CUTOUT_PREPARING), layer.textContent);
+  });
+  ready.resetCutoutReadiness();
+
   // Take with nothing armed sends the suggestion, by id, with the transition.
   const studio = await import('../panels/multiview/studio.js');
   const calls = [];
