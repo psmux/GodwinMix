@@ -94,6 +94,12 @@ impl Normaliser {
         // 28 fps into a 30 fps canvas must still produce 30 fps.
         crate::probe::set_bool(&vrate, "skip-to-first", true);
         crate::probe::set_bool(&vrate, "drop-only", false);
+        // The frames it repeats to fill a gap keep the decode time of the one
+        // they repeat, and every queue below would read its level by that
+        // and overfill. See `gstutil::decode_time`.
+        if let Some(out) = vrate.static_pad("src") {
+            gstutil::decode_time::present_only(&out);
+        }
         let vconv = make("videoconvert", &format!("{id}-vconv"))?;
         // The converter is where a decoder's half-filled colour tag would be
         // acted on, so the tag is completed just before it.
