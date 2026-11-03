@@ -98,9 +98,16 @@ pub struct CutoutReadiness {
     pub error: Option<String>,
 }
 
+#[cfg(feature = "matte")]
 fn cutout_readiness() -> CutoutReadiness {
     let now = godwinmix_core::plugin::filters::matte::readiness();
     CutoutReadiness { preparing: now.preparing, running: now.running, error: now.error }
+}
+
+/// A build without the cutout has none, so none is preparing.
+#[cfg(not(feature = "matte"))]
+fn cutout_readiness() -> CutoutReadiness {
+    CutoutReadiness { preparing: 0, running: 0, error: None }
 }
 
 /// `filter.add`.
