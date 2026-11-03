@@ -13,6 +13,7 @@ use std::time::Duration;
 use tracing::{error, warn};
 
 pub mod backstop;
+pub mod decode_time;
 
 pub fn make(factory: &str, name: &str) -> Result<gst::Element> {
     gst::ElementFactory::make(factory)

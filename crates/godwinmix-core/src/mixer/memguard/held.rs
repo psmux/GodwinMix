@@ -15,6 +15,11 @@ pub struct Held {
     pub element: String,
     pub bytes: u64,
     pub source: Option<String>,
+    /// Full by its byte or buffer backstop with less than its time limit in
+    /// it (`gstutil::backstop::by_backstop`): what it holds has stopped
+    /// counting in time. A queue full to its time limit is not this; it is
+    /// waiting on a programme that has fallen behind.
+    pub backstop: bool,
 }
 
 /// The queues the log names, fullest first: `element in pipeline: N MB`.
@@ -43,7 +48,8 @@ pub fn fullest_queues() -> Vec<Held> {
             }
             let bytes = u64::from(element.property::<u32>("current-level-bytes"));
             let source = source_of(&name, &element);
-            out.push(Held { pipeline: name.clone(), element: element.name().to_string(), bytes, source });
+            let backstop = crate::gstutil::backstop::held_by_backstop(&element);
+            out.push(Held { pipeline: name.clone(), element: element.name().to_string(), bytes, source, backstop });
         }
     }
     out.sort_by_key(|q| std::cmp::Reverse(q.bytes));
