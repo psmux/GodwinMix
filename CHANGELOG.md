@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+A show with an HTML set behind a cutout no longer climbs to its memory guard and takes healthy sources off air.
+
+* Queues on a source's path now hold what their time limit says. A live source stamps each frame with a decode time as well as a presentation time, and when it fell behind, the frame rate converter repeated its last frame to fill the gap with that one decode time on every copy. A queue measures itself by decode time when there is one, so it read 0 ms however much it held and filled to its byte limit, two seconds of 1080p where it was sized for one. On 0.3.25 four queues behind the HTML newsroom set held 186 MB each at a level of 0 ms. Raw video now leaves the converter with no decode time, and the queues fill by time.
+* The memory guard restarts only a source whose queue filled by its byte or buffer limit, and leaves a source it restarted alone for five minutes. When every full queue is full to its time limit the programme is behind its sources; the guard says so in the log (`behind=true`) and restarts nothing. On 0.3.25 it restarted the set and the guest in turn every half minute, each restart hung behind its own full queue, and colour bars and the clips stalled with them. See [show health](docs/reference/show-health.md#memory).
+
 ## 0.3.25 (2026-11-03)
 
 Preview shows what Take will put on air, filters and all.
