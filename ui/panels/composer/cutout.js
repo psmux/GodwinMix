@@ -81,7 +81,7 @@ export function cutoutEditor(o) {
 /** What the cutout is doing, said while its model opens. */
 export function readinessText(readiness, enabled = true) {
   if (!enabled || !readiness) return "";
-  if (readiness.preparing > 0) return "Preparing the cutout. The camera shows whole until the model is ready, which takes a few seconds the first time.";
+  if (readiness.preparing > 0) return "Preparing the cutout. The person appears once the model is ready, which takes a few seconds the first time.";
   if (readiness.error && !readiness.running) return `The cutout could not start: ${readiness.error}`;
   return "";
 }

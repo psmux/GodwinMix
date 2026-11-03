@@ -75,7 +75,7 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "filter.cutout",
             Scope::Read,
-            "Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out.",
+            "Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out.",
             handler(|_call: Call, _| async move { body(cutout_readiness()) }),
         )
         .result(schema_of::<CutoutReadiness>),
@@ -88,7 +88,7 @@ pub fn register(reg: &mut Registry<Call>) {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CutoutReadiness {
     /// Cutouts whose model is opening or has not answered a frame yet. Each
-    /// draws the camera whole until it has. Preview's copy of a scene counts
+    /// draws nothing of the camera until it has. Preview's copy of a scene counts
     /// as well as the programme's.
     pub preparing: usize,
     /// Cutouts cutting the person out now.
