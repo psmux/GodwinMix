@@ -1,16 +1,11 @@
-// Whether the cutouts are ready yet, for the words that say one is coming.
-//
-// A cutout's model takes seconds to open, and until it answers the camera is
-// drawn whole. A tester added one, saw the camera unchanged for seven seconds
-// and could not tell whether anything was happening. The core counts the
-// cutouts still opening (`filter.cutout`); this asks it, only while a cutout
-// is new on this page, and stops once none is preparing.
+// Whether the cutouts are ready yet. A cutout's model takes seconds to open
+// and the camera shows whole until then, so this asks the core
+// (`filter.cutout`) while a cutout is new here, and stops once none prepares.
 
 const EVERY_MS = 600;
-// A cutout added a moment ago may not have reached the pipeline yet, so a
-// first answer of none preparing is not believed until this long has gone.
+// A new cutout may not be in the pipeline yet; trust "none" only after this.
 const AT_LEAST_MS = 2500;
-// And nothing is asked for longer than this, whatever the answers.
+// Never asked for longer than this.
 const AT_MOST_MS = 60000;
 
 let readiness = null;
