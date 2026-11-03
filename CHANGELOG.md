@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.27 (2026-11-03)
+
+The first start after an install no longer leaves the app with no mixer, and a cutout never puts the whole room on air.
+
+* The desktop app waits for its mixer as long as the mixer is still writing to its log, up to two minutes. It gave the mixer 25 seconds, and the first start after an upgrade rebuilds the GStreamer registry: on a Windows laptop that took 19 seconds of a 26 second start, so the app killed a healthy mixer and sat with none until it was opened again.
+* A cutout draws nothing of its camera until its model answers. It drew the camera whole, so the first take of a cutout scene after a mixer restart put the presenter's room over the studio set for 15 seconds while the model opened. The composer and Preview say the cutout is preparing until the person appears. See [Replace the background](docs/how-to/replace-the-background.md).
+* A guest whose real camera is held by another program keeps the camera that opened. The join page swapped to the real camera and, when that would not open, was left with none and no message.
+
 ## 0.3.26 (2026-11-03)
 
 A show with an HTML set behind a cutout no longer climbs to its memory guard and takes healthy sources off air.
