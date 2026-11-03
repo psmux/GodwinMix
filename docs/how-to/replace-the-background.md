@@ -158,8 +158,9 @@ them. Its recurrent form takes more than one input and is not read yet.
 * **The person is on black.** The programme is composited on a GPU graphics
   entry, which does not draw transparent items yet. Use the software graphics
   entry for a scene with a cutout or a key.
-* **The camera shows whole, room and all.** The model has not answered yet,
-  or could not start. The mixer's log says which, on a line starting "the
+* **The person is not there at all.** The model has not answered yet, or
+  could not start. Nothing of the camera is drawn until it does, so the room
+  never goes to air. The mixer's log says which, on a line starting "the
   cutout".
 * **Bits of the room stay.** Raise **Edge position**, or pull a matte in from
   that side.

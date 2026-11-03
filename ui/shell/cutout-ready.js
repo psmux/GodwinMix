@@ -1,5 +1,5 @@
 // Whether the cutouts are ready yet. A cutout's model takes seconds to open
-// and the camera shows whole until then, so this asks the core
+// and the person is not drawn until then, so this asks the core
 // (`filter.cutout`) while a cutout is new here, and stops once none prepares.
 
 const EVERY_MS = 600;

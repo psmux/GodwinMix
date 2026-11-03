@@ -10,7 +10,7 @@
 //! another. The cost is one idle session's memory after the last cutout goes.
 //!
 //! The counts are what `filter.cutout` reports, so a page can say "preparing
-//! the cutout" rather than show the camera whole and leave a person guessing.
+//! the cutout" rather than show an empty set and leave a person guessing.
 
 use super::inference::Open;
 use crate::plugin::filters::matte::params::{Device, Quality};
@@ -41,7 +41,7 @@ pub(super) fn put_back(open: Open) {
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Readiness {
     /// Cutouts whose model is still opening or has not answered a frame yet.
-    /// Each draws the camera whole until it has.
+    /// Each draws nothing of the camera until it has.
     pub preparing: usize,
     /// Cutouts drawing a mask.
     pub running: usize,

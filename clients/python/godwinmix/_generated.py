@@ -1034,7 +1034,7 @@ class CutoutReadiness(TypedDict, total=False):
     error: Optional[str]
     # Why the last cutout that failed could not start, until one starts.
     preparing: int
-    # Cutouts whose model is opening or has not answered a frame yet. Each draws the camera whole until it has. Preview's copy of a scene counts as well as the programme's.
+    # Cutouts whose model is opening or has not answered a frame yet. Each draws nothing of the camera until it has. Preview's copy of a scene counts as well as the programme's.
     running: int
     # Cutouts cutting the person out now.
 
@@ -5723,7 +5723,7 @@ METHODS = (
     {"name": "feed.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/set"), "summary": 'Change a feed\'s address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one.'},
     {"name": "feed.test", "scope": "operate", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/feed/test"), "summary": 'Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.'},
     {"name": "filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters"), "summary": 'Hang a filter on one source or on the programme, live.'},
-    {"name": "filter.cutout", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/cutout"), "summary": 'Whether the cutouts are ready: how many are still opening their model, and so draw the camera whole, and how many cut the person out.'},
+    {"name": "filter.cutout", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/cutout"), "summary": 'Whether the cutouts are ready: how many are still opening their model, and so draw nothing of the camera, and how many cut the person out.'},
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
@@ -6841,7 +6841,7 @@ class GeneratedMethods:
     async def filter_cutout(
         self,
     ) -> CutoutReadiness:
-        """Whether the cutouts are ready: how many are still opening their model, and so draw the camera whole, and how many cut the person out."""
+        """Whether the cutouts are ready: how many are still opening their model, and so draw nothing of the camera, and how many cut the person out."""
         params: Dict[str, Any] = {}
         return await self._call("filter.cutout", params)
 

@@ -47,7 +47,7 @@ fn cost_per_1080p_frame() {
 }
 
 #[test]
-fn no_mask_yet_shows_the_whole_picture() {
+fn no_mask_yet_shows_nothing() {
     let r = Region {
         x: 0,
         y: 0,
@@ -56,7 +56,7 @@ fn no_mask_yet_shows_the_whole_picture() {
     };
     let mut out = Vec::new();
     alpha(&[], (0, 0), (4, 4), r, &identity(), &mut out);
-    assert_eq!(out, [255; 4]);
+    assert_eq!(out, [0; 4]);
 }
 
 #[test]
