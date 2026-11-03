@@ -40,16 +40,14 @@ export function emptyState() {
 /**
  * What is on air, in one name, for a bar that has room for one.
  *
- * `program` is a source id when a single source is up, and also when a one
- * item scene is, beside `scene`. `scene` is the name that
+ * `program` is a source id when a single source is up. `scene` is the name that
  * scene had at the moment it was taken, which the core never revises, so a
  * rename leaves it reading the old one; `sceneName` is what the scene document
  * calls it now. Null when nothing is on air, so each caller says black in its
  * own words.
  */
 export function programLabel(state) {
-  // A one item scene names its source in `program` as well. The scene is what
-  // a person took, so it wins, as it does in the core's on air record.
+  // A one item scene sends its source too; the scene is what was taken.
   if (state.scene) return state.sceneName || state.scene;
   const source = state.program ? (state.sources || []).find((s) => s.id === state.program) : null;
   if (source) return source.name;
@@ -71,15 +69,10 @@ export class Store {
 
   /** Replace the status document wholesale. Used by `event/snapshot`. */
   snapshot(status, seq) {
-    // The armed scene is kept unless the status names one. The status document
-    // has no field for it and `event/preview.changed` is the only thing that
-    // says what is armed, so resetting it here took the armed scene away a
-    // moment after it arrived: asking for the preview stream re-subscribes,
-    // and a re-subscribe brings a fresh snapshot with it. The pane beside the
-    // programme appeared and went dark again on that one.
-    // The scene's current name is kept for the same reason: it comes from the
-    // scene document rather than the status, and a re-subscribe brings a fresh
-    // snapshot that would otherwise put the stale name back in the header.
+    // The status has no armed scene and no current scene name, so both are
+    // kept: a re-subscribe brings a snapshot, and resetting them darkened
+    // Preview and put a stale name in the header. The core says what is
+    // armed after every snapshot (`event/preview.changed`).
     const keep = {
       media: this.state.media,
       meters: this.state.meters,
