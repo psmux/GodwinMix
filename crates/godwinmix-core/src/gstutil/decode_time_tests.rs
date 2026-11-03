@@ -6,7 +6,6 @@
 use super::*;
 use crate::gstutil::backstop::{by_backstop, bytes_for, held_by_backstop};
 use crate::gstutil::{capsfilter, make, queue_thread};
-use gstreamer::prelude::*;
 use gstreamer_app::AppSrc;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
