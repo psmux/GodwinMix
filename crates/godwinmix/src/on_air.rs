@@ -103,10 +103,12 @@ pub fn choose(record: Option<OnAir>, scenes: &SceneServer, sources: &[String]) -
 }
 
 /// Put back what was on air. Called once, after the scenes are open.
-pub async fn restore(handle: &MixerHandle, scenes: &Arc<SceneServer>, path: &Path) {
+/// Returns what it chose, for `armed::restore`, or black when it put back
+/// nothing.
+pub async fn restore(handle: &MixerHandle, scenes: &Arc<SceneServer>, path: &Path) -> OnAir {
     let sources = match handle.status().await {
         Ok(status) => status.sources.into_iter().map(|s| s.id).collect::<Vec<_>>(),
-        Err(_) => return,
+        Err(_) => return OnAir::Black,
     };
     let chosen = choose(read(path), scenes, &sources);
     info!(on_air = ?chosen, "putting back what was on air");
@@ -119,7 +121,7 @@ pub async fn restore(handle: &MixerHandle, scenes: &Arc<SceneServer>, path: &Pat
                 transition: None,
                 ack: None,
             }),
-            Err(_) => return,
+            Err(_) => return OnAir::Black,
         },
         // Under the downstream keys that were up, when any were.
         OnAir::Source(id) => match scenes.source_with_keys(id) {
@@ -132,11 +134,12 @@ pub async fn restore(handle: &MixerHandle, scenes: &Arc<SceneServer>, path: &Pat
             }),
             None => handle.send(Command::Take { source: Some(id.clone()), at_running_time_ms: None, ack: None }),
         },
-        OnAir::Black => return,
+        OnAir::Black => return OnAir::Black,
     };
     if let Err(e) = sent {
         warn!(error = %e, "could not put back what was on air");
     }
+    chosen
 }
 
 #[cfg(test)]

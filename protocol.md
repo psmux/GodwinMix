@@ -89,6 +89,7 @@ Keys accepted on every method, handled before a method runs.
 | `feed.set` | `POST /api/v1/feed/set` | operate |  | 1 | Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one. |
 | `feed.test` | `POST /api/v1/feed/test` | operate |  | 1 | Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written. |
 | `filter.add` | `POST /api/v1/filters` | operate |  | 1 | Hang a filter on one source or on the programme, live. |
+| `filter.cutout` | `POST /api/v1/filters/{id}/cutout` | read |  | 1 | Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out. |
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
@@ -1253,6 +1254,23 @@ MCP tool `add_filter` in the `search` profile: readOnlyHint false, destructiveHi
   },
   "result": {
     "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `filter.cutout`
+
+Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/CutoutReadiness"
   }
 }
 ```

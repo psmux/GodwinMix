@@ -123,6 +123,20 @@ Preview reaches both copies, and they end on one model whichever is told
 first. While a new model loads, the cutout on air keeps drawing its last mask
 rather than the whole camera.
 
+Opening the model is the slow part: three to eleven seconds for the fine
+model on DirectML on a Windows laptop. Preview makes its own copy of a scene's
+filters every time the scene is armed, and each copy used to open the model
+again. Now a cutout that stops leaves its open model behind, one per model
+and device, and the next cutout with the same quality and device takes it, so
+arming the scene again cuts the person out on the first frame. The cost is
+that one idle model stays in memory after the last cutout goes.
+
+Until a new cutout's model has answered its first frame the camera is drawn
+whole. `filter.cutout` says how many cutouts are still preparing and how many
+are running, with the reason when one could not start. The composer's cutout
+settings and the item's box in Preview say "preparing the cutout" while any
+is, and the page asks only while a cutout is new to it, for a minute at most.
+
 A cutout feeds its model only while its item can be seen. A cutout scene
 taken off air used to keep its model running on a camera nobody saw.
 

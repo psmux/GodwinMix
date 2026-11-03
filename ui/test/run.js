@@ -143,6 +143,18 @@ presenceTests(test, eq, ok);
 
 const ORDER = ["a", "b", "c", "d", "e"];
 
+test("a scene read again after a restart takes the restarted core's patches", () => {
+  const mirror = new SceneMirror({});
+  const scene = (id, name) => ({ id, kind: "scene", name, parent: null });
+  ok(mirror.applyPatch({ seq: 40, added: [scene("one", "One")] }).applied, "the first patch");
+  // The core restarted: the page reads the document again, and the patches
+  // that follow are numbered from one.
+  mirror.reset([]);
+  const after = mirror.applyPatch({ seq: 1, added: [scene("grey", "Grey")] });
+  ok(after.applied, "patch 1 after the restart was dropped as a duplicate of 40");
+  ok(mirror.record("grey"), "the scene made after the restart is in the mirror");
+});
+
 test("a plain click replaces the selection", () => {
   const s = new Selection();
   s.click("b", ORDER, {});
@@ -512,6 +524,8 @@ test("what is on air is named once, for every bar that shows it", () => {
   // The header and the programme monitor both read this, and both kept the
   // old name after a rename because the core never revises what it said.
   eq(programLabel({ program: null, scene: "Scene 3", sceneName: "tb-one", sources }), "tb-one", "the name it goes by now");
+  // A one item scene sends both. The header said "Camera 1" over Scene 2.
+  eq(programLabel({ program: "cam1", scene: "Scene 2", sources }), "Scene 2", "a one item scene by the scene's name");
 });
 
 test("the name a renamed scene goes by survives the snapshot too", () => {
@@ -2706,6 +2720,33 @@ async function liveSuite() {
     eq(retainedSource.id, sources[1]);
   });
   await panel.scenes.remove(addCheck.id);
+
+  // A page that reconnects hears what is armed from the core, not from what
+  // it held before. After a restart one named the old scene over an empty
+  // Preview, because the snapshot has no field for it.
+  const armCheck = await panel.scenes.add("Armed check");
+  await panel.addSources(armCheck.id, [sources[0]]);
+  await client.call("scene.preview.set", { scene: armCheck.id });
+  client.store.patch({ preview: "a scene from before the restart" });
+  client.resubscribe();
+  await waitFor(() => client.state.preview === "Armed check", 4000, "the armed scene after a subscribe").catch(() => {});
+  test("a subscribe says what is armed, so a stale name is replaced", () => eq(client.state.preview, "Armed check"));
+  await client.call("scene.preview.set", {});
+  client.store.patch({ preview: "Armed check" });
+  client.resubscribe();
+  await waitFor(() => client.state.preview === null, 4000, "nothing armed after a subscribe").catch(() => {});
+  test("and says nothing is armed when nothing is", () => eq(client.state.preview, null));
+  // A one item scene names its source as well, and the scene is what was taken.
+  await client.call("program.take", { scene: armCheck.id });
+  const onAir = await client.call("program.get", {});
+  await waitFor(() => client.state.scene === "Armed check", 3000, "the take of a one item scene").catch(() => {});
+  test("a one item scene on air is named by the scene, in program.get and on the page", () => {
+    eq(onAir.on_air, "Armed check");
+    eq(programLabel(client.state), "Armed check");
+  });
+  await client.call("program.take", { source: "t-ball" });
+  await client.call("scene.preview.set", {});
+  await panel.scenes.remove(armCheck.id);
 
   const before = panel.scenes.scenes().length;
 

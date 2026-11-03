@@ -9,7 +9,9 @@
 //!
 //! The session is opened on this thread too, on the first frame: a model can
 //! take a second to load and a GPU longer to prepare, and none of that may
-//! happen where a frame is waiting.
+//! happen where a frame is waiting. A session a stopped worker left behind is
+//! taken before a new one is opened (`warm`), so arming a cutout scene again
+//! does not load the model again.
 
 use super::model::{self, Spec};
 use super::params::Settings;
@@ -26,6 +28,8 @@ use std::sync::Arc;
 use std::time::Instant;
 #[path = "share.rs"]
 pub mod share;
+#[path = "warm.rs"]
+pub mod warm;
 
 /// One mask, a byte per pixel at the model's size.
 pub struct Mask {
@@ -98,6 +102,9 @@ fn run(shared: &Shared) {
     let (mut input, mut out) = (Vec::new(), Vec::new());
     let mut last: Option<Arc<Mask>> = None;
     let mut frames = 0u64;
+    // Counted from the first frame it is handed, because a cutout nobody can
+    // see is fed nothing and is not getting ready for anybody.
+    let mut counted: Option<warm::Counted> = None;
     loop {
         let (frame, info) = {
             let mut job = shared.job.lock();
@@ -105,34 +112,18 @@ fn run(shared: &Shared) {
                 shared.wake.wait(&mut job);
             }
             if shared.stop.load(Ordering::SeqCst) {
+                // Left for the next cutout with these settings.
+                if let Some(o) = open.take() {
+                    warm::put_back(o);
+                }
                 return;
             }
             job.take().expect("woken with a job")
         };
+        let count = counted.get_or_insert_with(warm::Counted::start);
         let settings = shared.settings.lock().clone();
-        let wanted = (settings.quality.clone(), settings.device);
-        if open.as_ref().is_none_or(|o| o.for_settings != wanted) {
-            open = None;
-            match prepare(&settings) {
-                Ok((session, spec, ran)) => {
-                    tracing::info!(model = %spec.name, device = %ran.label(), "the cutout is running");
-                    *shared.error.lock() = None;
-                    open = Some(Open { session, spec, for_settings: wanted });
-                }
-                Err(e) => {
-                    let why = format!("{e:#}");
-                    let mut last = shared.error.lock();
-                    if last.as_deref() != Some(&why) {
-                        tracing::error!(error = %why, "the cutout could not start; the camera is drawn whole");
-                    }
-                    *last = Some(why);
-                    drop(last);
-                    // Asked again only when the settings change: the same
-                    // failure every frame would be a log a minute long.
-                    wait_for_change(shared, &wanted);
-                    continue;
-                }
-            }
+        if !ensure_open(shared, &settings, &mut open, count) {
+            continue;
         }
         let o = open.as_mut().expect("opened above");
         let started = Instant::now();
@@ -145,10 +136,53 @@ fn run(shared: &Shared) {
             out = old.data;
         }
         *shared.mask.lock() = Some(mask);
+        count.running();
         frames += 1;
         if frames % 300 == 1 {
             let ms = started.elapsed().as_secs_f32() * 1000.0;
             tracing::debug!(model = %o.spec.name, ms, "a frame through the cutout");
+        }
+    }
+}
+
+/// The session for these settings: the one open, a warm one, or a new one.
+/// False when it would not open; the worker has then waited for the settings
+/// to change (or to stop) and the caller goes round again.
+fn ensure_open(shared: &Shared, settings: &Settings, open: &mut Option<Open>, counted: &mut warm::Counted) -> bool {
+    let wanted = (settings.quality.clone(), settings.device);
+    if open.as_ref().is_some_and(|o| o.for_settings == wanted) {
+        return true;
+    }
+    if let Some(o) = open.take() {
+        warm::put_back(o);
+        counted.again();
+    }
+    if let Some(o) = warm::take(&wanted) {
+        tracing::info!(model = %o.spec.name, "the cutout is running, on a model already open");
+        *open = Some(o);
+        return true;
+    }
+    match prepare(settings) {
+        Ok((session, spec, ran)) => {
+            tracing::info!(model = %spec.name, device = %ran.label(), "the cutout is running");
+            *shared.error.lock() = None;
+            *open = Some(Open { session, spec, for_settings: wanted });
+            true
+        }
+        Err(e) => {
+            let why = format!("{e:#}");
+            let mut last = shared.error.lock();
+            if last.as_deref() != Some(&why) {
+                tracing::error!(error = %why, "the cutout could not start; the camera is drawn whole");
+            }
+            *last = Some(why.clone());
+            drop(last);
+            counted.failed(&why);
+            // Asked again only when the settings change: the same failure
+            // every frame would be a log a minute long.
+            wait_for_change(shared, &wanted);
+            counted.retry();
+            false
         }
     }
 }

@@ -36,6 +36,7 @@ pub mod mcp;
 pub mod nodes;
 pub mod mcp_http;
 pub mod observe;
+pub mod armed;
 pub mod on_air;
 pub mod setup;
 pub mod station;
@@ -1108,7 +1109,12 @@ pub async fn run() -> Result<()> {
     {
         let path = on_air::path_for(&config_path);
         on_air::spawn_recorder(handle.clone(), path.clone());
-        on_air::restore(&handle, &scenes, &path).await;
+        let on_air = on_air::restore(&handle, &scenes, &path).await;
+        // What was armed, after what was on air, because with nothing
+        // written down Preview follows the scene put back.
+        let armed_path = armed::path_for(&config_path);
+        armed::restore(&scenes, armed::read(&armed_path), &on_air);
+        armed::spawn_recorder(handle.clone(), scenes.clone(), armed_path);
     }
 
     let state = control::AppState::new(

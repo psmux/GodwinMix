@@ -1,11 +1,14 @@
 // Words over the preview picture where there would otherwise be black: a
 // source in the previewed scene that has no picture yet gets its name and
 // its state on its own box, and a preview with nothing in it says what to do.
+// A cutout whose model is still opening says so on its box too, because the
+// camera is drawn whole until it is ready and looks as if nothing happened.
 //
 // Plain elements over the canvas, placed in percentages of the scene's own
 // canvas, so they stay put whatever size the pane is drawn at.
 
 import { el } from "../../shell/dom.js";
+import { cutoutPreparing, hasCutout, watchCutouts } from "../../shell/cutout-ready.js";
 
 const STATES = {
   connecting: "connecting, no picture yet",
@@ -28,6 +31,26 @@ function label(box, title, state) {
 
 const WHOLE = { left: "0", top: "0", width: "100%", height: "100%" };
 
+export const CUTOUT_PREPARING = "preparing the cutout, shown whole until it is ready";
+
+/**
+ * Ask whether the cutouts are ready when Preview starts holding a scene with
+ * one, and again when one is added or its model changes, by anybody.
+ */
+function watchFor(panel, kit, id) {
+  const view = kit && kit.view(id);
+  const cuts = [];
+  for (const box of (view && view.geometry) || []) {
+    const record = kit.mirror && kit.mirror.record(box.item);
+    if (!hasCutout(record)) continue;
+    const f = record.filters.find((x) => x.type === "matte/filter") || {};
+    cuts.push([box.item, JSON.stringify(f.params || {})]);
+  }
+  const key = cuts.length ? JSON.stringify([id, cuts]) : null;
+  if (key && key !== panel.cutoutWatched) watchCutouts(panel.client);
+  panel.cutoutWatched = key;
+}
+
 /** The boxes of a scene's sources that have no picture, as labels. */
 function sceneSlots(s, kit, id) {
   const view = kit && kit.view(id);
@@ -39,7 +62,7 @@ function sceneSlots(s, kit, id) {
     if (!box.source) continue;
     const record = kit.mirror && kit.mirror.record(box.item);
     if (record && record.visible === false) continue;
-    const trouble = sourceTrouble(s, box.source);
+    const trouble = sourceTrouble(s, box.source) || (hasCutout(record) && cutoutPreparing() ? CUTOUT_PREPARING : null);
     if (!trouble) continue;
     const known = (s.sources || []).find((x) => x.id === box.source);
     out.push(label({
@@ -61,6 +84,7 @@ export function paintSlots(panel, s, kit, next) {
     const trouble = sourceTrouble(s, next.id);
     if (trouble) slots = [label(WHOLE, next.name, trouble)];
   } else {
+    watchFor(panel, kit, next.id);
     slots = sceneSlots(s, kit, next.id);
     const view = kit && kit.view(next.id);
     const empty = view && !(view.geometry || []).length;

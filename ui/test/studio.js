@@ -92,6 +92,18 @@ export async function studioTests(test, eq, ok) {
     eq(observing, 1);
     eq(wanted, ['preview']);
   });
+  // Nothing armed and Scene 2 on air: Preview holds Scene 2, and Take would
+  // put up the programme's own picture again, look and all. Drawn from the
+  // raw cells it showed Scene 2 in colour beside a black and white Programme.
+  attached.length = 0;
+  const two = { id: 'two', name: 'Scene 2' };
+  pane.sceneSession = { scenes: { supported: true, scenes: () => [two], summary: (x) => (x === 'two' || x === 'Scene 2' ? two : null), live: () => 'two', armed: () => null } };
+  studio.retunePreview(pane, { preview: null, scene: 'Scene 2', multiview: { cells: [{ source: 'cam-wide', index: 1 }, { source: null, index: 4 }] } });
+  test('with nothing armed, Preview shows the programme return for the scene on air', () => {
+    eq(pane.next.why, 'live');
+    eq(attached[attached.length - 1], 4, 'the programme cell');
+    eq(observing, 0, 'the raw cells are not drawn');
+  });
   studio.releasePreview(pane);
   setSetting('producer', producer);
   if (armedBefore === undefined) delete document.body.dataset.armed; else document.body.dataset.armed = armedBefore;

@@ -17,7 +17,9 @@
 //! Every part is its own module and can be changed alone: the settings
 //! (`params`), which model and where it is (`model`), the runtime and the
 //! device (`runtime`), the thread (`worker`), the picture in and the mask out
-//! (`sample`), and the mask laid over a frame (`blocks`, `run`).
+//! (`sample`), the mask laid over a frame (`blocks`, `run`), and the session
+//! kept open between cutouts with the count of those still preparing
+//! (`warm`).
 
 mod blocks;
 mod components;
@@ -32,6 +34,7 @@ mod worker;
 
 pub use params::Settings;
 pub use worker::share::workers_on;
+pub use worker::warm::{readiness, Readiness};
 
 use crate::caps::CanvasCaps;
 use crate::config::Params;
