@@ -24,6 +24,7 @@
 import { mountPublisher } from "./publisher.js";
 import { nameField } from "./name-field.js";
 import { GuestReturn } from "./return.js";
+import { CERT_GUEST, ownCertificate } from "./cert-note.js";
 
 /** The link's fragment as `{url, key, title, channel, shape, guest, show}`. Missing parts are "". */
 export function parseLink(hash) {
@@ -44,6 +45,19 @@ export function whipUrl(channel, stream) {
   return `/whip/${encodeURIComponent(channel)}/${encodeURIComponent(stream)}`;
 }
 
+/**
+ * The line about the browser's certificate warning, under the heading, on an
+ * address that gets the mixer's own certificate. Answers the line or null.
+ */
+export function certLine(heading, href) {
+  if (!heading || !ownCertificate(href)) return null;
+  const line = document.createElement("p");
+  line.className = "sm dim join-cert";
+  line.textContent = CERT_GUEST;
+  heading.after(line);
+  return line;
+}
+
 const root = document.getElementById("join");
 if (root) start(root, parseLink(location.hash));
 
@@ -51,6 +65,7 @@ function start(root, link) {
   if (link.title) document.title = link.title;
   const heading = document.getElementById("join-title");
   if (heading && link.title) heading.textContent = link.title;
+  certLine(heading, location.href);
   if (link.guest && link.key) return startGuest(root, link);
   if (!link.key || (!link.url && !link.channel)) {
     root.textContent = "This link has no address or no key in it, so there is nowhere to publish. Ask whoever sent it for the whole link.";

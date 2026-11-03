@@ -67,7 +67,7 @@ fn find(name: &str) -> Result<PathBuf> {
         return Ok(path.to_path_buf());
     }
     let pack: Vec<&str> = PACK.iter().map(|(n, _)| *n).collect();
-    let unknown = || format!("there is no template {name:?}. The pack has {}, and the media library has whatever template.list shows", pack.join(", "));
+    let unknown = || format!("there is no template {name:?}. The pack has {}, and the media library has whatever template.list shows{}", pack.join(", "), shell_hint(name));
     if file.split(['/', '\\']).any(|p| p == ".." || p.is_empty()) {
         bail!("{}", unknown());
     }
@@ -77,6 +77,21 @@ fn find(name: &str) -> Result<PathBuf> {
         bail!("{}", unknown());
     }
     Ok(path)
+}
+
+/// What to add to "no template" when `name` is a Windows path that lost its
+/// backslashes before it got here: a drive letter and a colon with no
+/// separator anywhere, `C:Usersgjdesk.svg`. The mixer keeps a backslash as it
+/// is; Git Bash and other Unix shells drop one that is outside quotes, so
+/// `gmx ctl source add desk template:C:\Users\gj\desk.svg` arrives without them.
+pub(crate) fn shell_hint(name: &str) -> &'static str {
+    let b = name.trim().as_bytes();
+    let drive = b.len() > 2 && b[0].is_ascii_alphabetic() && b[1] == b':';
+    if drive && !name.contains(['/', '\\']) {
+        ". It reads like a Windows path whose backslashes the shell took out: put the address in single quotes, or write it with forward slashes, C:/Users/you/desk.svg"
+    } else {
+        ""
+    }
 }
 
 /// The library's templates: every SVG with a field marker or a
@@ -115,3 +130,4 @@ pub fn save(dir: &Path, name: &str, svg: &str, replace: bool) -> Result<Template
     std::fs::rename(&part, &path).with_context(|| format!("saving {}", path.display()))?;
     Ok(template)
 }
+

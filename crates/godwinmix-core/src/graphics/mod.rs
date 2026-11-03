@@ -46,3 +46,6 @@ pub fn render(t: &Template, values: &Values, size: (u32, u32)) -> Result<Picture
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "pack_tests.rs"]
+mod pack_tests;

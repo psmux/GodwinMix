@@ -19,6 +19,12 @@ address names the template:
 | `template:news-lower-third` | the pack template of that name |
 | `template:my-bar.svg` or `template:my-bar` | `my-bar.svg` in the media library (`[media] dir`) |
 | `template:/srv/gfx/bar.svg` | that file, by absolute path |
+| `template:C:\gfx\bar.svg` or `template:C:/gfx/bar.svg` | the same on Windows, either slash |
+
+Git Bash and other Unix shells drop a backslash that is outside quotes, so
+on Windows put a path with backslashes in single quotes there, or write it
+with forward slashes. An address that arrives as `C:gfxbar.svg` is refused
+with that advice.
 
 | Param | Type | Default | Meaning |
 |---|---|---|---|

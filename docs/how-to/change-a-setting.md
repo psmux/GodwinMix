@@ -9,8 +9,9 @@ comment you wrote in it.
 ## In the web UI
 
 Press the gear at the top right. That opens **Settings for this page**: the
-theme, the tile pictures, the confirms, all kept in this browser and nothing
-to do with the mixer. The **Mixer settings** button at its top opens the
+theme, the tile pictures, the confirms, all kept in this browser. The one
+exception is **After Take, Preview shows**: the mixer keeps that choice, so it
+applies to every page and to a Take from a Stream Deck. The **Mixer settings** button at its top opens the
 mixer's own settings. The palette has it too (Ctrl+K, then type "mixer
 settings"). It needs a token with admin scope; with a lesser one the dialog
 says so and who to ask.
