@@ -7,10 +7,11 @@
 //! frames; the picture keeps its frame rate and the edge follows a frame or
 //! two behind, which is what every camera cutout does.
 //!
-//! The session is opened on this thread too, as soon as the thread starts:
-//! a model can take a second to load and a GPU longer to prepare, and none
-//! of that may happen where a frame is waiting. A session a stopped worker
-//! leaves behind is taken before a new one is opened (`warm`).
+//! The session is opened on this thread too, on the first frame: a model can
+//! take a second to load and a GPU longer to prepare, and none of that may
+//! happen where a frame is waiting. A session a stopped worker left behind is
+//! taken before a new one is opened (`warm`), so arming a cutout scene again
+//! does not load the model again.
 
 use super::model::{self, Spec};
 use super::params::Settings;
@@ -101,20 +102,10 @@ fn run(shared: &Shared) {
     let (mut input, mut out) = (Vec::new(), Vec::new());
     let mut last: Option<Arc<Mask>> = None;
     let mut frames = 0u64;
-    let mut counted = warm::Counted::start();
+    // Counted from the first frame it is handed, because a cutout nobody can
+    // see is fed nothing and is not getting ready for anybody.
+    let mut counted: Option<warm::Counted> = None;
     loop {
-        if shared.stop.load(Ordering::SeqCst) {
-            if let Some(o) = open.take() {
-                warm::put_back(o);
-            }
-            return;
-        }
-        // Opened before the first frame rather than on it, so the model is
-        // loading while the item and the compositor are still being built.
-        let settings = shared.settings.lock().clone();
-        if !ensure_open(shared, &settings, &mut open, &mut counted) {
-            continue;
-        }
         let (frame, info) = {
             let mut job = shared.job.lock();
             while job.is_none() && !shared.stop.load(Ordering::SeqCst) {
@@ -129,11 +120,12 @@ fn run(shared: &Shared) {
             }
             job.take().expect("woken with a job")
         };
+        let count = counted.get_or_insert_with(warm::Counted::start);
         let settings = shared.settings.lock().clone();
-        let o = match open.as_mut() {
-            Some(o) if o.for_settings == (settings.quality.clone(), settings.device) => o,
-            _ => continue,
-        };
+        if !ensure_open(shared, &settings, &mut open, count) {
+            continue;
+        }
+        let o = open.as_mut().expect("opened above");
         let started = Instant::now();
         let Some(answer) = infer(o, &frame, &info, &mut input) else { continue };
         sample::mask(&answer, last.as_deref().map(|m| m.data.as_slice()), settings.steady, &mut out);
@@ -144,7 +136,7 @@ fn run(shared: &Shared) {
             out = old.data;
         }
         *shared.mask.lock() = Some(mask);
-        counted.running();
+        count.running();
         frames += 1;
         if frames % 300 == 1 {
             let ms = started.elapsed().as_secs_f32() * 1000.0;
@@ -155,7 +147,7 @@ fn run(shared: &Shared) {
 
 /// The session for these settings: the one open, a warm one, or a new one.
 /// False when it would not open; the worker has then waited for the settings
-/// to change and the caller goes round again.
+/// to change (or to stop) and the caller goes round again.
 fn ensure_open(shared: &Shared, settings: &Settings, open: &mut Option<Open>, counted: &mut warm::Counted) -> bool {
     let wanted = (settings.quality.clone(), settings.device);
     if open.as_ref().is_some_and(|o| o.for_settings == wanted) {
