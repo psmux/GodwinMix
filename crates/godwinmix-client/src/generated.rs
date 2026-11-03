@@ -1665,6 +1665,23 @@ pub struct CueSetRequest {
     pub source: String,
 }
 
+/// `filter.cutout`. A page asks while a cutout it can see is new, so it can
+/// say the cutout is on its way rather than show a camera that looks as if
+/// nothing happened.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CutoutReadiness {
+    /// Why the last cutout that failed could not start, until one starts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Cutouts whose model is opening or has not answered a frame yet. Each
+    /// draws the camera whole until it has. Preview's copy of a scene counts
+    /// as well as the programme's.
+    pub preparing: i64,
+    /// Cutouts cutting the person out now.
+    pub running: i64,
+}
+
 /// Whether an interlaced picture is made progressive.
 pub type Deinterlace = String;
 /// The values api_level 1 knows for [`Deinterlace`].
@@ -5914,6 +5931,11 @@ pub struct ProgramState {
     /// sits under them shows through, until they are added back. Left out when
     /// every source is here.
     pub missing: Vec<String>,
+    /// What is on air, in one name: the scene when a scene is, whatever it
+    /// holds, else the source, and null for the slate. `program` is null
+    /// under a scene of more than one item, so read this to say what is up.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_air: Option<String>,
     /// The scene armed for the next `program.take` with no argument.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
@@ -8719,7 +8741,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 294] = [
+pub const METHODS: [MethodInfo; 295] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -8775,6 +8797,7 @@ pub const METHODS: [MethodInfo; 294] = [
     MethodInfo { name: "feed.set", summary: "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/set")) },
     MethodInfo { name: "feed.test", summary: "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.", scope: "operate", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/feed/test")) },
     MethodInfo { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters")) },
+    MethodInfo { name: "filter.cutout", summary: "Whether the cutouts are ready: how many are still opening their model, and so draw the camera whole, and how many cut the person out.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/cutout")) },
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
     MethodInfo { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/set")) },
@@ -9651,6 +9674,11 @@ impl Client {
     /// Hang a filter on one source or on the programme, live.
     pub async fn filter_add(&self, params: &AddFilterRequest) -> Result<FilterRecord> {
         self.call("filter.add", params).await
+    }
+
+    /// Whether the cutouts are ready: how many are still opening their model, and so draw the camera whole, and how many cut the person out.
+    pub async fn filter_cutout(&self) -> Result<CutoutReadiness> {
+        self.call("filter.cutout", &serde_json::json!({})).await
     }
 
     /// Every filter in place, with what it is and where it sits.
