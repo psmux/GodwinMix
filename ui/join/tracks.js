@@ -53,7 +53,12 @@ export async function preferRealCamera(pub) {
     const { cameras } = await listDevices();
     if (open) {
       const real = realCameraFor(open.getSettings?.().deviceId || "", cameras);
-      if (real) await openKind(pub, "video", real, true);
+      if (!real) return;
+      // Opened before the swap, so a real camera another program holds
+      // leaves the guest on the one that works rather than on none.
+      const track = await openTrack("video", real, { exact: true, processing: pub.r.processing.checked, loose: !!pub.shaper });
+      track.enabled = open.enabled;
+      await install(pub, "video", track);
       return;
     }
     for (const c of camerasToTry(cameras)) {
