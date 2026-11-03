@@ -876,6 +876,17 @@ export interface CueSetRequest {
   source: string;
 }
 
+/**
+ * `filter.cutout`. A page asks while a cutout it can see is new, so it can
+ * say the cutout is on its way rather than show a camera that looks as if
+ * nothing happened.
+ */
+export interface CutoutReadiness {
+  error?: string | null;
+  preparing: number;
+  running: number;
+}
+
 /** Whether an interlaced picture is made progressive. */
 export type Deinterlace = "off" | "on" | "auto";
 
@@ -3263,6 +3274,7 @@ export interface ProfileSaveRequest {
 export interface ProgramState {
   ad?: AdStatus | null;
   missing?: string[];
+  on_air?: string | null;
   preview?: string | null;
   previous?: string | null;
   program?: string | null;
@@ -4848,6 +4860,7 @@ export interface MethodParams {
   "feed.set": FeedSetRequest;
   "feed.test": FeedTestRequest;
   "filter.add": AddFilterRequest;
+  "filter.cutout": Record<string, never>;
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
   "filter.set": SetFilterRequest;
@@ -5146,6 +5159,7 @@ export interface MethodResults {
   "feed.set": FeedStatus;
   "feed.test": FeedTestResult;
   "filter.add": FilterRecord;
+  "filter.cutout": CutoutReadiness;
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
   "filter.set": FilterRecord;
@@ -5502,6 +5516,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "feed.set", summary: "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/set" } },
   { name: "feed.test", summary: "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.", scope: "operate", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/feed/test" } },
   { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters" } },
+  { name: "filter.cutout", summary: "Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/cutout" } },
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
   { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/set" } },
@@ -6086,6 +6101,11 @@ export class GeneratedMethods {
   /** Hang a filter on one source or on the programme, live. */
   filterAdd(params: AddFilterRequest): Promise<FilterRecord> {
     return this._call("filter.add", params as unknown as Record<string, unknown>) as Promise<FilterRecord>;
+  }
+
+  /** Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out. */
+  filterCutout(): Promise<CutoutReadiness> {
+    return this._call("filter.cutout", {}) as Promise<CutoutReadiness>;
   }
 
   /** Every filter in place, with what it is and where it sits. */
