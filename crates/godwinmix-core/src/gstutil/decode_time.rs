@@ -21,13 +21,14 @@
 //! for a shared one copies its header, never its picture.
 
 use gstreamer as gst;
+use gstreamer::prelude::*;
 
 /// Clear the decode time of every buffer that leaves `pad`.
 pub fn present_only(pad: &gst::Pad) {
     pad.add_probe(gst::PadProbeType::BUFFER | gst::PadProbeType::BUFFER_LIST, |_, info| {
-        match &mut info.data {
-            Some(gst::PadProbeData::Buffer(buffer)) => clear(buffer),
-            Some(gst::PadProbeData::BufferList(list)) => {
+        match info.data {
+            Some(gst::PadProbeData::Buffer(ref mut buffer)) => clear(buffer),
+            Some(gst::PadProbeData::BufferList(ref mut list)) => {
                 list.make_mut().foreach_mut(|mut buffer, _| {
                     clear(&mut buffer);
                     std::ops::ControlFlow::Continue(Some(buffer))
