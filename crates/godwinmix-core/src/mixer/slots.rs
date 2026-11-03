@@ -979,10 +979,10 @@ impl SlotPool {
                     warn!(?e, "a filtered group could not be composited; it was left out");
                     continue;
                 }
-                self.slots[index].open();
                 if let Err(e) = self.sync_filters(index, p) {
                     warn!(slot = index, ?e, "a group's filter could not go on");
                 }
+                self.slots[index].open();
                 ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
                 self.slots[index].remember(p);
                 claimed.push(index);
@@ -1003,7 +1003,9 @@ impl SlotPool {
                     index
                 }
             };
-            self.slots[index].open();
+            // Filters before the valve opens: a camera that has just started
+            // sent its first frames through raw, so a cutout's room reached
+            // the programme for a second after a restart.
             if let Err(e) = self.sync_filters(index, p) {
                 // The picture is still on air with whatever chain it had. A
                 // filter that will not build is a refused change, not a black
@@ -1014,6 +1016,7 @@ impl SlotPool {
                 // leaves the pad alone until the item's filters change.
                 self.slots[index].filter_shape = p.filters.to_vec();
             }
+            self.slots[index].open();
             ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
             self.slots[index].remember(p);
             claimed.push(index);
