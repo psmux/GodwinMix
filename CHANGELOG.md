@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.28 (2026-11-04)
+
+A cutout camera never reaches the programme uncut, even in the second after a mixer restart.
+
+* A scene item's filters are built before its picture is let through. A camera that had just started sent its first frames to the programme before its cutout went in, so the first take of a cutout scene after a restart could show a frame of the whole room over the studio set. 0.3.27 covered the seconds while the model opened, not this.
+* A cutout the board is not drawing yet hands the programme nothing until its first mask, in place of the camera as it is.
+* `program.thumbnail` asks the mixer for pictures again when a second passes with none. Right after a restart the mixer's queue can be full for several seconds, the first ask was dropped without a word, and a client asking every second got `pending` until it stopped asking for ten seconds.
+
 ## 0.3.27 (2026-11-03)
 
 The first start after an install no longer leaves the app with no mixer, and a cutout never puts the whole room on air.
