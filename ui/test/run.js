@@ -512,6 +512,8 @@ test("what is on air is named once, for every bar that shows it", () => {
   // The header and the programme monitor both read this, and both kept the
   // old name after a rename because the core never revises what it said.
   eq(programLabel({ program: null, scene: "Scene 3", sceneName: "tb-one", sources }), "tb-one", "the name it goes by now");
+  // A one item scene sends both. The header said "Camera 1" over Scene 2.
+  eq(programLabel({ program: "cam1", scene: "Scene 2", sources }), "Scene 2", "a one item scene by the scene's name");
 });
 
 test("the name a renamed scene goes by survives the snapshot too", () => {

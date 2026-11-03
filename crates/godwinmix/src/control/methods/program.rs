@@ -141,14 +141,10 @@ async fn state(call: &Call) -> Result<ProgramState, RpcError> {
     Ok(ProgramState {
         missing,
         previous: call.app.history.previous(status.program.as_deref()).flatten(),
+        on_air: status.scene.clone().or_else(|| status.program.clone()),
         program: status.program,
         scene: status.scene,
-        preview: call
-            .app
-            .scenes
-            .armed()
-            .and_then(|id| call.app.scenes.scene(&id.to_string()).ok())
-            .map(|s| s.name),
+        preview: call.app.scenes.armed_name(),
         running_time_ms: status.running_time_ms,
         ad: status.ad,
     })

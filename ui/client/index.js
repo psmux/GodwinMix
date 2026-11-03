@@ -18,6 +18,9 @@ export { Store, emptyState } from "./store.js";
 
 const TOKEN_KEY = "gmx.token";
 
+/** How long a subscribe waits for its snapshot before it is sent again. */
+const SNAPSHOT_WAIT_MS = 3000;
+
 /** The events a UI wants. Anything not listed is never sent to us. */
 const WANTED_EVENTS = [
   "snapshot",
@@ -287,11 +290,33 @@ export class Client {
     const same = JSON.stringify(spec) === JSON.stringify(this._subscribed);
     if (same) return;
     this._subscribed = spec;
+    const snapshots = this._snapshots || 0;
     try {
       await this.transport.subscribe(spec);
     } catch (e) {
       console.warn("core.subscribe was refused", e);
+      // Remembered as sent, a refused subscribe was never tried again. A page
+      // that reconnected while the old core was still shutting down kept the
+      // last picture and the last take it heard until it was reloaded.
+      if (this._subscribed === spec) this._subscribed = null;
+      this._retrySubscribe();
+      return;
     }
+    // The core sends a snapshot for every subscribe it can answer. One that
+    // could not read the mixer yet sends none, and the page waits for it.
+    // The adapter for an old core makes its own and is not waited on.
+    if (this.transport.name !== "rpc") return;
+    clearTimeout(this._snapshotTimer);
+    this._snapshotTimer = setTimeout(() => {
+      if ((this._snapshots || 0) === snapshots && this.store.state.connected) this.resubscribe();
+    }, SNAPSHOT_WAIT_MS);
+  }
+
+  _retrySubscribe() {
+    clearTimeout(this._retryTimer);
+    this._retryTimer = setTimeout(() => {
+      if (this.store.state.connected) this._resubscribe();
+    }, SNAPSHOT_WAIT_MS);
   }
 
   /** Force a fresh subscribe, used on reconnect and on resync. */
@@ -306,6 +331,7 @@ export class Client {
     const s = this.store;
     switch (name) {
       case "snapshot":
+        this._snapshots = (this._snapshots || 0) + 1;
         s.snapshot(params.state, params.seq);
         if (params.state.multiview) this.sheet.setLayout(params.state.multiview);
         break;

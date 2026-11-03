@@ -541,6 +541,11 @@ pub struct ProgramState {
     /// The scene on air, when one was taken by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+    /// What is on air, in one name: the scene when a scene is, whatever it
+    /// holds, else the source, and null for the slate. `program` is null
+    /// under a scene of more than one item, so read this to say what is up.
+    #[serde(default)]
+    pub on_air: Option<String>,
     /// The scene armed for the next `program.take` with no argument.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
