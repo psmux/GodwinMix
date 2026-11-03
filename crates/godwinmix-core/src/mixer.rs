@@ -3683,6 +3683,7 @@ impl Mixer {
         // Whatever the last take was doing, it is over. Settling leaves every
         // pad where that transition's curves ended rather than halfway.
         self.settle_transition();
+        crate::observe::laps::mark("transition settled");
         let mut took = transition::Kind::Cut;
         let mut duration = 0u64;
         match crossing {
@@ -3709,7 +3710,9 @@ impl Mixer {
             }
         }
 
+        crate::observe::laps::mark("scene applied");
         self.show_held_clips_again();
+        crate::observe::laps::mark("held clips shown");
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(
             scene = %name,
@@ -3744,10 +3747,13 @@ impl Mixer {
     ) -> Result<()> {
         let arriving = self.current_placements();
         let clip = self.stinger_clip(spec)?;
+        crate::observe::laps::mark("stinger clip");
         let branches: Vec<(&SourceId, &ProgrammeBranch)> =
             self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
         let crossed = self.pool.begin_transition(&arriving, &branches)?;
+        crate::observe::laps::mark("pool transition begun");
         let cover = clip.as_ref().and_then(|id| self.cover_leg(id));
+        crate::observe::laps::mark("cover leg");
         let duration = gst::ClockTime::from_mseconds(spec.duration().as_millis() as u64);
         let mut x = transition::Crossing {
             out: crossed.out,
@@ -3767,9 +3773,11 @@ impl Mixer {
         }
         let lead = self.fx_lead(spec, &mut x);
         let (curves, longest) = self.crossing_curves(spec, &x)?;
+        crate::observe::laps::mark("curves");
         let slate = self.tint_slate(&spec.kind);
         self.bind_window(id, spec.kind.name(), curves, x.start, longest + lead, slate);
         let fx = self.start_fx(spec, &x);
+        crate::observe::laps::mark("fx started");
         if let Some(running) = self.running_transition.as_mut() {
             running.clip = clip;
             running.fx = fx;
@@ -4055,6 +4063,7 @@ impl Mixer {
             Some(_) => self.pool.apply_ramped(&placements, &branches),
             None => self.pool.apply(&placements, &branches),
         };
+        crate::observe::laps::mark("pool applied");
         match applied {
             Ok(applied) => {
                 if !applied.missing.is_empty() {
@@ -4075,6 +4084,7 @@ impl Mixer {
             }
         }
         self.cue_sources(&placements);
+        crate::observe::laps::mark("sources cued");
 
         // Audio follows video per item: a source is heard when any live item
         // of it says `follow` and is visible, or says `always`. This is OBS's
@@ -5550,6 +5560,7 @@ impl Mixer {
                 self.drop_mosaic();
                 let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
                     .context("building multiview")?;
+                crate::observe::laps::mark("multiview pipeline built");
                 mv.attach_watch(gstutil::watch_bus(
                     mv.pipeline(),
                     gstutil::BusOwner::Multiview,
@@ -5575,6 +5586,7 @@ impl Mixer {
                         }
                     })
                     .context("adding multiview tile")?;
+                    crate::observe::laps::mark("multiview tile");
                 }
                 mv.follow_clock_of(&self.program);
                 // Marked built before the first frame can leave it: a
@@ -5585,6 +5597,7 @@ impl Mixer {
                     self.mv.mark_built(None);
                     return Err(e.context("starting multiview"));
                 }
+                crate::observe::laps::mark("multiview started");
                 self.multiview = Some(mv);
                 // Last, once the mosaic is running. The branch ends at a
                 // `proxysink`, and a proxysink pushing into a `proxysrc` whose
@@ -5593,7 +5606,9 @@ impl Mixer {
                 // cell never fills.
                 self.attach_programme_return()
                     .context("attaching the programme return branch for the mosaic")?;
+                crate::observe::laps::mark("programme return attached");
                 self.show_held_clips_again();
+                crate::observe::laps::mark("held clips shown");
                 info!(?shape, "multiview built for a subscriber");
             }
             Demand::Preview => {}
@@ -5611,6 +5626,7 @@ impl Mixer {
         // The preview lives in the mosaic's pipeline, so a mosaic that has
         // just been built or rebuilt has to be told what is armed.
         self.preview_demand_now()?;
+        crate::observe::laps::mark("preview reconciled");
         // Clients learn the grid from the status document, and the grid has
         // just changed: a mosaic was built, torn down, or given a preview
         // cell. Nothing else announces that. A client subscribing before the
@@ -5655,6 +5671,7 @@ impl Mixer {
             Some(shape) => {
                 mv.preview_on(shape, self.mv.preview_publisher())
                     .context("building the preview compositor")?;
+                crate::observe::laps::mark("preview on");
                 self.mv.mark_preview_built(Some(shape));
                 info!(?shape, items = cells, "preview composited for a subscriber");
                 self.draw_preview();
@@ -6057,6 +6074,7 @@ pub fn spawn(
                 // say what the loop is inside. One uncontended lock on a path
                 // that is about to do a GStreamer state change.
                 running.begin(label);
+                crate::observe::laps::open(label);
                 // A net under every command. The programme's encoder lives in
                 // GStreamer's own threads and a panic here does not stop it,
                 // but without this the mixer thread dies and every command
@@ -6071,6 +6089,7 @@ pub fn spawn(
                 let outcome =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mixer.handle(cmd)));
                 running.finish();
+                crate::observe::laps::close();
                 match outcome {
                     Ok(Ok(true)) => {}
                     Ok(Ok(false)) => break,
