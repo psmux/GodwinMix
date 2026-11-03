@@ -8,6 +8,7 @@
 import { el, on } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { withParam } from "./key.js";
+import { cutoutReadiness, onCutoutReadiness, watchCutouts } from "../../shell/cutout-ready.js";
 
 /** The choices: param, label, options and what each means. */
 export const CHOICES = [
@@ -71,7 +72,35 @@ export function cutoutEditor(o) {
   });
   return el("div.col.key-editor", {}, [
     el("p.sm.dim", { text: "The person is cut out by a model, with no screen behind them. Put a picture, a clip or a page below this item and it becomes the background." }),
+    readinessLine(o),
     ...choices,
     ...sliders,
   ]);
+}
+
+/** What the cutout is doing, said while its model opens. */
+export function readinessText(readiness, enabled = true) {
+  if (!enabled || !readiness) return "";
+  if (readiness.preparing > 0) return "Preparing the cutout. The camera shows whole until the model is ready, which takes a few seconds the first time.";
+  if (readiness.error && !readiness.running) return `The cutout could not start: ${readiness.error}`;
+  return "";
+}
+
+/** A status line that follows the core's count, asked for while it is new. */
+function readinessLine(o) {
+  const line = el("p.sm.cutout-status", { role: "status", hidden: true });
+  const enabled = o.filter.enabled !== false;
+  const paint = (r) => {
+    line.textContent = readinessText(r, enabled);
+    line.hidden = !line.textContent;
+  };
+  paint(cutoutReadiness());
+  const off = onCutoutReadiness((r) => {
+    // Gone with the inspector that drew it.
+    if (!line.isConnected && line.dataset.shown) return off();
+    line.dataset.shown = "1";
+    paint(r);
+  });
+  if (enabled) watchCutouts(o.client);
+  return line;
 }
