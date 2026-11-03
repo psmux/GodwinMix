@@ -133,8 +133,13 @@ impl Cutter {
             }
             return gst::PadProbeReturn::Ok;
         }
-        if mask.is_some() {
-            st.flatten(buffer.make_mut(), &vinfo, mask.as_deref());
+        // Drawn by the compositor itself. Before the first mask that would be
+        // the whole camera, which went to air over the set for a second or
+        // two after a restart, before the board took the item; a gap draws
+        // nothing until the model answers.
+        match mask {
+            Some(m) => st.flatten(buffer.make_mut(), &vinfo, Some(&m)),
+            None => *buffer = gap(&frame),
         }
         gst::PadProbeReturn::Ok
     }
