@@ -582,7 +582,7 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
     }
     // A cutout needs a runtime and a model on this machine. Asked here, so a
     // machine without them hears what to install instead of getting a filter
-    // that draws the camera whole and says nothing.
+    // that draws nothing of the camera and says nothing.
     #[cfg(feature = "matte")]
     if req.type_id == "matte/filter" {
         let filter_params: godwinmix_core::config::Params =

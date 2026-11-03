@@ -68,7 +68,7 @@ impl Worker {
         let mine = shared.clone();
         let started = std::thread::Builder::new().name("gmx-cutout".into()).spawn(move || run(&mine));
         if let Err(e) = started {
-            tracing::error!(error = %e, "no thread for the cutout; the camera is drawn whole");
+            tracing::error!(error = %e, "no thread for the cutout; the person is not drawn");
         }
         Worker { shared }
     }
@@ -173,7 +173,7 @@ fn ensure_open(shared: &Shared, settings: &Settings, open: &mut Option<Open>, co
             let why = format!("{e:#}");
             let mut last = shared.error.lock();
             if last.as_deref() != Some(&why) {
-                tracing::error!(error = %why, "the cutout could not start; the camera is drawn whole");
+                tracing::error!(error = %why, "the cutout could not start; the person is not drawn");
             }
             *last = Some(why.clone());
             drop(last);

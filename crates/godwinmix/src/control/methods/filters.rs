@@ -88,7 +88,7 @@ pub fn register(reg: &mut Registry<Call>) {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CutoutReadiness {
     /// Cutouts whose model is opening or has not answered a frame yet. Each
-    /// draws the camera whole until it has. Preview's copy of a scene counts
+    /// draws nothing of the camera until it has. Preview's copy of a scene counts
     /// as well as the programme's.
     pub preparing: usize,
     /// Cutouts cutting the person out now.
