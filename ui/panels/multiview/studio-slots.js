@@ -33,11 +33,20 @@ const WHOLE = { left: "0", top: "0", width: "100%", height: "100%" };
 
 export const CUTOUT_PREPARING = "preparing the cutout, shown whole until it is ready";
 
-/** Ask whether the cutouts are ready when Preview starts holding a scene with one. */
+/**
+ * Ask whether the cutouts are ready when Preview starts holding a scene with
+ * one, and again when one is added or its model changes, by anybody.
+ */
 function watchFor(panel, kit, id) {
   const view = kit && kit.view(id);
-  const any = !!view && (view.geometry || []).some((box) => hasCutout(kit.mirror && kit.mirror.record(box.item)));
-  const key = any ? id : null;
+  const cuts = [];
+  for (const box of (view && view.geometry) || []) {
+    const record = kit.mirror && kit.mirror.record(box.item);
+    if (!hasCutout(record)) continue;
+    const f = record.filters.find((x) => x.type === "matte/filter") || {};
+    cuts.push([box.item, JSON.stringify(f.params || {})]);
+  }
+  const key = cuts.length ? JSON.stringify([id, cuts]) : null;
   if (key && key !== panel.cutoutWatched) watchCutouts(panel.client);
   panel.cutoutWatched = key;
 }
