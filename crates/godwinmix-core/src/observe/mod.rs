@@ -34,6 +34,7 @@
 
 pub mod doctor;
 pub mod introspect;
+pub mod laps;
 pub mod logs;
 pub mod metrics;
 pub mod session;

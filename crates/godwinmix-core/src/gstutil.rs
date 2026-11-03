@@ -359,6 +359,7 @@ where
 
     let waited = std::time::Instant::now();
     if rx.recv_timeout(timeout).is_ok() {
+        crate::observe::laps::mark("pad block");
         let ms = waited.elapsed().as_millis() as u64;
         if ms >= SLOW_STEP_MS {
             warn!(pad = %pad.name(), ms, "a pad took its time reaching an idle point");

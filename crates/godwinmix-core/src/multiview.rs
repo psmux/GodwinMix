@@ -940,6 +940,7 @@ impl Multiview {
         let tee = make("tee", &format!("mv-tee-{tag}"))?;
         tee.set_property("allow-not-linked", true);
         let branch = vec![src, queue, scale, caps, tee.clone()];
+        crate::observe::laps::mark("tile made");
         self.pipeline.add_many(&branch).context("adding tile branch")?;
         gst::Element::link_many(&branch).context("linking tile branch")?;
 
@@ -952,6 +953,7 @@ impl Multiview {
         pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
         let tee_pad = tee.request_pad_simple("src_%u").context("a tile tee refused a pad")?;
         tee_pad.link(&pad).context("linking tile into the mosaic")?;
+        crate::observe::laps::mark("tile linked");
 
         // Say when this tile has actually put something on the canvas. The
         // probe removes itself on the first buffer, so it costs one closure
@@ -971,9 +973,11 @@ impl Multiview {
         for el in branch.iter().rev() {
             el.sync_state_with_parent().context("starting a multiview branch")?;
         }
+        crate::observe::laps::mark("tile started");
 
         self.tiles.push(Tile { source, pad, branch, tee, fed });
         self.relayout();
+        crate::observe::laps::mark("tile relaid out");
         debug!(%tag, "added multiview tile");
         Ok(entry)
     }
@@ -1046,8 +1050,10 @@ impl Multiview {
         }
         self.preview_off();
         self.preview_filters_pending();
+        crate::observe::laps::mark("old preview off");
         let mut built =
             preview::ScenePreview::build(&self.pipeline, shape, publish, self.cfg.jpeg_quality as i32)?;
+        crate::observe::laps::mark("preview compositor built");
         built.borrow_layers(self.shared.overlay.lock().clone());
         // A tile of its own on the mosaic, so an operator watching the sheet
         // sees what is armed beside what is live without a second stream.
@@ -1055,8 +1061,10 @@ impl Multiview {
             Ok(pad) => built.set_tile_pad(Some(pad)),
             Err(e) => warn!(?e, "the preview has no tile on the mosaic; the stream still works"),
         }
+        crate::observe::laps::mark("preview tile attached");
         self.preview = Some(built);
         self.relayout();
+        crate::observe::laps::mark("relaid out");
         Ok(())
     }
 

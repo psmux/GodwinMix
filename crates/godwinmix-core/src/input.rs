@@ -1092,6 +1092,7 @@ impl InputPipeline {
         let proxy = make("proxysink", &format!("{id}-tproxy"))?;
         let _ = canvas;
         let branch = [&queue, &rate, &scale, &caps, &proxy];
+        crate::observe::laps::mark("thumb end made");
         self.pipeline.add_many(branch).context("adding a thumbnail end")?;
         let joined = gst::Element::link_many([&queue, &rate, &scale, &caps, &proxy])
             .context("linking a thumbnail end")
@@ -1102,6 +1103,7 @@ impl InputPipeline {
                     el.sync_state_with_parent()
                         .with_context(|| format!("starting {}", el.name()))?;
                 }
+                crate::observe::laps::mark("thumb end started");
                 self.link_thumb_end(&queue)
             });
         if let Err(e) = joined {
