@@ -132,7 +132,7 @@ fn only_the_decode_time_is_cleared() {
     let pipeline = gst::Pipeline::new();
     let src = AppSrc::builder().caps(&gst::Caps::from_str(SMALL).unwrap()).format(gst::Format::Time).build();
     let sink = gstreamer_app::AppSink::builder().sync(false).build();
-    pipeline.add_many([src.upcast_ref(), sink.upcast_ref()]).unwrap();
+    pipeline.add_many([src.upcast_ref::<gst::Element>(), sink.upcast_ref()]).unwrap();
     src.link(&sink).unwrap();
     present_only(&src.static_pad("src").unwrap());
     pipeline.set_state(gst::State::Playing).unwrap();

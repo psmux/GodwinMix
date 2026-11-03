@@ -15,7 +15,7 @@ fn a_frame_pushed_again_is_stamped_again() {
     let o = Opaque::build("page-test", &canvas(), (64, 36)).unwrap();
     let pipeline = gst::Pipeline::new();
     let sink = AppSink::builder().sync(false).build();
-    pipeline.add_many([o.src.upcast_ref(), sink.upcast_ref()]).unwrap();
+    pipeline.add_many([o.src.upcast_ref::<gst::Element>(), sink.upcast_ref()]).unwrap();
     o.src.link(&sink).unwrap();
     pipeline.set_state(gst::State::Playing).unwrap();
     let frame = vec![16u8; 64 * 36 * 3 / 2];
