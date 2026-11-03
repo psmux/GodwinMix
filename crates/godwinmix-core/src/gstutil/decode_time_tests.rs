@@ -63,12 +63,16 @@ fn stamped(at: u64) -> gst::Buffer {
     buffer
 }
 
-/// A frame, then nothing for three seconds (a renderer starved of CPU, or a
-/// source held up behind a full queue), then frames again. Answers the
-/// queue's level once it has stopped moving: buffers, bytes, time, and
-/// whether it is full by its backstop.
+/// A frame, then nothing for six seconds (a renderer starved of CPU, or a
+/// source held up behind a full queue; the 0.3.25 set was 4 to 8 s behind),
+/// then frames again. `videorate` repeats the nearer input frame, so the
+/// first three seconds of repeats carry the first frame's decode time: 90
+/// of them, more than the backstop lets in. A gap under four seconds gives
+/// fewer than 60 before a newer decode time arrives and the level jumps.
+/// Answers the queue's level once it has stopped moving: buffers, bytes,
+/// time, and whether it is full by its backstop.
 fn gap_then_wait(rig: &Rig) -> (u32, u32, u64, bool) {
-    for at in [0, 3 * SECOND, 6 * SECOND] {
+    for at in [0, 6 * SECOND, 12 * SECOND] {
         rig.src.push_buffer(stamped(at)).unwrap();
     }
     let q = &rig.queue;
