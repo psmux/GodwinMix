@@ -252,7 +252,9 @@ the resident size on macOS) and compares it with this.
 | `guard_mb` | unset | megabytes past which the show raises a `memory` alarm, names its five fullest queues in the log and restarts the source whose queue holds the most. Unset is a quarter of the machine's memory or 4096, whichever is lower. 0 switches the guard off. Takes effect at the next check, without a restart |
 
 The guard restarts a source only when one of its queues holds at least
-64 MB, and then waits 30 seconds before it restarts anything else. The
+64 MB and filled by its byte or buffer limit rather than its time limit. It
+then waits 30 seconds before it restarts anything else, and five minutes
+before it restarts the same source again. The
 programme, the encoder and the outputs are never restarted by it: their
 queues are named in the log and left alone. The alarm clears when the show
 falls under nine tenths of the threshold. [Show health](show-health.md#memory)
