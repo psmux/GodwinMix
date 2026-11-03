@@ -34,6 +34,7 @@ mod boundary;
 mod boundary_tests;
 pub mod lifecycle;
 mod pull;
+mod seek;
 pub use boundary::guard_timeline;
 #[cfg(all(test, not(unix)))]
 mod pipe_tests;
@@ -1620,8 +1621,7 @@ impl InputPipeline {
     /// clip's last frame (`mixer::clip_act`), where that is exactly wrong. The
     /// caller resets the aligner first, as for `seek_ms`.
     pub fn seek_exact(&self, position: gst::ClockTime) -> Result<()> {
-        self.pipeline
-            .seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, position)
+        seek::clip(&self.pipeline, &self.video_proxy, gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, position)
             .with_context(|| format!("seeking {} to exactly {position}", self.id))?;
         self.health.rearm();
         self.ended.store(false, Ordering::Relaxed);
@@ -1633,12 +1633,13 @@ impl InputPipeline {
         // GStreamer can express: `ClockTime::from_mseconds` panics past it, and
         // a request carrying a silly number must not take the mixer down.
         let wanted = position_ms.min(self.duration_ms().unwrap_or(gst::ClockTime::MAX.mseconds()));
-        self.pipeline
-            .seek_simple(
-                gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::KEY_UNIT,
-                gst::ClockTime::from_mseconds(wanted),
-            )
-            .with_context(|| format!("seeking {} to {wanted}ms", self.id))?;
+        seek::clip(
+            &self.pipeline,
+            &self.video_proxy,
+            gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE | gst::SeekFlags::KEY_UNIT,
+            gst::ClockTime::from_mseconds(wanted),
+        )
+        .with_context(|| format!("seeking {} to {wanted}ms", self.id))?;
         // In this order: a clip that sat at its end for longer than the stall
         // timeout read stalled for the tick between the two otherwise.
         self.health.rearm();
