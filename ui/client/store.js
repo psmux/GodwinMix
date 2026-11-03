@@ -40,17 +40,20 @@ export function emptyState() {
 /**
  * What is on air, in one name, for a bar that has room for one.
  *
- * `program` is a source id when a single source is up. `scene` is the name that
+ * `program` is a source id when a single source is up, and also when a one
+ * item scene is, beside `scene`. `scene` is the name that
  * scene had at the moment it was taken, which the core never revises, so a
  * rename leaves it reading the old one; `sceneName` is what the scene document
  * calls it now. Null when nothing is on air, so each caller says black in its
  * own words.
  */
 export function programLabel(state) {
+  // A one item scene names its source in `program` as well. The scene is what
+  // a person took, so it wins, as it does in the core's on air record.
+  if (state.scene) return state.sceneName || state.scene;
   const source = state.program ? (state.sources || []).find((s) => s.id === state.program) : null;
   if (source) return source.name;
-  if (state.program) return state.program;
-  return state.scene ? state.sceneName || state.scene : null;
+  return state.program || null;
 }
 
 export class Store {
