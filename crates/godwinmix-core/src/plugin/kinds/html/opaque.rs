@@ -127,3 +127,7 @@ impl Opaque {
         let _ = self.src.push_buffer(buffer);
     }
 }
+
+#[cfg(test)]
+#[path = "opaque_tests.rs"]
+mod tests;
