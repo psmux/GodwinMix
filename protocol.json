@@ -3656,7 +3656,7 @@
           ]
         },
         "preparing": {
-          "description": "Cutouts whose model is opening or has not answered a frame yet. Each\ndraws the camera whole until it has. Preview's copy of a scene counts\nas well as the programme's.",
+          "description": "Cutouts whose model is opening or has not answered a frame yet. Each\ndraws nothing of the camera until it has. Preview's copy of a scene counts\nas well as the programme's.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -22175,7 +22175,7 @@
       },
       "scope": "read",
       "since": "1",
-      "summary": "Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out."
+      "summary": "Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out."
     },
     {
       "destructive": false,
