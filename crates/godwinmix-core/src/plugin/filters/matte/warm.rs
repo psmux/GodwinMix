@@ -41,7 +41,7 @@ pub(super) fn put_back(open: Open) {
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Readiness {
     /// Cutouts whose model is still opening or has not answered a frame yet.
-    /// Each draws the camera whole until it has.
+    /// Each draws nothing of the camera until it has.
     pub preparing: usize,
     /// Cutouts drawing a mask.
     pub running: usize,

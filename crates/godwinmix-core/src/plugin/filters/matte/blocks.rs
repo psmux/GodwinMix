@@ -33,9 +33,12 @@ pub fn alpha(
     out: &mut Vec<u8>,
 ) {
     let (bw, bh) = (r.w / 2, r.h / 2);
-    out.resize(bw * bh, 255);
+    out.resize(bw * bh, 0);
+    // No mask yet draws nothing: a camera taken to air before its model
+    // answers (the first take after a restart) showed the whole room over
+    // the set for 15 s.
     if mw == 0 || mh == 0 || mask.len() < mw * mh {
-        out.fill(255);
+        out.fill(0);
         return;
     }
     let cols = axis(bw, r.x, frame.0, mw);

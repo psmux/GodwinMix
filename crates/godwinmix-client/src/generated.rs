@@ -1675,7 +1675,7 @@ pub struct CutoutReadiness {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// Cutouts whose model is opening or has not answered a frame yet. Each
-    /// draws the camera whole until it has. Preview's copy of a scene counts
+    /// draws nothing of the camera until it has. Preview's copy of a scene counts
     /// as well as the programme's.
     pub preparing: i64,
     /// Cutouts cutting the person out now.

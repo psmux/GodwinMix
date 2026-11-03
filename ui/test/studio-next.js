@@ -121,7 +121,7 @@ export async function studioNextTests(test, eq, ok) {
     eq(sourceTrouble({ sources: [{ id: 'clip', state: 'live', ended: true, has_video: true }] }, 'clip'), null);
   });
 
-  // A cutout whose model is still opening draws the camera whole, which
+  // A cutout whose model is still opening draws nothing of the camera, which
   // looked as if nothing had happened for seven seconds.
   const ready = await import('../shell/cutout-ready.js');
   const { CUTOUT_PREPARING } = await import('../panels/multiview/studio-slots.js');

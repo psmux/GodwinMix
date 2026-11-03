@@ -2,7 +2,7 @@
 // source in the previewed scene that has no picture yet gets its name and
 // its state on its own box, and a preview with nothing in it says what to do.
 // A cutout whose model is still opening says so on its box too, because the
-// camera is drawn whole until it is ready and looks as if nothing happened.
+// person is not drawn until it is ready and looks missing.
 //
 // Plain elements over the canvas, placed in percentages of the scene's own
 // canvas, so they stay put whatever size the pane is drawn at.
@@ -31,7 +31,7 @@ function label(box, title, state) {
 
 const WHOLE = { left: "0", top: "0", width: "100%", height: "100%" };
 
-export const CUTOUT_PREPARING = "preparing the cutout, shown whole until it is ready";
+export const CUTOUT_PREPARING = "preparing the cutout, the person appears when it is ready";
 
 /**
  * Ask whether the cutouts are ready when Preview starts holding a scene with
