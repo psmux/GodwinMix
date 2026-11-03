@@ -1,12 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.3.26 (2026-11-03)
 
 A show with an HTML set behind a cutout no longer climbs to its memory guard and takes healthy sources off air.
 
 * Queues on a source's path now hold what their time limit says. A live source stamps each frame with a decode time as well as a presentation time, and when it fell behind, the frame rate converter repeated its last frame to fill the gap with that one decode time on every copy. A queue measures itself by decode time when there is one, so it read 0 ms however much it held and filled to its byte limit, two seconds of 1080p where it was sized for one. On 0.3.25 four queues behind the HTML newsroom set held 186 MB each at a level of 0 ms. Raw video now leaves the converter with no decode time, and the queues fill by time.
 * The memory guard restarts only a source whose queue filled by its byte or buffer limit, and leaves a source it restarted alone for five minutes. When every full queue is full to its time limit the programme is behind its sources; the guard says so in the log (`behind=true`) and restarts nothing. On 0.3.25 it restarted the set and the guest in turn every half minute, each restart hung behind its own full queue, and colour bars and the clips stalled with them. See [show health](docs/reference/show-health.md#memory).
 * A clip with no sound set to `at_end = "repeat"` loops by seeking again. The pipeline asks every one of its outputs to take a seek, and a clip with no audio track has an audio output with nothing behind it, which said no while the picture had already moved. The mixer took that as a failure and rebuilt the clip on every loop, with or without faststart. Each rebuild started the clip's timeline over, and its slot queue on the programme side read 0 ms and filled to 186 MB until it caught up. A refused seek is now sent through the picture's own output.
+
+The desk stays right across a mixer restart.
+
+* The scene armed in Preview, and the After Take choice, are kept when the mixer restarts (`godwinmix.armed.json`) and armed again at start. An open page is told what is armed as soon as it reconnects, so it no longer names a scene that is not there over a grey Preview.
+* A page left open through a restart follows the new mixer without a reload. It kept the old mixer's update numbers and dropped every update after the restart, and a subscribe the mixer did not answer was never sent again.
+* With nothing armed, Preview shows the programme itself, its looks included. It used to draw the raw sources, so a black and white scene on air showed in colour in Preview.
+* A one item scene on air is named by the scene on Programme and the top bar, not by its source. `program.get` gains `on_air`.
+* The transition panel shows the mixer's default transition until you pick one, and Take uses exactly what the panel shows. It said Fade while some takes used the film burn.
+* A cutout's model stays open once it has opened, so arming its scene again takes a fraction of a second. While a model opens, the cutout and its box in Preview say it is preparing. `filter.cutout` reports how many are still opening.
+* Settings says that After Take is the mixer's, for every page and a Stream Deck Take.
+* The guest invite and join page say in one line that the browser will warn about the mixer's own certificate, and how to go on. The guest page prefers a real camera over virtual ones such as DroidCam when the guest has not chosen.
+* A template path with backslashes that goes missing says to quote the path or use forward slashes. Git Bash drops unquoted backslashes before `gmx` sees them.
 
 ## 0.3.25 (2026-11-03)
 
