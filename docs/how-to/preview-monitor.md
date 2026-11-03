@@ -49,7 +49,9 @@ browser and opens the same way next time.
   and the ones imported from packs. The direction (Wipe, Slide, Push) or
   colour (Dip), the easing and the length from 0.25 s to 2 s are at the top of
   that list. Escape, Done or a press outside it closes it, and nothing in it
-  moves while it is closed.
+  moves while it is closed. Until you pick one in this browser it shows the
+  mixer's default, the one **Default** (or **For** a scene) set on a pack's
+  tile, and Take uses that one. With no default set it shows Fade, 0.5 s.
 * The three small buttons under that are quick picks: the three transitions
   this browser has taken with most, Fade, Wipe and Dip until it has taken
   with any. One press makes it the next take's.

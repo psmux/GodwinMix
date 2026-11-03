@@ -561,10 +561,23 @@ impl Connection {
             serde_json::to_value(snapshot).map_err(|_| ())?,
         ))
         .await?;
+        self.send_armed().await?;
         self.send_layout(&status.multiview).await?;
         self.send_tally().await?;
         self.send_presence().await?;
         self.flush().await
+    }
+
+    /// What is armed, said once after the snapshot. The status document has
+    /// no field for it, so a page that reconnected after a restart kept the
+    /// scene armed before it and drew an empty Preview under its name. Null
+    /// when nothing is armed, which is news to a page that thought otherwise.
+    async fn send_armed(&mut self) -> Result<(), ()> {
+        if !self.sub.as_ref().is_some_and(|s| s.wants("preview.changed")) {
+            return Ok(());
+        }
+        let scene = self.ctx.app.scenes.armed_name();
+        self.send(rpc::notification("event/preview.changed", json!({ "scene": scene, "seq": self.seq }))).await
     }
 
     /// Tell the client about the grid, when it wants the mosaic and neither the

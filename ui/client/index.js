@@ -287,6 +287,13 @@ export class Client {
     const same = JSON.stringify(spec) === JSON.stringify(this._subscribed);
     if (same) return;
     this._subscribed = spec;
+    // Sent again if refused or never answered with a snapshot, as by a core
+    // shutting down: the page kept a stale picture until reloaded.
+    const seen = this._snaps;
+    clearTimeout(this._snapTimer);
+    if (this.transport.name === "rpc") this._snapTimer = setTimeout(() => {
+      if (this._snaps === seen && this.store.state.connected) this.resubscribe();
+    }, 3000);
     try {
       await this.transport.subscribe(spec);
     } catch (e) {
@@ -306,16 +313,13 @@ export class Client {
     const s = this.store;
     switch (name) {
       case "snapshot":
+        this._snaps = (this._snaps | 0) + 1;
         s.snapshot(params.state, params.seq);
         if (params.state.multiview) this.sheet.setLayout(params.state.multiview);
         break;
       case "flush":
-        // The number moves on without marking the state changed. The core
-        // ends every batch with a flush, a batch of meters alone included,
-        // and meters come about forty times a second: marking it changed
-        // made every panel render again each time, rewriting the same text
-        // into the DOM, and the page restyled and repainted itself whole
-        // while the monitors waited. Only a change renders now.
+        // Not a change in itself: meters end in a flush forty times a second,
+        // and marking each one changed repainted every panel.
         s.state.seq = params.seq ?? s.state.seq;
         s.flush();
         break;

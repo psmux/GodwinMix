@@ -308,7 +308,7 @@ export class Inspector {
       }
       if (filter.type === "matte/filter") {
         const { cutoutEditor } = await import("./cutout.js");
-        list.appendChild(cutoutEditor({ filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
+        list.appendChild(cutoutEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
       }
     }
     if (!(record.filters || []).length) {

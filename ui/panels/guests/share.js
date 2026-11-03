@@ -4,6 +4,7 @@
 import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast } from "../../shell/toast.js";
+import { CERT_INVITE, ownCertificate } from "../../join/cert-note.js";
 
 export function openLink(answer, name) {
   const field = el("input.guests-link", { type: "text", readOnly: true, value: answer.link, "aria-label": "Invite link", onfocus: (e) => e.target.select() });
@@ -14,9 +15,10 @@ export function openLink(answer, name) {
     code,
     field,
     answer.note ? el("p.sm.guests-note", { role: "alert", text: answer.note }) : null,
+    ownCertificate(answer.link) ? el("p.sm.guests-cert", { text: CERT_INVITE }) : null,
     el("p.sm.dim", { text: "Anyone with the link can join as this guest until it runs out or you revoke it, so send it only to them." }),
   ]);
-  modal({ title: `Invite for ${name}`, body, footer: [copy] });
+  return modal({ title: `Invite for ${name}`, body, footer: [copy] });
 }
 
 async function copyLink(link) {

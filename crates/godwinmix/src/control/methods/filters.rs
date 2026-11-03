@@ -70,6 +70,44 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .result(schema_of::<FilterListing>),
     );
+
+    reg.register(
+        MethodDef::new(
+            "filter.cutout",
+            Scope::Read,
+            "Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out.",
+            handler(|_call: Call, _| async move { body(cutout_readiness()) }),
+        )
+        .result(schema_of::<CutoutReadiness>),
+    );
+}
+
+/// `filter.cutout`. A page asks while a cutout it can see is new, so it can
+/// say the cutout is on its way rather than show a camera that looks as if
+/// nothing happened.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CutoutReadiness {
+    /// Cutouts whose model is opening or has not answered a frame yet. Each
+    /// draws the camera whole until it has. Preview's copy of a scene counts
+    /// as well as the programme's.
+    pub preparing: usize,
+    /// Cutouts cutting the person out now.
+    pub running: usize,
+    /// Why the last cutout that failed could not start, until one starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[cfg(feature = "matte")]
+fn cutout_readiness() -> CutoutReadiness {
+    let now = godwinmix_core::plugin::filters::matte::readiness();
+    CutoutReadiness { preparing: now.preparing, running: now.running, error: now.error }
+}
+
+/// A build without the cutout has none, so none is preparing.
+#[cfg(not(feature = "matte"))]
+fn cutout_readiness() -> CutoutReadiness {
+    CutoutReadiness { preparing: 0, running: 0, error: None }
 }
 
 /// `filter.add`.

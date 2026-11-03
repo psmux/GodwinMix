@@ -1028,6 +1028,16 @@ class CueSetRequest(TypedDict, total=False):
     # Clear every other mark first, so only this source is heard: solo.
     source: str
 
+class CutoutReadiness(TypedDict, total=False):
+    """`filter.cutout`. A page asks while a cutout it can see is new, so it can say the cutout is on its way rather than show a camera that looks as if nothing happened."""
+
+    error: Optional[str]
+    # Why the last cutout that failed could not start, until one starts.
+    preparing: int
+    # Cutouts whose model is opening or has not answered a frame yet. Each draws the camera whole until it has. Preview's copy of a scene counts as well as the programme's.
+    running: int
+    # Cutouts cutting the person out now.
+
 class Destination(TypedDict, total=False):
     """One destination as a client sees it. The key never appears: `has_key` says whether there is one."""
 
@@ -3702,6 +3712,8 @@ class ProgramState(TypedDict, total=False):
     # Present while an ad break is armed or on air.
     missing: List[str]
     # Sources the scene on air draws that this mixer does not have. The take went ahead without them and they draw nothing, so the slate or whatever sits under them shows through, until they are added back. Left out when every source is here.
+    on_air: Optional[str]
+    # What is on air, in one name: the scene when a scene is, whatever it holds, else the source, and null for the slate. `program` is null under a scene of more than one item, so read this to say what is up.
     preview: Optional[str]
     # The scene armed for the next `program.take` with no argument.
     previous: Optional[str]
@@ -5711,6 +5723,7 @@ METHODS = (
     {"name": "feed.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/set"), "summary": 'Change a feed\'s address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one.'},
     {"name": "feed.test", "scope": "operate", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/feed/test"), "summary": 'Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.'},
     {"name": "filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters"), "summary": 'Hang a filter on one source or on the programme, live.'},
+    {"name": "filter.cutout", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/cutout"), "summary": 'Whether the cutouts are ready: how many are still opening their model, and so draw the camera whole, and how many cut the person out.'},
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
@@ -6824,6 +6837,13 @@ class GeneratedMethods:
         if source is not None:
             params["source"] = source
         return await self._call("filter.add", params)
+
+    async def filter_cutout(
+        self,
+    ) -> CutoutReadiness:
+        """Whether the cutouts are ready: how many are still opening their model, and so draw the camera whole, and how many cut the person out."""
+        params: Dict[str, Any] = {}
+        return await self._call("filter.cutout", params)
 
     async def filter_list(
         self,

@@ -12,6 +12,14 @@ import { settings, setSetting, onSettingsChanged, GALLERY_MODES, proposeGalleryM
 
 // ---------------------------------------------------------------- the modal
 
+// After Take is the one choice here the mixer keeps: after-take.js sends it
+// with `scene.preview.set`, and the last page to choose decides for every
+// client. The intro and the hint say so.
+export const SETTINGS_INTRO =
+  "This page: kept in this browser, except After Take, which the mixer keeps for every page. The mixer's own settings (picture, stream, folders, token) are in Mixer settings.";
+export const AFTER_TAKE_HINT =
+  "Mixer wide. The mixer keeps this choice, so it applies to every page and to a Take from a Stream Deck.";
+
 export function openSettingsDialog(client, opts = {}) {
   const s = settings();
   const simple = el("div.form");
@@ -56,7 +64,8 @@ export function openSettingsDialog(client, opts = {}) {
   simple.appendChild(
     field(
       "After Take, Preview shows",
-      select([["same", "The same scene"], ["swap", "The scene that was on air"]], s.afterTake, (v) => setSetting("afterTake", v))
+      select([["same", "The same scene"], ["swap", "The scene that was on air"]], s.afterTake, (v) => setSetting("afterTake", v)),
+      AFTER_TAKE_HINT
     )
   );
 
@@ -159,9 +168,10 @@ export function openSettingsDialog(client, opts = {}) {
   body.appendChild(shown);
 
   // The split a person needs before anything else: what is here changes this
-  // page in this browser, and the mixer's own settings are one button away.
+  // page in this browser, After Take aside, and the mixer's own settings are
+  // one button away.
   const mixer = el("div.row", { style: { paddingBottom: "var(--gap)", marginBottom: "var(--gap)", borderBottom: "var(--border) solid var(--line)" } }, [
-    el("span.sm.dim.grow", { text: "This page: kept in this browser, and nothing here changes the mixer. The mixer's own settings (picture, stream, folders, token) are in Mixer settings." }),
+    el("span.sm.dim.grow", { text: SETTINGS_INTRO }),
     el("button.btn", {
       text: "Mixer settings",
       onclick: async () => {

@@ -36,7 +36,13 @@ Cut sends the same request with `transition: "cut"`. Take sends
 `direction` for a wipe, slide or push, `colour` for a dip, and `easing` when it
 is not the default. The choice is kept in this browser under
 `gmx.studio.take`, and a count of takes per transition under
-`gmx.studio.used`, which orders the three quick picks. The list is the built
+`gmx.studio.used`, which orders the three quick picks. While
+`gmx.studio.take` is empty the control shows what `fx.list` answers in
+`assigned` (the armed scene's entry, then `default`), and Take sends that name
+as `{type, duration_ms}` at the length a take naming none would run it: an fx
+item's or a collection transition's own, otherwise `default_duration_ms` from
+`program.transitions`, with no `params`. With nothing assigned it is
+`{type: "fade", duration_ms: 500}`. The list is the built
 in transitions plus what `program.transitions` adds, asked once, and the fx
 library's transitions from `fx.list`, asked each time the picker opens.
 **Default** and **For** a scene on an fx tile call `fx.assign`. An effect

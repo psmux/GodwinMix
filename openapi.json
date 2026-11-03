@@ -3651,6 +3651,35 @@
         ],
         "type": "object"
       },
+      "CutoutReadiness": {
+        "description": "`filter.cutout`. A page asks while a cutout it can see is new, so it can\nsay the cutout is on its way rather than show a camera that looks as if\nnothing happened.",
+        "properties": {
+          "error": {
+            "description": "Why the last cutout that failed could not start, until one starts.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preparing": {
+            "description": "Cutouts whose model is opening or has not answered a frame yet. Each\ndraws the camera whole until it has. Preview's copy of a scene counts\nas well as the programme's.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "description": "Cutouts cutting the person out now.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "preparing",
+          "running"
+        ],
+        "type": "object"
+      },
       "Deinterlace": {
         "description": "Whether an interlaced picture is made progressive.",
         "oneOf": [
@@ -13160,6 +13189,14 @@
             },
             "type": "array"
           },
+          "on_air": {
+            "default": null,
+            "description": "What is on air, in one name: the scene when a scene is, whatever it\nholds, else the source, and null for the slate. `program` is null\nunder a scene of more than one item, so read this to say what is up.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "preview": {
             "description": "The scene armed for the next `program.take` with no argument.",
             "type": [
@@ -20664,6 +20701,57 @@
         "x-destructive": true,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/filters/{id}/cutout": {
+      "post": {
+        "description": "JSON-RPC method `filter.cutout`. Needs the `read` scope.",
+        "operationId": "filter.cutout",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutoutReadiness"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Whether the cutouts are ready: how many are still opening their model,              and so draw the camera whole, and how many cut the person out.",
+        "tags": [
+          "filter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/filters/{id}/set": {

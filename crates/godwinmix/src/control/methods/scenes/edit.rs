@@ -220,7 +220,17 @@ fn preview(reg: &mut Registry<Call>) {
             handler(|call: Call, params| async move {
                 let req: PreviewRequest = call.params(&params)?;
                 if let Some(mode) = req.after_take {
+                    let changed = server(&call).after_take() != mode;
                     server(&call).set_after_take(mode);
+                    // Said as an arm of what is already armed, so the record
+                    // a restart reads (armed.rs) hears the new mode. Every
+                    // page sends its choice on connect; a mode that did not
+                    // change raises nothing.
+                    if changed {
+                        call.app.mixer.emit(godwinmix_protocol::types::Event::PreviewChanged {
+                            scene: server(&call).armed_name(),
+                        });
+                    }
                     if req.scene.is_none() && req.draft.is_none() {
                         return body(json!({ "preview": server(&call).armed(), "after_take": mode }));
                     }

@@ -22,7 +22,9 @@ The mixer's https certificate is its own, signed by an authority the mixer
 made itself, so a browser that has never met it warns before it opens the
 page. Edge and Chrome say "Your connection isn't private", Safari says "This
 Connection Is Not Private", Firefox says "Warning: Potential Security Risk
-Ahead". Tell the guest to expect it. Which way round it depends on who they
+Ahead". Tell the guest to expect it. When the link is on an IP address or a
+`.local` name, the invite dialog and the guest's own page each say so in one
+line: choose Advanced, then continue. Which way round it depends on who they
 are:
 
 * **A guest on your own network, once.** They press **Advanced** and then
@@ -86,8 +88,10 @@ microphone, but headphones mean there is none to cancel.
 Until they pick one, the page opens a real camera rather than a program that
 poses as one. A laptop with DroidCam, OBS or another virtual camera installed
 often lists that first, and a browser asked for any camera takes the first.
-The guest can still pick the virtual one from the list, and the page keeps
-that choice next time.
+If the browser's own choice will not open, because another program has it,
+the page tries the other real cameras in turn. The list puts the real
+cameras first. The guest can still pick the virtual one from it, and the
+page keeps that choice next time.
 
 If their connection drops, the page sends again by itself, and the show comes
 back when it does. A reload or a new tab takes over from the old one.

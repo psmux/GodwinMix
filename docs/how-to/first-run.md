@@ -24,6 +24,10 @@ scene, a source on its own, or black. It keeps that in
 `godwinmix.onair.json` beside the config. With nothing kept yet, it starts on
 the first scene that has something in it, and on black when none has.
 
+It puts back what was armed in Preview too, and the After Take setting, from
+`godwinmix.armed.json` beside it. With nothing kept there yet, Preview holds
+the scene put back on air, as it would after a take.
+
 Open that address. The page asks what you are streaming, with a tile for a
 church service, a classroom, a streamer, starting empty, and importing from
 OBS. Pick one.
