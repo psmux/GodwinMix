@@ -57,6 +57,72 @@ export async function transitionTests(test, eq, ok) {
     eq(q.describe(), 'light-leak 1.5 s');
     eq(q.request(500), { type: 'light-leak', duration_ms: 500, params: { easing: 'linear' } });
   });
+
+  // The core's default (fx.assign, kept in fx-assign.json) is what a page
+  // nobody picked on shows and what its Take names.
+  try { for (const k of KEYS) localStorage.removeItem(k); } catch { /* private window */ }
+  const { follow, assignedFor } = await import('../panels/multiview/transition-default.js');
+  const CATALOGUE = [
+    { name: 'film-burn', origin: 'fx', type: 'shader', duration_ms: 1500 },
+    { name: 'light-leak', origin: 'fx', type: 'overlay', duration_ms: 1200 },
+  ];
+  const ASSIGNED = { default: 'film-burn', scenes: { Interview: 'light-leak' } };
+  test('a scene\'s own assignment wins over the default, as the core takes it', () => {
+    eq(assignedFor(ASSIGNED, 'Interview'), 'light-leak');
+    eq(assignedFor(ASSIGNED, 'Scene 4'), 'film-burn');
+    eq(assignedFor({}, 'Scene 4'), null);
+  });
+  const d = new TransitionState();
+  d.learn(CATALOGUE);
+  follow(d, ASSIGNED, 'Scene 4');
+  test('nothing picked here: the core\'s default is shown and Take names it at its own length', () => {
+    ok(!d.picked, 'a fresh page has picked nothing');
+    eq(d.describe(), 'film-burn 1.5 s');
+    eq(d.request(d.ms()), { type: 'film-burn', duration_ms: 1500 });
+  });
+  follow(d, { default: 'wipe' }, null);
+  test('a built in default runs at the protocol\'s default length with no params', () => {
+    eq(d.describe(), 'Wipe left 0.3 s');
+    eq(d.request(d.ms()), { type: 'wipe', duration_ms: 300 });
+  });
+  follow(d, {}, null);
+  test('with nothing assigned a fresh page still takes with a plain fade', () => {
+    eq(d.request(d.ms()), { type: 'fade', duration_ms: 500 });
+  });
+  d.set({ type: 'push' });
+  follow(d, ASSIGNED, 'Scene 4');
+  test('once the person picks one, the page keeps it over the core\'s default', () => {
+    ok(d.picked);
+    eq(d.request(d.ms()), { type: 'push', duration_ms: 500, params: { direction: 'left' } });
+  });
+
+  try { for (const k of KEYS) localStorage.removeItem(k); } catch { /* private window */ }
+  const { picker } = await import('../panels/multiview/transition-picker.js');
+  let armed = 'Scene 4';
+  const stub = {
+    call: async (method) => method === 'program.transitions'
+      ? { transitions: CATALOGUE, default_duration_ms: 300 }
+      : method === 'fx.list' ? { fx: [], assigned: ASSIGNED } : {},
+    on: () => () => {},
+  };
+  const tp = picker({ client: stub, armedScene: () => armed });
+  await tp.load(stub);
+  test('the control beside Take shows the core\'s default and Take sends what it shows', () => {
+    ok(tp.el.textContent.includes('film-burn') && tp.el.textContent.includes('1.5 s'), tp.el.textContent);
+    ok(!tp.el.textContent.includes('Fade'), 'no fade is shown while film-burn is what a take runs');
+    eq(tp.request(tp.ms()), { type: 'film-burn', duration_ms: 1500 });
+  });
+  armed = 'Interview';
+  test('the armed scene\'s own transition is the one Take names', () => {
+    eq(tp.request(tp.ms()), { type: 'light-leak', duration_ms: 1200 });
+    eq(tp.describe(), 'light-leak 1.2 s');
+  });
+  tp.choose('fade');
+  test('a pick on this page is shown and sent from then on', () => {
+    ok(tp.el.textContent.includes('Fade'), tp.el.textContent);
+    eq(tp.request(tp.ms()), { type: 'fade', duration_ms: 500 });
+  });
+  tp.close();
   try { for (const k of KEYS) { if (before[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, before[k]); } } catch { /* ignore */ }
 
   const { takeBarTests } = await import('./take-bar.js');

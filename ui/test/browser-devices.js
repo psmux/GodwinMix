@@ -5,10 +5,12 @@
 
 import { orderCodecs, WhipError } from "../join/whip.js";
 import { Session, backoff, isFinal } from "../join/session.js";
-import { audioConstraints, videoConstraints, remembered, remember, secureProblem, mediaErrorText, isVirtualCamera, realCameraFor } from "../join/devices.js";
+import { audioConstraints, videoConstraints, remembered, remember, secureProblem, mediaErrorText, isVirtualCamera, realCameraFor, rankCameras, camerasToTry } from "../join/devices.js";
+import { CERT_GUEST, CERT_INVITE, ownCertificate } from "../join/cert-note.js";
+import { openLink } from "../panels/guests/share.js";
 import { levelOf } from "../join/meter.js";
 import { summarise, statsText } from "../join/stats.js";
-import { parseLink, guestUrls } from "../join/page.js";
+import { parseLink, guestUrls, certLine } from "../join/page.js";
 import { fillSelect, paintState, buildForm } from "../join/form.js";
 import { SHAPES, shapeOfCanvas, startShape, deviceTurn, screenTurn, correction, placement, holdHint } from "../join/shape.js";
 import { browserChannelTests } from "./browser-channel.js";
@@ -69,6 +71,54 @@ export async function browserDeviceTests(test, eq, ok) {
     eq(realCameraFor("w", cams), "", "a real camera stays");
     eq(realCameraFor("d", cams.slice(0, 2)), "", "with nothing real to go to, the virtual one stays");
     eq(realCameraFor("", cams), "", "no labels yet: nothing to go on");
+  });
+
+  test("real cameras rank ahead of the programs posing as one, in the browser's order", () => {
+    for (const label of ["DroidCam Source 3", "OBS Virtual Camera", "ManyCam Virtual Webcam", "Snap Camera", "XSplit VCam", "NVIDIA Broadcast", "Some Virtual Device"]) {
+      ok(isVirtualCamera(label), label);
+    }
+    const cams = [
+      { id: "d", label: "DroidCam Source 3", named: true },
+      { id: "u", label: "USB2.0 FHD UVC WebCam (3277:0055)", named: true },
+      { id: "n", label: "NVIDIA Broadcast", named: true },
+      { id: "i", label: "Integrated Webcam", named: true },
+    ];
+    eq(rankCameras(cams).map((c) => c.id), ["u", "i", "d", "n"]);
+    eq(rankCameras([]), []);
+    eq(realCameraFor("n", cams), "u", "the best real one, not the next in the list");
+    eq(camerasToTry(cams).map((c) => c.id), ["u", "i"], "when the browser's own choice will not open, only real ones are tried");
+    eq(camerasToTry([{ id: "a", label: "Camera 1", named: false }]), [], "without labels there is no telling which is real");
+  });
+
+  test("the invite and the guest page each say how to get past the certificate warning, in one line", () => {
+    ok(ownCertificate("https://192.168.50.173:18801/join/#guest=qa"), "an IP address");
+    ok(ownCertificate("https://studio-pc.local:18801/join/"), "a .local name");
+    ok(ownCertificate("https://[fe80::1]:18801/join/"), "an IPv6 address");
+    ok(!ownCertificate("https://studio.example.com/join/"), "a real name has a real certificate");
+    ok(!ownCertificate("http://localhost:8080/join/"), "plain http has no certificate");
+    ok(!ownCertificate("not a link"));
+    for (const line of [CERT_GUEST, CERT_INVITE]) {
+      ok(!/\n/.test(line) && /not private/.test(line) && /Advanced, then continue/.test(line), line);
+    }
+    const m = openLink({ link: "https://192.168.50.173:18801/join/#guest=qa&key=k", qr_svg: "" }, "QA Guest");
+    try {
+      const shown = m.el.querySelector(".guests-cert");
+      ok(shown && shown.textContent === CERT_INVITE, "the invite dialog has the line");
+    } finally {
+      m.close();
+    }
+    const named = openLink({ link: "https://studio.example.com/join/#guest=qa&key=k", qr_svg: "" }, "QA Guest");
+    try {
+      ok(!named.el.querySelector(".guests-cert"), "no line for an address with a real certificate");
+    } finally {
+      named.close();
+    }
+    const box = document.createElement("div");
+    const h = document.createElement("h1");
+    box.append(h);
+    const line = certLine(h, "https://10.0.0.5:18801/join/#guest=qa");
+    ok(line && h.nextSibling === line && line.textContent === CERT_GUEST, "the guest page has it under the heading");
+    eq(certLine(h, "https://studio.example.com/join/"), null);
   });
 
   test("reconnecting waits 1, 2, 4, 8 seconds and then 15 each time", () => {
