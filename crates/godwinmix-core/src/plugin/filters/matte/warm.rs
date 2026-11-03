@@ -10,7 +10,7 @@
 //! another. The cost is one idle session's memory after the last cutout goes.
 //!
 //! The counts are what `filter.cutout` reports, so a page can say "preparing
-//! the cutout" rather than show the camera whole and leave a person guessing.
+//! the cutout" rather than show an empty set and leave a person guessing.
 
 use super::inference::Open;
 use crate::plugin::filters::matte::params::{Device, Quality};
