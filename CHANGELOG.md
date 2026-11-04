@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.29 (2026-11-04)
 
 Calls keep getting answers in the seconds after a mixer restart.
 
@@ -9,6 +9,9 @@ Calls keep getting answers in the seconds after a mixer restart.
 * A line logged on the mixer's command loop goes to the terminal through a queue of its own. Under the desktop app the terminal is a pipe the app reads, and the app reads it late while its window opens after a restart. In those seconds supervisor ticks held the loop for 0.5 to 3.4 seconds, in steps whose only slow part was writing a log line. With the queue, no tick held it for 100 ms. If the queue fills, the terminal copy is dropped and the count is reported in its place. `godwinmix.log` still gets every line.
 * A command that holds the loop for 100 ms or more writes one log line naming each step it took and the milliseconds spent on it. See [Debug a show](docs/how-to/debug-a-show.md#when-calls-answer-mixer-is-busy).
 * A scene item whose filter will not go on stays hidden until it does. It went on air without its filter, and the failure was remembered, so a cutout that could not be made in the second after a restart showed the whole room until the item changed. The mixer now tries again on every apply and logs the reason once. A cutout with no picture format yet draws nothing either.
+* The desk asks again whether the cutout is ready each time it reconnects to the mixer, for up to ten seconds. A mixer restart opens every cutout model again, and the Composer never showed its Preparing line for them.
+* Every `fx.assign` is announced as `event/fx.assigned`, and the transition picker follows it. A page that was already open showed a default or scene transition another desk assigned only after a reload.
+* The guest join page names an icon. The guest's browser asked for `/favicon.ico` when the page loaded and again when it went live, and got a 404 both times.
 
 ## 0.3.28 (2026-11-04)
 
