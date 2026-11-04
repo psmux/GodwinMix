@@ -5295,6 +5295,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/prompter.changed` |  |  | The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed. |
 | `event/prompter.script.changed` |  |  | A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter. |
 | `event/guest.changed` |  |  | An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key. |
+| `event/fx.assigned` |  |  | fx.assign changed the transition a take uses when it names none, for one scene or for every take. Carries every assignment, as fx.list answers them in assigned, so an open page follows a choice made on another. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces

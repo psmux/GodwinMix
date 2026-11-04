@@ -20030,6 +20030,22 @@
     {
       "ext": null,
       "legacy": null,
+      "name": "event/fx.assigned",
+      "pattern": "fx.assigned",
+      "payload": {
+        "properties": {
+          "assigned": {
+            "$ref": "#/$defs/FxAssignments"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "fx.assign changed the transition a take uses when it names none, for one scene or for every take. Carries every assignment, as fx.list answers them in assigned, so an open page follows a choice made on another."
+    },
+    {
+      "ext": null,
+      "legacy": null,
       "name": "event/health",
       "pattern": "health",
       "payload": {
