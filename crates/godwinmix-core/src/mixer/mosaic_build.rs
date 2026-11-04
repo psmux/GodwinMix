@@ -43,6 +43,12 @@ pub(super) struct Mosaic {
     /// The shape being built, while a worker builds it. `Some` with no shape
     /// is a teardown on its own.
     out: Option<Option<MultiviewShape>>,
+    /// The demand generation when the job went out. Unchanged at its return
+    /// means nobody has come or gone since, and the build is what was asked.
+    asked_at: u64,
+    /// Tests that drive a mixer with no loop run the job right here.
+    #[cfg(test)]
+    pub(super) inline: bool,
 }
 
 /// A source's tile, as planned on the loop.
@@ -111,21 +117,31 @@ impl Mixer {
 
     /// Take the mosaic down off the loop, and build `shape` after it when
     /// asked. Does nothing while another job is out: its return looks again.
-    pub(super) fn send_mosaic_job(&mut self, shape: Option<MultiviewShape>) {
+    pub(super) fn send_mosaic_job(&mut self, shape: Option<MultiviewShape>) -> Result<()> {
         let here = self.multiview.as_ref().map(|mv| mv.shape());
-        if !self.mosaic_out() && (here != shape || shape.is_none()) {
-            let old = self.retire_mosaic();
-            self.mosaic_job(old, shape);
+        if self.mosaic_out() || (here == shape && shape.is_some()) {
+            return Ok(());
         }
+        let old = self.retire_mosaic();
+        self.mosaic_job(old, shape)
     }
 
     /// One job: `old` down, then `shape` up, in that order on one worker.
-    fn mosaic_job(&mut self, old: Option<Retired>, shape: Option<MultiviewShape>) {
+    fn mosaic_job(&mut self, old: Option<Retired>, shape: Option<MultiviewShape>) -> Result<()> {
         let plan = shape.map(|s| self.mosaic_plan(s));
         if old.is_none() && plan.is_none() {
-            return;
+            return Ok(());
         }
         self.mosaic.out = Some(shape);
+        self.mosaic.asked_at = self.mv.generation();
+        #[cfg(test)]
+        if self.mosaic.inline {
+            if let Some(old) = old {
+                old.tear_down();
+            }
+            let back = plan.map(|p| build(p).map_err(|e| format!("{e:#}")));
+            return self.mosaic_built(back);
+        }
         debug!(?shape, "the mosaic goes to a worker");
         let handle = self.handle.clone();
         self.rt.spawn_blocking(move || {
@@ -136,6 +152,17 @@ impl Mixer {
             // A refused send drops the mosaic, which stops it.
             let _ = handle.send(Command::MosaicBuilt(Box::new(back)));
         });
+        Ok(())
+    }
+
+    /// `multiview_demand` with the job done before it returns, for a test
+    /// that drives a mixer with no loop.
+    #[cfg(test)]
+    pub(crate) fn multiview_demand_inline(&mut self, at: crate::multiview::DemandAt) -> Result<()> {
+        self.mosaic.inline = true;
+        let done = self.multiview_demand(at);
+        self.mosaic.inline = false;
+        done
     }
 
     /// Unhook the running mosaic from the programme and hand it back to be
@@ -184,26 +211,33 @@ impl Mixer {
         self.mosaic.out = None;
         let wanted = self.mv.wanted();
         match back {
-            None => self.send_mosaic_job(wanted),
+            None => self.send_mosaic_job(wanted)?,
             Some(Err(e)) => {
                 // Not asked again: a build that failed once fails the same
                 // way, and the next subscriber's demand tries it afresh.
                 self.mv.mark_built(None);
                 warn!(error = %e, "the multiview could not be built");
             }
-            Some(Ok(built)) if wanted == Some(built.mv.shape()) => return self.keep_mosaic(built),
+            Some(Ok(built)) if self.still_asked(&built) => return self.keep_mosaic(built),
             Some(Ok(built)) => {
                 // Built for nobody, or at a shape nobody wants now: down off
                 // the loop, ahead of the build that is wanted, if any.
                 debug!(?wanted, "a mosaic built for a demand that has moved on goes down off the loop");
                 self.mv.mark_built(None);
                 let inputs = self.thumbed(built.tiles.into_iter().map(|(i, _)| i).collect());
-                self.mosaic_job(Some(Retired { mv: built.mv, inputs }), wanted);
+                self.mosaic_job(Some(Retired { mv: built.mv, inputs }), wanted)?;
             }
         }
         self.preview_demand_now()?;
         self.broadcast_status();
         Ok(())
+    }
+
+    /// True when the mosaic back from the worker is still the one to have:
+    /// nobody has come or gone since it was asked for, or what is wanted now
+    /// is this shape anyway.
+    fn still_asked(&self, built: &Built) -> bool {
+        self.mv.generation() == self.mosaic.asked_at || self.mv.wanted() == Some(built.mv.shape())
     }
 
     /// Put a built mosaic in place: tiles for what changed while it was
