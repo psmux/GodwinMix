@@ -1,16 +1,22 @@
 // Whether the cutouts are ready yet. A cutout's model takes seconds to open
 // and the person is not drawn until then, so this asks the core
 // (`filter.cutout`) while a cutout is new here, and stops once none prepares.
+// A mixer restart opens every model again, so a page that has watched asks
+// again each time its socket opens.
 
 const EVERY_MS = 600;
 // A new cutout may not be in the pipeline yet; trust "none" only after this.
 const AT_LEAST_MS = 2500;
 // Never asked for longer than this.
 const AT_MOST_MS = 60000;
+// After a reconnect the restarted mixer may still be building its scenes.
+const AFTER_RECONNECT_MS = 10000;
 
 let readiness = null;
 let timer = null;
 let since = 0;
+let atLeast = AT_LEAST_MS;
+const followed = new WeakSet();
 const listeners = new Set();
 
 /** The last answer: `{preparing, running, error}`, or null before any. */
@@ -40,12 +46,25 @@ export function hasCutout(record) {
  */
 export function watchCutouts(client) {
   if (!client || !client.call) return;
+  follow(client);
   since = Date.now();
+  atLeast = AT_LEAST_MS;
   if (timer) return;
   // Said at once, so the words appear with the click rather than an answer later.
   readiness = Object.assign({ running: 0, error: null }, readiness, { preparing: Math.max(1, (readiness && readiness.preparing) || 0) });
   timer = setTimeout(() => ask(client), 0);
   tell();
+}
+
+/** Ask again whenever the socket opens anew, since the models open again too. */
+function follow(client) {
+  if (followed.has(client) || !client.on) return;
+  followed.add(client);
+  client.on("open", () => {
+    since = Date.now();
+    atLeast = AFTER_RECONNECT_MS;
+    if (!timer) timer = setTimeout(() => ask(client), 0);
+  });
 }
 
 async function ask(client) {
@@ -59,7 +78,7 @@ async function ask(client) {
   const was = JSON.stringify(readiness);
   readiness = { preparing: answer.preparing || 0, running: answer.running || 0, error: answer.error || null };
   const age = Date.now() - since;
-  const done = (readiness.preparing === 0 && age >= AT_LEAST_MS) || age >= AT_MOST_MS;
+  const done = (readiness.preparing === 0 && age >= atLeast) || age >= AT_MOST_MS;
   timer = done ? null : setTimeout(() => ask(client), EVERY_MS);
   if (done || JSON.stringify(readiness) !== was) tell();
 }
@@ -80,4 +99,5 @@ export function resetCutoutReadiness() {
   timer = null;
   readiness = null;
   since = 0;
+  atLeast = AT_LEAST_MS;
 }
