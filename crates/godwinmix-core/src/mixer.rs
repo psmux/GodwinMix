@@ -6115,6 +6115,7 @@ mod tests {
     mod recording_store;
     mod restart;
     mod rtsp_live;
+    mod filter_waits;
     mod mosaic_off_loop;
     mod preview_churn;
     mod preview_rate;
