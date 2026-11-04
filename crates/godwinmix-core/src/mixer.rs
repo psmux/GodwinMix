@@ -421,6 +421,7 @@ mod backoff;
 mod cue;
 mod exited;
 pub mod failover;
+mod fx_open;
 mod fx_take;
 mod generation;
 mod keyed;
@@ -490,6 +491,9 @@ pub enum Command {
     /// An fx clip transition's clip has its first frame, or has had long
     /// enough: bind the cut and start the window now. Never sent by the API.
     FxReady { transition: u64 },
+    /// The worker opening a clip transition's clip is back, with the player
+    /// or with why not. See `fx_open`. Never sent by the API.
+    FxOpened { transition: u64, opened: std::result::Result<fx_open::Opened, String> },
     /// Interrupt the programme with an ad, then return to live.
     ///
     /// `return_to` defaults to whatever is on program when the break starts.
@@ -4330,6 +4334,7 @@ impl Mixer {
             Command::TransitionEnd { .. } => "transition.end",
             Command::FireFx { .. } => "fx.fire",
             Command::FxReady { .. } => "fx.ready",
+            Command::FxOpened { .. } => "fx.opened",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -4418,6 +4423,7 @@ impl Mixer {
                 }
             }
             Command::FxReady { transition } => self.fx_ready(transition),
+            Command::FxOpened { transition, opened } => self.fx_opened(transition, opened),
             Command::FireFx { plan, opacity, ack } => {
                 let r = self.fire_fx(&plan, opacity);
                 reply(ack, &r);
