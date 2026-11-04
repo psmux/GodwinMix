@@ -29,10 +29,11 @@ const READY_WAIT_MS: u64 = 800;
 
 /// A clip transition waiting for its first frame.
 pub struct PendingFx {
-    id: u64,
+    pub(super) id: u64,
     spec: TransitionSpec,
     x: Crossing,
-    player: Option<Player>,
+    /// Empty until the worker opening it hands it over (`fx_open`).
+    pub(super) player: Option<Player>,
     asked: std::time::Instant,
 }
 
@@ -45,22 +46,13 @@ impl Drop for PendingFx {
 }
 
 impl Mixer {
-    /// Start a clip transition's clip and hold the window until it has a
-    /// frame. False for anything else, which goes ahead at once.
+    /// Start opening a clip transition's clip, off the loop, and hold the
+    /// window until it has a frame. False for anything else, which goes ahead
+    /// at once.
     pub(super) fn defer_fx(&mut self, id: u64, spec: &TransitionSpec, x: &Crossing) -> bool {
         let Kind::Fx(plan) = &spec.kind else { return false };
         let Look::Clip { path, mode, .. } = &plan.look else { return false };
-        let player = match Player::start(path, crate::fx::decode_size(*mode, (self.canvas.width, self.canvas.height))) {
-            Ok(p) => p,
-            Err(e) => {
-                warn!(fx = %plan.name, error = %format!("{e:#}"), "the clip would not open; the take is a cut");
-                return false;
-            }
-        };
-        let tx = self.handle.clone();
-        player.on_first_frame(move || {
-            let _ = tx.send(Command::FxReady { transition: id });
-        });
+        self.open_clip(id, path.clone(), crate::fx::decode_size(*mode, (self.canvas.width, self.canvas.height)));
         let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         let fallback = self.schedule_command(Command::FxReady { transition: id }, now.mseconds() + READY_WAIT_MS).ok();
         self.running_transition = Some(RunningTransition {
@@ -73,7 +65,7 @@ impl Mixer {
             slate: false,
             fx: None,
         });
-        self.pending_fx = Some(PendingFx { id, spec: spec.clone(), x: x.clone(), player: Some(player), asked: std::time::Instant::now() });
+        self.pending_fx = Some(PendingFx { id, spec: spec.clone(), x: x.clone(), player: None, asked: std::time::Instant::now() });
         true
     }
 
@@ -96,7 +88,12 @@ impl Mixer {
         self.bind_window(id, &plan.name, curves.0, x.start, curves.1, false);
         let canvas = (self.canvas.width, self.canvas.height);
         let window = (x.start.nseconds(), x.end().nseconds());
-        let started = crate::fx::transition(plan, &self.overlay, canvas, window, x.easing, Outgoing::Held, pending.player.take());
+        // Never opened here: that is the worker's, and the loop does not wait
+        // on a clip. Not open by now is a cut, and a late player is stopped.
+        let Some(player) = pending.player.take() else {
+            return warn!(fx = %plan.name, "the clip was not open in time; the take is a cut");
+        };
+        let started = crate::fx::transition(plan, &self.overlay, canvas, window, x.easing, Outgoing::Held, Some(player));
         debug!(fx = %plan.name, waited_ms = pending.asked.elapsed().as_millis() as u64, "a clip transition's window started");
         if let (Some(running), Ok(fx)) = (self.running_transition.as_mut(), started) {
             running.fx = Some(fx);
