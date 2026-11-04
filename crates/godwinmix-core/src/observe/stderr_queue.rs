@@ -5,8 +5,8 @@
 //! app stderr is a pipe the app reads, and in the seconds after a restart
 //! the app is busy opening its window and reads it late. A line written to a
 //! full pipe waits, and the mixer thread that serves Take was the one
-//! waiting: a supervisor tick held the loop for a second and a half while
-//! it wrote one line about a camera catching up.
+//! waiting: after a restart, supervisor ticks held the loop for 0.5 to 3.4
+//! seconds in steps whose only slow part was writing a log line.
 //!
 //! So a line logged on the mixer thread is queued for a writer thread, and
 //! a full queue drops the stderr copy and counts it. The file copy is
