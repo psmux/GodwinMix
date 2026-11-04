@@ -4754,26 +4754,31 @@ impl Mixer {
         // An add waiting on a stop that finished, or that has waited long
         // enough, goes ahead.
         self.release_stopped();
+        crate::observe::laps::mark("stopped adds released");
         // What the governor says to give up, or that there is room again.
         self.rendition_tick();
         // Outputs refused at start, asked for again once their wait is up.
         self.retry_unattached();
+        crate::observe::laps::mark("outputs retried");
 
 
         // A plugin process that died by itself is restarted now rather than
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
         self.relay_plugin_logs();
+        crate::observe::laps::mark("plugins looked at");
 
         // A line in the log every five minutes with the mixer's own size, and
         // every five seconds a look at whether it is past its guard.
         self.watch_memory();
         self.guard_memory();
+        crate::observe::laps::mark("memory guarded");
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
         // than here.
         self.release_retired(None);
+        crate::observe::laps::mark("held frames released");
 
         let mut restart = Vec::new();
         // Sources whose first picture has just arrived, and sources that have
@@ -4847,6 +4852,7 @@ impl Mixer {
         for id in swaps {
             self.swap_client_off_thread(&id);
         }
+        crate::observe::laps::mark("sources swept");
         for id in first_picture {
             // The rebuilt source draws now, so the frame held for it is done.
             self.release_retired(Some(&id));
@@ -4855,12 +4861,15 @@ impl Mixer {
         for id in judged_stalled {
             self.log_timeline(&id, "judged stalled", true);
         }
+        crate::observe::laps::mark("timelines logged");
         self.report_states();
+        crate::observe::laps::mark("states reported");
         for id in restart {
             self.arm_stall_restart(id);
         }
         // Deadlines the stall sweep cannot see. See `mixer::supervise`.
         self.supervise(now);
+        crate::observe::laps::mark("supervised");
         // A live source whose frames all wait before they are due is moved
         // back to its newest frame. See `mixer::catch_up`.
         for slot in &self.sources {
@@ -4871,6 +4880,7 @@ impl Mixer {
         for id in forgiven {
             info!(source = %id, "the source has stayed live since its last restart; its backoff starts again from nothing");
         }
+        crate::observe::laps::mark("caught up");
 
         for slot in &self.sources {
             let id = &slot.input.id;
@@ -4895,6 +4905,7 @@ impl Mixer {
                 self.output_attempts.insert(out.id().clone(), 0);
             }
         }
+        crate::observe::laps::mark("outputs refreshed");
 
         let overflowing: Vec<_> = self
             .outputs
