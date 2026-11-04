@@ -431,6 +431,7 @@ mod memwatch;
 mod motion;
 mod on_time;
 mod page;
+mod mosaic_build;
 mod preview_draw;
 pub use page::PageCall;
 pub(crate) mod offload;
@@ -645,6 +646,9 @@ pub enum Command {
     /// subscriber generation it was decided at, so one that has been overtaken
     /// is refused rather than applied. See `multiview.rs`.
     Multiview(DemandAt),
+    /// The worker building or taking down the mosaic is back. See
+    /// `mosaic_build`. Never sent by the API.
+    MosaicBuilt(Box<mosaic_build::Back>),
     /// Start or stop the programme encode chain. Sent by `EncoderHandle` when
     /// the first consumer arrives or the last one leaves, never by the API.
     /// See `encoder.rs`.
@@ -1400,6 +1404,8 @@ pub struct Mixer {
     /// The preview's filter chains being built off the loop. See
     /// `preview_draw`.
     preview_build: preview_draw::Building,
+    /// The mosaic job out on a worker, if any. See `mosaic_build`.
+    mosaic: mosaic_build::Mosaic,
     /// Which sources have a backup, and which backup is drawn in whose place
     /// now. Empty, and asked nothing, on a mixer with no `on_loss`. See
     /// `crate::failover` and `mixer::failover`.
@@ -2124,6 +2130,7 @@ impl Mixer {
             ramp: None,
             preview_cells: Vec::new(),
             preview_build: preview_draw::Building::default(),
+            mosaic: mosaic_build::Mosaic::default(),
             backups: Default::default(),
         };
         Ok((mixer, handle, rx, bus_rx))
@@ -2331,7 +2338,9 @@ impl Mixer {
         // Nothing runs unless asked, and a source nobody is looking at should
         // not be scaling a picture for nobody. It can be attached later on a
         // running source without a rebuild; see `attach_thumb_end`.
-        let wants_thumb = in_multiview && self.multiview.is_some();
+        // A mosaic a worker is building counts: its tile for this source is
+        // added when it comes back. See `mosaic_build`.
+        let wants_thumb = in_multiview && (self.multiview.is_some() || self.mosaic_building().is_some());
         let input = InputPipeline::build_kind(
             cfg,
             &self.canvas,
@@ -4372,6 +4381,7 @@ impl Mixer {
             Command::Tick => "tick",
             Command::PositionTick => "position tick",
             Command::Multiview(_) => "multiview demand",
+            Command::MosaicBuilt(_) => "multiview built",
             Command::Encoder(_) => "encoder demand",
             Command::Preview(_) => "preview demand",
             Command::Audio(..) => "audio",
@@ -4445,6 +4455,7 @@ impl Mixer {
                 r?;
             }
             Command::Multiview(d) => self.multiview_demand(d)?,
+            Command::MosaicBuilt(back) => self.mosaic_built(*back)?,
             Command::Encoder(d) => self.encoder.demand(d)?,
             Command::Preview(d) => self.preview_demand(d),
             Command::AddSource(cfg, ack) => {
@@ -5454,7 +5465,8 @@ impl Mixer {
     /// at the 25 the page asks for on a machine with eight threads or more, so
     /// they moved at a third of the rate of everything else.
     fn mosaic_fps(&self) -> i32 {
-        self.multiview.as_ref().map_or(self.cfg.multiview.fps, |mv| mv.shape().fps).max(1)
+        let shape = self.multiview.as_ref().map(|mv| mv.shape()).or(self.mosaic_building());
+        shape.map_or(self.cfg.multiview.fps, |s| s.fps).max(1)
     }
 
     /// Give the programme return the mosaic's rate. Only while it is off the
@@ -5558,64 +5570,15 @@ impl Mixer {
         }
         match at.demand {
             Demand::Build(shape) => {
-                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
+                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) || self.mosaic_out() {
+                    // Kept, or a worker is out and looks again when it is
+                    // back.
                     return self.preview_settled();
                 }
-                // A rebuild at another size drops the old one first, so there
-                // is never a moment with two mosaic encoders running.
-                self.drop_mosaic();
-                let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
-                    .context("building multiview")?;
-                crate::observe::laps::mark("multiview pipeline built");
-                mv.attach_watch(gstutil::watch_bus(
-                    mv.pipeline(),
-                    gstutil::BusOwner::Multiview,
-                    self.bus_tx.clone(),
-                )?);
-                for slot in &self.sources {
-                    if slot.input.id == AD_ID {
-                        continue;
-                    }
-                    // A source pays for its thumbnail branch only while a
-                    // mosaic exists to show it; the end is attached to the
-                    // running source here and taken back at teardown.
-                    let proxy = slot
-                        .input
-                        .attach_thumb_end(&self.canvas, shape.fps)
-                        .context("attaching a thumbnail end for the mosaic")?;
-                    mv.add_tile_with(Some(slot.input.id.clone()), &proxy, |pad| {
-                        if let Some(a) = &slot.aligner {
-                            a.follow_tile(pad);
-                        }
-                        if slot.clip_end.is_some() {
-                            clip_end::ClipEnd::keep_last_frame(pad);
-                        }
-                    })
-                    .context("adding multiview tile")?;
-                    crate::observe::laps::mark("multiview tile");
-                }
-                mv.follow_clock_of(&self.program);
-                // Marked built before the first frame can leave it: a
-                // subscriber that reads `is_built` the moment its frame lands
-                // must find it true, and on Windows the frame beat the flag.
-                self.mv.mark_built(Some(shape));
-                if let Err(e) = mv.start() {
-                    self.mv.mark_built(None);
-                    return Err(e.context("starting multiview"));
-                }
-                crate::observe::laps::mark("multiview started");
-                self.multiview = Some(mv);
-                // Last, once the mosaic is running. The branch ends at a
-                // `proxysink`, and a proxysink pushing into a `proxysrc` whose
-                // pipeline has not started yet has nowhere to put the buffer:
-                // it waits, holding the tee branch, and the mosaic's return
-                // cell never fills.
-                self.attach_programme_return()
-                    .context("attaching the programme return branch for the mosaic")?;
-                crate::observe::laps::mark("programme return attached");
-                self.show_held_clips_again();
-                crate::observe::laps::mark("held clips shown");
-                info!(?shape, "multiview built for a subscriber");
+                // A rebuild at another size takes the old one down first, on
+                // the same worker, so there is never a moment with two mosaic
+                // encoders running.
+                self.send_mosaic_job(Some(shape));
             }
             Demand::Preview => {}
             Demand::Teardown => {
@@ -5625,8 +5588,7 @@ impl Mixer {
                     debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
                     return Ok(());
                 }
-                self.detach_programme_return();
-                self.drop_mosaic()
+                self.send_mosaic_job(None);
             }
         }
         // The preview lives in the mosaic's pipeline, so a mosaic that has
@@ -6153,6 +6115,7 @@ mod tests {
     mod recording_store;
     mod restart;
     mod rtsp_live;
+    mod mosaic_off_loop;
     mod preview_churn;
     mod preview_rate;
     mod slow_restart;

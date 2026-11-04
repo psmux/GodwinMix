@@ -153,3 +153,21 @@ async fn an_effect_fired_over_a_moving_source_plays_and_goes() {
     assert!(after.0 < 60, "and be gone once its clip ends: {after:?}");
     assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms ({before:.1} ms before)");
 }
+
+/// The clip opens on a worker: the take is answered before it has, and a
+/// status asked right behind it is not kept waiting either.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_clip_transition_answers_before_its_clip_opens() {
+    let (handle, frames, thread) = blue_then_red().await;
+    let asked = Instant::now();
+    take_with(&handle, "b", Some(plan("glitch"))).await;
+    let take_ms = asked.elapsed().as_millis();
+    handle.status().await.expect("status");
+    let status_ms = asked.elapsed().as_millis();
+    settle(2_000).await;
+    let end = frames.latest().unwrap().yuv(160, 90);
+    stop(handle, thread);
+    println!("take answered in {take_ms} ms, status in {status_ms} ms");
+    assert!((status_ms as f64) < 100.0 * slack(), "the take held the loop: status answered after {status_ms} ms");
+    assert!(near(end, RED), "the new scene is on after the stinger: {end:?}");
+}
