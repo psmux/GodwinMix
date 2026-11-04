@@ -150,3 +150,22 @@ pub struct FxAssignments {
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub scenes: std::collections::BTreeMap<String, String>,
 }
+
+/// `event/fx.assigned`, raised by every `fx.assign`.
+pub fn assigned_event() -> crate::protocol::EventDef {
+    crate::protocol::EventDef {
+        name: "fx.assigned",
+        since: "1",
+        summary: "fx.assign changed the transition a take uses when it names none, for one \
+                  scene or for every take. Carries every assignment, as fx.list answers them \
+                  in assigned, so an open page follows a choice made on another.",
+        ext: None,
+        legacy: None,
+        payload: |g| {
+            serde_json::json!({
+                "type": "object",
+                "properties": { "assigned": crate::method::schema_of::<FxAssignments>(g) }
+            })
+        },
+    }
+}

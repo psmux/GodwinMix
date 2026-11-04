@@ -67,5 +67,6 @@ pub(super) async fn assign(call: Call, params: Value) -> Result<Value, RpcError>
     }
     let dir = media(&call);
     let assigned = blocking(move || fx::assign::set(&dir, req.scene.as_deref(), req.transition.as_deref())).await?;
+    call.app.mixer.emit(godwinmix_protocol::types::Event::FxAssigned { assigned: assigned.clone() });
     body(assigned)
 }

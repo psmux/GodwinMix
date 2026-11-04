@@ -4803,6 +4803,10 @@ export interface FeedRecoveredEvent {
   id: string;
 }
 
+export interface FxAssignedEvent {
+  assigned?: FxAssignments;
+}
+
 /** The params each method takes, by method name. */
 export interface MethodParams {
   "adbreak.end": Record<string, never>;
@@ -5445,6 +5449,7 @@ export interface EventPayloads {
   "prompter.changed": PrompterState;
   "prompter.script.changed": ScriptChanged;
   "guest.changed": GuestList;
+  "fx.assigned": FxAssignedEvent;
   "health": HealthEvent;
 }
 
@@ -5812,6 +5817,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "prompter.changed",
   "prompter.script.changed",
   "guest.changed",
+  "fx.assigned",
   "health",
 ];
 
