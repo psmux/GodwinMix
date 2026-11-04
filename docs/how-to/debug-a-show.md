@@ -64,6 +64,25 @@ service unit or a container, it is JSON lines, one object per line, so
 `journalctl`, Loki or `jq` read it without a parser. `--log-format json` or
 `--log-format human` overrides the guess.
 
+### When calls answer "mixer is busy"
+
+Every take, cut and status goes through one mixer command loop. If a command
+holds that loop, the queue behind it fills, calls come back with `-32001` and
+`core.status` answers 503. The refusal names the command that held the loop.
+To find out which step inside it was slow, search the log:
+
+```
+gmx logs --since 20:13 | grep "held the mixer loop"
+```
+
+The mixer writes one such line for each command that held the loop for 100 ms
+or more, at info level, so it is in the log without a `log.set`. `command`
+names the command, `held_ms` is the whole hold and `steps` lists each step it
+passed with the milliseconds since the step before, ending with `end` for the
+tail. A transition clip opening or a mosaic being built used to show up here
+after a restart. Both now run on a worker, so if either appears again, report
+it as a bug.
+
 ## 3. `log.set`: turn the interesting log on, without a restart
 
 The reason the log you want is never on is that turning it on has always meant

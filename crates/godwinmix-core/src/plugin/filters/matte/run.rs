@@ -117,8 +117,13 @@ impl Cutter {
             return gst::PadProbeReturn::Ok;
         };
         let mut st = self.state.lock();
-        let Some(vinfo) = st.video_info(pad) else { return gst::PadProbeReturn::Ok };
         let frame = buffer.clone();
+        // No I420 caps here yet: nothing to cut with, and the frame as it is
+        // would be the whole camera on air. A gap draws nothing.
+        let Some(vinfo) = st.video_info(pad) else {
+            *buffer = gap(&frame);
+            return gst::PadProbeReturn::Ok;
+        };
         // A cutout drawn by the board on pads nobody can see (an item off
         // air whose slot is kept, a scene armed but faded out) feeds the model
         // nothing: it used to run flat out on a camera that was not on screen.

@@ -275,7 +275,9 @@ impl ScenePreview {
                         continue;
                     };
                     let chain = built.take(&cell.share_key(), &cell.filters, canvas);
-                    match self.bind(cell, &tee, chain) {
+                    let bound = self.bind(cell, &tee, chain);
+                    crate::observe::laps::mark("preview slot bound");
+                    match bound {
                         Ok(index) => index,
                         Err(e) => {
                             warn!(source = %cell.source, ?e, "could not draw a source in the preview");
@@ -299,6 +301,7 @@ impl ScenePreview {
             (0..self.slots.len()).filter(|i| !kept.contains(i)).rev().collect();
         for index in stale {
             self.unbind(index);
+            crate::observe::laps::mark("preview slot unbound");
         }
         Ok(())
     }

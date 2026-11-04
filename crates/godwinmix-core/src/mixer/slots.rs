@@ -59,6 +59,8 @@ use gstreamer::prelude::*;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+mod filters_in;
+
 /// How many slots the pool starts with.
 ///
 /// Eight is the number 11 section 3 settles on: more scenes than anyone builds
@@ -390,6 +392,12 @@ pub struct Slot {
     /// How the last placement drawn here trims and fits its picture, and the
     /// item's own motions, for a transition that has to reach them.
     look: Look,
+    /// The item drawn here asks for filters that are not on the chain, so it
+    /// is held at alpha 0. See `filters_in`.
+    waiting: bool,
+    /// The filters that last failed to go on here, so the reason is said
+    /// once and not on every apply.
+    refused: Option<Vec<ItemFilter>>,
 }
 
 /// The parts of a placement a transition needs after the apply has gone.
@@ -784,6 +792,8 @@ impl SlotPool {
             filter_shape: Vec::new(),
             shared_as: None,
             look: Look::default(),
+            waiting: false,
+            refused: None,
         });
         Ok(self.slots.last_mut().expect("just pushed"))
     }
@@ -886,6 +896,7 @@ impl SlotPool {
             .zip(placements.iter().filter(|p| branches.iter().any(|(id, _)| *id == &p.source)))
             .map(|(index, p)| {
                 let to = PadState::of(p);
+                let to = PadState { alpha: self.may_show(*index, to.alpha), ..to };
                 self.slots[*index].leg(p.source.clone(), PadState { alpha: 0.0, ..to }, to)
             })
             .collect();
@@ -949,6 +960,7 @@ impl SlotPool {
                     p.item.is_some() && s.drawn == p.item && !self.crossing.contains(&s.index)
                 })?;
                 let to = PadState::of(p);
+                let to = PadState { alpha: self.may_show(slot.index, to.alpha), ..to };
                 Some(slot.leg(p.source.clone(), PadState { alpha: slot.state().alpha, ..to }, to))
             })
             .collect()
@@ -979,11 +991,9 @@ impl SlotPool {
                     warn!(?e, "a filtered group could not be composited; it was left out");
                     continue;
                 }
-                if let Err(e) = self.sync_filters(index, p) {
-                    warn!(slot = index, ?e, "a group's filter could not go on");
-                }
+                let shown = self.filters_in(index, p);
                 self.slots[index].open();
-                ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+                ramps.push(self.slots[index].draw(&shown, Z_LIVE + i as u32, write));
                 self.slots[index].remember(p);
                 claimed.push(index);
                 drawn += 1;
@@ -1005,19 +1015,11 @@ impl SlotPool {
             };
             // Filters before the valve opens: a camera that has just started
             // sent its first frames through raw, so a cutout's room reached
-            // the programme for a second after a restart.
-            if let Err(e) = self.sync_filters(index, p) {
-                // The picture is still on air with whatever chain it had. A
-                // filter that will not build is a refused change, not a black
-                // frame, and the message names the item's own filter.
-                warn!(slot = index, source = %p.source, ?e, "a scene item's filter could not go on");
-                // Once, not twice a second. The shape is remembered as it was
-                // asked for, so the next apply finds nothing new to build and
-                // leaves the pad alone until the item's filters change.
-                self.slots[index].filter_shape = p.filters.to_vec();
-            }
+            // the programme for a second after a restart. An item whose
+            // filters would not go on is held at alpha 0 until they do.
+            let shown = self.filters_in(index, p);
             self.slots[index].open();
-            ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+            ramps.push(self.slots[index].draw(&shown, Z_LIVE + i as u32, write));
             self.slots[index].remember(p);
             claimed.push(index);
             drawn += 1;

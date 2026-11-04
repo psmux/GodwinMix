@@ -203,7 +203,7 @@ async fn a_mosaic_built_after_a_clip_came_to_rest_still_gets_its_last_frame() {
 
     let shape = crate::multiview::MultiviewShape { fps: 8, width: 320, height: 180 };
     c.mix
-        .multiview_demand(DemandAt { demand: Demand::Build(shape), generation: c.mix.mv.generation() })
+        .multiview_demand_inline(DemandAt { demand: Demand::Build(shape), generation: c.mix.mv.generation() })
         .expect("a subscriber builds the mosaic");
     let after = play(&mut c.mix, &mut c.cmds, &mut c.bus, 3).await;
     let warm = c.mix.mv.warm();

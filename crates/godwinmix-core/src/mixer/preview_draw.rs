@@ -64,6 +64,7 @@ impl Mixer {
         if let Err(e) = mv.apply_preview_built(&self.canvas, &cells, built) {
             warn!(?e, "the armed scene could not be drawn in the preview");
         }
+        crate::observe::laps::mark("preview drawn");
         self.show_held_clips_again();
     }
 

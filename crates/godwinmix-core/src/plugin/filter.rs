@@ -344,7 +344,9 @@ pub fn insert(
     canvas: &CanvasCaps,
     live: bool,
 ) -> Result<FilterSlot> {
-    place(at, Built::new(spec, filter, canvas)?, live)
+    let built = Built::new(spec, filter, canvas)?;
+    crate::observe::laps::mark("filter built");
+    place(at, built, live)
 }
 
 /// A filter built and not yet in any pipeline: the slow half of `insert`.
@@ -400,6 +402,7 @@ pub fn place(at: Insertion<'_>, built: Built, live: bool) -> Result<FilterSlot> 
                 spec.id
             ));
         }
+        crate::observe::laps::mark("filter started");
 
         let (up, down, b) = (at.upstream.clone(), at.downstream.clone(), bin.clone());
         let src_for_link = src.clone();

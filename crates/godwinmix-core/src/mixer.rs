@@ -421,6 +421,7 @@ mod backoff;
 mod cue;
 mod exited;
 pub mod failover;
+mod fx_open;
 mod fx_take;
 mod generation;
 mod keyed;
@@ -430,6 +431,7 @@ mod memwatch;
 mod motion;
 mod on_time;
 mod page;
+mod mosaic_build;
 mod preview_draw;
 pub use page::PageCall;
 pub(crate) mod offload;
@@ -490,6 +492,9 @@ pub enum Command {
     /// An fx clip transition's clip has its first frame, or has had long
     /// enough: bind the cut and start the window now. Never sent by the API.
     FxReady { transition: u64 },
+    /// The worker opening a clip transition's clip is back, with the player
+    /// or with why not. See `fx_open`. Never sent by the API.
+    FxOpened { transition: u64, opened: std::result::Result<fx_open::Opened, String> },
     /// Interrupt the programme with an ad, then return to live.
     ///
     /// `return_to` defaults to whatever is on program when the break starts.
@@ -641,6 +646,9 @@ pub enum Command {
     /// subscriber generation it was decided at, so one that has been overtaken
     /// is refused rather than applied. See `multiview.rs`.
     Multiview(DemandAt),
+    /// The worker building or taking down the mosaic is back. See
+    /// `mosaic_build`. Never sent by the API.
+    MosaicBuilt(Box<mosaic_build::Back>),
     /// Start or stop the programme encode chain. Sent by `EncoderHandle` when
     /// the first consumer arrives or the last one leaves, never by the API.
     /// See `encoder.rs`.
@@ -1396,6 +1404,8 @@ pub struct Mixer {
     /// The preview's filter chains being built off the loop. See
     /// `preview_draw`.
     preview_build: preview_draw::Building,
+    /// The mosaic job out on a worker, if any. See `mosaic_build`.
+    mosaic: mosaic_build::Mosaic,
     /// Which sources have a backup, and which backup is drawn in whose place
     /// now. Empty, and asked nothing, on a mixer with no `on_loss`. See
     /// `crate::failover` and `mixer::failover`.
@@ -2120,6 +2130,7 @@ impl Mixer {
             ramp: None,
             preview_cells: Vec::new(),
             preview_build: preview_draw::Building::default(),
+            mosaic: mosaic_build::Mosaic::default(),
             backups: Default::default(),
         };
         Ok((mixer, handle, rx, bus_rx))
@@ -2327,7 +2338,9 @@ impl Mixer {
         // Nothing runs unless asked, and a source nobody is looking at should
         // not be scaling a picture for nobody. It can be attached later on a
         // running source without a rebuild; see `attach_thumb_end`.
-        let wants_thumb = in_multiview && self.multiview.is_some();
+        // A mosaic a worker is building counts: its tile for this source is
+        // added when it comes back. See `mosaic_build`.
+        let wants_thumb = in_multiview && (self.multiview.is_some() || self.mosaic_building().is_some());
         let input = InputPipeline::build_kind(
             cfg,
             &self.canvas,
@@ -3683,6 +3696,7 @@ impl Mixer {
         // Whatever the last take was doing, it is over. Settling leaves every
         // pad where that transition's curves ended rather than halfway.
         self.settle_transition();
+        crate::observe::laps::mark("transition settled");
         let mut took = transition::Kind::Cut;
         let mut duration = 0u64;
         match crossing {
@@ -3709,7 +3723,9 @@ impl Mixer {
             }
         }
 
+        crate::observe::laps::mark("scene applied");
         self.show_held_clips_again();
+        crate::observe::laps::mark("held clips shown");
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(
             scene = %name,
@@ -3744,10 +3760,13 @@ impl Mixer {
     ) -> Result<()> {
         let arriving = self.current_placements();
         let clip = self.stinger_clip(spec)?;
+        crate::observe::laps::mark("stinger clip");
         let branches: Vec<(&SourceId, &ProgrammeBranch)> =
             self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
         let crossed = self.pool.begin_transition(&arriving, &branches)?;
+        crate::observe::laps::mark("pool transition begun");
         let cover = clip.as_ref().and_then(|id| self.cover_leg(id));
+        crate::observe::laps::mark("cover leg");
         let duration = gst::ClockTime::from_mseconds(spec.duration().as_millis() as u64);
         let mut x = transition::Crossing {
             out: crossed.out,
@@ -3767,9 +3786,11 @@ impl Mixer {
         }
         let lead = self.fx_lead(spec, &mut x);
         let (curves, longest) = self.crossing_curves(spec, &x)?;
+        crate::observe::laps::mark("curves");
         let slate = self.tint_slate(&spec.kind);
         self.bind_window(id, spec.kind.name(), curves, x.start, longest + lead, slate);
         let fx = self.start_fx(spec, &x);
+        crate::observe::laps::mark("fx started");
         if let Some(running) = self.running_transition.as_mut() {
             running.clip = clip;
             running.fx = fx;
@@ -4055,6 +4076,7 @@ impl Mixer {
             Some(_) => self.pool.apply_ramped(&placements, &branches),
             None => self.pool.apply(&placements, &branches),
         };
+        crate::observe::laps::mark("pool applied");
         match applied {
             Ok(applied) => {
                 if !applied.missing.is_empty() {
@@ -4075,6 +4097,7 @@ impl Mixer {
             }
         }
         self.cue_sources(&placements);
+        crate::observe::laps::mark("sources cued");
 
         // Audio follows video per item: a source is heard when any live item
         // of it says `follow` and is visible, or says `always`. This is OBS's
@@ -4320,6 +4343,7 @@ impl Mixer {
             Command::TransitionEnd { .. } => "transition.end",
             Command::FireFx { .. } => "fx.fire",
             Command::FxReady { .. } => "fx.ready",
+            Command::FxOpened { .. } => "fx.opened",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -4357,6 +4381,7 @@ impl Mixer {
             Command::Tick => "tick",
             Command::PositionTick => "position tick",
             Command::Multiview(_) => "multiview demand",
+            Command::MosaicBuilt(_) => "multiview built",
             Command::Encoder(_) => "encoder demand",
             Command::Preview(_) => "preview demand",
             Command::Audio(..) => "audio",
@@ -4408,6 +4433,7 @@ impl Mixer {
                 }
             }
             Command::FxReady { transition } => self.fx_ready(transition),
+            Command::FxOpened { transition, opened } => self.fx_opened(transition, opened),
             Command::FireFx { plan, opacity, ack } => {
                 let r = self.fire_fx(&plan, opacity);
                 reply(ack, &r);
@@ -4429,6 +4455,7 @@ impl Mixer {
                 r?;
             }
             Command::Multiview(d) => self.multiview_demand(d)?,
+            Command::MosaicBuilt(back) => self.mosaic_built(*back)?,
             Command::Encoder(d) => self.encoder.demand(d)?,
             Command::Preview(d) => self.preview_demand(d),
             Command::AddSource(cfg, ack) => {
@@ -4727,26 +4754,31 @@ impl Mixer {
         // An add waiting on a stop that finished, or that has waited long
         // enough, goes ahead.
         self.release_stopped();
+        crate::observe::laps::mark("stopped adds released");
         // What the governor says to give up, or that there is room again.
         self.rendition_tick();
         // Outputs refused at start, asked for again once their wait is up.
         self.retry_unattached();
+        crate::observe::laps::mark("outputs retried");
 
 
         // A plugin process that died by itself is restarted now rather than
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
         self.relay_plugin_logs();
+        crate::observe::laps::mark("plugins looked at");
 
         // A line in the log every five minutes with the mixer's own size, and
         // every five seconds a look at whether it is past its guard.
         self.watch_memory();
         self.guard_memory();
+        crate::observe::laps::mark("memory guarded");
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
         // than here.
         self.release_retired(None);
+        crate::observe::laps::mark("held frames released");
 
         let mut restart = Vec::new();
         // Sources whose first picture has just arrived, and sources that have
@@ -4820,6 +4852,7 @@ impl Mixer {
         for id in swaps {
             self.swap_client_off_thread(&id);
         }
+        crate::observe::laps::mark("sources swept");
         for id in first_picture {
             // The rebuilt source draws now, so the frame held for it is done.
             self.release_retired(Some(&id));
@@ -4828,12 +4861,15 @@ impl Mixer {
         for id in judged_stalled {
             self.log_timeline(&id, "judged stalled", true);
         }
+        crate::observe::laps::mark("timelines logged");
         self.report_states();
+        crate::observe::laps::mark("states reported");
         for id in restart {
             self.arm_stall_restart(id);
         }
         // Deadlines the stall sweep cannot see. See `mixer::supervise`.
         self.supervise(now);
+        crate::observe::laps::mark("supervised");
         // A live source whose frames all wait before they are due is moved
         // back to its newest frame. See `mixer::catch_up`.
         for slot in &self.sources {
@@ -4844,6 +4880,7 @@ impl Mixer {
         for id in forgiven {
             info!(source = %id, "the source has stayed live since its last restart; its backoff starts again from nothing");
         }
+        crate::observe::laps::mark("caught up");
 
         for slot in &self.sources {
             let id = &slot.input.id;
@@ -4868,6 +4905,7 @@ impl Mixer {
                 self.output_attempts.insert(out.id().clone(), 0);
             }
         }
+        crate::observe::laps::mark("outputs refreshed");
 
         let overflowing: Vec<_> = self
             .outputs
@@ -5438,7 +5476,8 @@ impl Mixer {
     /// at the 25 the page asks for on a machine with eight threads or more, so
     /// they moved at a third of the rate of everything else.
     fn mosaic_fps(&self) -> i32 {
-        self.multiview.as_ref().map_or(self.cfg.multiview.fps, |mv| mv.shape().fps).max(1)
+        let shape = self.multiview.as_ref().map(|mv| mv.shape()).or(self.mosaic_building());
+        shape.map_or(self.cfg.multiview.fps, |s| s.fps).max(1)
     }
 
     /// Give the programme return the mosaic's rate. Only while it is off the
@@ -5542,59 +5581,15 @@ impl Mixer {
         }
         match at.demand {
             Demand::Build(shape) => {
-                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
+                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) || self.mosaic_out() {
+                    // Kept, or a worker is out and looks again when it is
+                    // back.
                     return self.preview_settled();
                 }
-                // A rebuild at another size drops the old one first, so there
-                // is never a moment with two mosaic encoders running.
-                self.drop_mosaic();
-                let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
-                    .context("building multiview")?;
-                mv.attach_watch(gstutil::watch_bus(
-                    mv.pipeline(),
-                    gstutil::BusOwner::Multiview,
-                    self.bus_tx.clone(),
-                )?);
-                for slot in &self.sources {
-                    if slot.input.id == AD_ID {
-                        continue;
-                    }
-                    // A source pays for its thumbnail branch only while a
-                    // mosaic exists to show it; the end is attached to the
-                    // running source here and taken back at teardown.
-                    let proxy = slot
-                        .input
-                        .attach_thumb_end(&self.canvas, shape.fps)
-                        .context("attaching a thumbnail end for the mosaic")?;
-                    mv.add_tile_with(Some(slot.input.id.clone()), &proxy, |pad| {
-                        if let Some(a) = &slot.aligner {
-                            a.follow_tile(pad);
-                        }
-                        if slot.clip_end.is_some() {
-                            clip_end::ClipEnd::keep_last_frame(pad);
-                        }
-                    })
-                    .context("adding multiview tile")?;
-                }
-                mv.follow_clock_of(&self.program);
-                // Marked built before the first frame can leave it: a
-                // subscriber that reads `is_built` the moment its frame lands
-                // must find it true, and on Windows the frame beat the flag.
-                self.mv.mark_built(Some(shape));
-                if let Err(e) = mv.start() {
-                    self.mv.mark_built(None);
-                    return Err(e.context("starting multiview"));
-                }
-                self.multiview = Some(mv);
-                // Last, once the mosaic is running. The branch ends at a
-                // `proxysink`, and a proxysink pushing into a `proxysrc` whose
-                // pipeline has not started yet has nowhere to put the buffer:
-                // it waits, holding the tee branch, and the mosaic's return
-                // cell never fills.
-                self.attach_programme_return()
-                    .context("attaching the programme return branch for the mosaic")?;
-                self.show_held_clips_again();
-                info!(?shape, "multiview built for a subscriber");
+                // A rebuild at another size takes the old one down first, on
+                // the same worker, so there is never a moment with two mosaic
+                // encoders running.
+                self.send_mosaic_job(Some(shape))?;
             }
             Demand::Preview => {}
             Demand::Teardown => {
@@ -5604,13 +5599,13 @@ impl Mixer {
                     debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
                     return Ok(());
                 }
-                self.detach_programme_return();
-                self.drop_mosaic()
+                self.send_mosaic_job(None)?;
             }
         }
         // The preview lives in the mosaic's pipeline, so a mosaic that has
         // just been built or rebuilt has to be told what is armed.
         self.preview_demand_now()?;
+        crate::observe::laps::mark("preview reconciled");
         // Clients learn the grid from the status document, and the grid has
         // just changed: a mosaic was built, torn down, or given a preview
         // cell. Nothing else announces that. A client subscribing before the
@@ -5655,6 +5650,7 @@ impl Mixer {
             Some(shape) => {
                 mv.preview_on(shape, self.mv.preview_publisher())
                     .context("building the preview compositor")?;
+                crate::observe::laps::mark("preview on");
                 self.mv.mark_preview_built(Some(shape));
                 info!(?shape, items = cells, "preview composited for a subscriber");
                 self.draw_preview();
@@ -6057,6 +6053,7 @@ pub fn spawn(
                 // say what the loop is inside. One uncontended lock on a path
                 // that is about to do a GStreamer state change.
                 running.begin(label);
+                crate::observe::laps::open(label);
                 // A net under every command. The programme's encoder lives in
                 // GStreamer's own threads and a panic here does not stop it,
                 // but without this the mixer thread dies and every command
@@ -6071,6 +6068,7 @@ pub fn spawn(
                 let outcome =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mixer.handle(cmd)));
                 running.finish();
+                crate::observe::laps::close();
                 match outcome {
                     Ok(Ok(true)) => {}
                     Ok(Ok(false)) => break,
@@ -6128,6 +6126,8 @@ mod tests {
     mod recording_store;
     mod restart;
     mod rtsp_live;
+    mod filter_waits;
+    mod mosaic_off_loop;
     mod preview_churn;
     mod preview_rate;
     mod slow_restart;
@@ -7271,7 +7271,7 @@ mod tests {
             full: false,
         });
         let shape = mix.mv.wanted().expect("a preview subscriber wants a mosaic too");
-        mix.multiview_demand(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
+        mix.multiview_demand_inline(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
             .expect("building the mosaic");
         mix.set_preview_cells(vec![
             crate::multiview::preview::Cell {
@@ -7947,7 +7947,7 @@ mod tests {
         let mut events = mix.events.subscribe();
         assert!(mix.status().multiview.cells.is_empty(), "no cells before a mosaic");
 
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Build(crate::multiview::MultiviewShape { fps: 8, width: 320, height: 180 }),
             generation: mix.mv.generation(),
         })
@@ -7988,7 +7988,7 @@ mod tests {
         );
 
         mix.start().expect("the programme starts");
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Build(crate::multiview::MultiviewShape {
                 fps: 5,
                 width: 320,
@@ -8000,7 +8000,7 @@ mod tests {
         assert!(mix.return_pad.is_some(), "the mosaic was built without the programme return");
         assert!(q.static_pad("sink").and_then(|p| p.peer()).is_some());
 
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Teardown,
             generation: 0,
         })
