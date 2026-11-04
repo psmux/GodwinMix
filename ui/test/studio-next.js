@@ -153,6 +153,22 @@ export async function studioNextTests(test, eq, ok) {
   });
   ready.resetCutoutReadiness();
 
+  // A mixer restart opens every model again, with the composer still open.
+  const opens = [];
+  const again = { call: async () => answer, on: (name, fn) => { if (name === 'open') opens.push(fn); return () => {}; } };
+  answer = { preparing: 0, running: 1 };
+  ready.watchCutouts(again);
+  await new Promise((r) => setTimeout(r, 20));
+  answer = { preparing: 1, running: 0 };
+  for (const fn of opens) fn();
+  // The next ask, at most one interval later.
+  await new Promise((r) => setTimeout(r, 700));
+  test('a page that watched asks again after it reconnects', () => {
+    eq(opens.length, 1, 'one open listener per client');
+    ok(ready.cutoutPreparing(), JSON.stringify(ready.cutoutReadiness()));
+  });
+  ready.resetCutoutReadiness();
+
   // Take with nothing armed sends the suggestion, by id, with the transition.
   const studio = await import('../panels/multiview/studio.js');
   const calls = [];
