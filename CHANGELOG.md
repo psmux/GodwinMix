@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+Calls keep getting answers in the seconds after a mixer restart.
+
+* A take with a clip transition is answered at once. The clip opens on a worker, and the cut waits for its first frame or falls back to a plain cut, as before. It used to open on the mixer's command loop, and one take after a restart held that loop for 4.3 seconds. Every call behind it was refused with `-32001 mixer is busy`, and `core.status` answered 503.
+* The multiview mosaic is built on a worker, with its tiles and the Preview compositor. The web UI's first ask after a restart held the loop for 2.5 seconds. The mixer now checks the mosaic when it comes back, and adds or removes tiles for sources that came or went in the meantime.
+* A command that holds the loop for 100 ms or more writes one log line naming each step it took and the milliseconds spent on it. See [Debug a show](docs/how-to/debug-a-show.md#when-calls-answer-mixer-is-busy).
+* A scene item whose filter will not go on stays hidden until it does. It went on air without its filter, and the failure was remembered, so a cutout that could not be made in the second after a restart showed the whole room until the item changed. The mixer now tries again on every apply and logs the reason once. A cutout with no picture format yet draws nothing either.
+
 ## 0.3.28 (2026-11-04)
 
 A cutout camera never reaches the programme uncut, even in the second after a mixer restart.
