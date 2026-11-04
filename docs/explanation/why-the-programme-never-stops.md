@@ -94,6 +94,15 @@ losing data on one path and stalling the programme, the programme wins.
 * **Nothing may block a streaming thread.** Not a plugin, not a UI client, not
   a metrics scrape, not a disk write. Work that could block goes to another
   thread and hands its result over.
+* **No command may hold the mixer loop.** Take and Cut are served by the
+  same loop as everything else, so a command that takes a second there makes
+  every take behind it a second late. Building a pipeline beside the
+  programme is slow, and it is slowest just after a restart, when every source
+  starts at once. So a transition's clip and the mosaic with its preview are
+  built on a worker, and the result comes back to the loop as one more
+  command. The take is answered first. The clip cuts in when its first frame
+  arrives, or the take falls back to a plain cut if the clip is late
+  (`mixer::fx_open`, `mixer::mosaic_build`).
 * **A crash must cost one source.** This is why plugins are separate processes.
   See [why plugins are processes](why-plugins-are-processes.md).
 * **A source's timing stops at its own edge.** The compositor and the audio
