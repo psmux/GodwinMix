@@ -8730,6 +8730,13 @@ pub struct FeedRecoveredEvent {
     pub id: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FxAssignedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned: Option<FxAssignments>,
+}
+
 /// What a method is, for a surface that builds its own menu or its own REST call.
 #[derive(Debug, Clone, Copy)]
 pub struct MethodInfo {
@@ -9039,7 +9046,7 @@ pub const METHODS: [MethodInfo; 295] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 41] = [
+pub const EVENT_NAMES: [&str; 42] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -9080,6 +9087,7 @@ pub const EVENT_NAMES: [&str; 41] = [
     "prompter.changed",
     "prompter.script.changed",
     "guest.changed",
+    "fx.assigned",
     "health",
 ];
 
@@ -9181,6 +9189,8 @@ pub enum Event {
     PrompterScriptChanged(ScriptChanged),
     /// An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key.
     GuestChanged(GuestList),
+    /// fx.assign changed the transition a take uses when it names none, for one scene or for every take. Carries every assignment, as fx.list answers them in assigned, so an open page follows a choice made on another.
+    FxAssigned(FxAssignedEvent),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -9341,6 +9351,10 @@ impl Event {
                 Ok(payload) => Event::GuestChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "fx.assigned" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::FxAssigned(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -9392,6 +9406,7 @@ impl Event {
             Event::PrompterChanged(_) => "prompter.changed",
             Event::PrompterScriptChanged(_) => "prompter.script.changed",
             Event::GuestChanged(_) => "guest.changed",
+            Event::FxAssigned(_) => "fx.assigned",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }

@@ -5441,6 +5441,9 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+class FxAssignedEvent(TypedDict, total=False):
+    assigned: FxAssignments
+
 # What Preview holds after a Take. See the module.
 AfterTake = Literal['same', 'swap']
 
@@ -6006,6 +6009,7 @@ EVENT_NAMES = (
     "prompter.changed",
     "prompter.script.changed",
     "guest.changed",
+    "fx.assigned",
     "health",
 )
 

@@ -447,6 +447,8 @@ pub enum Event {
     PrompterScriptChanged { changed: crate::prompter::ScriptChanged },
     /// An invite, a guest's state or talkback changed. See `guests.rs`.
     GuestChanged { list: Box<crate::guests::GuestList> },
+    /// `fx.assign` changed the default transition or a scene's own.
+    FxAssigned { assigned: crate::fx::FxAssignments },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

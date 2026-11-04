@@ -117,6 +117,18 @@ export async function transitionTests(test, eq, ok) {
     eq(tp.request(tp.ms()), { type: 'light-leak', duration_ms: 1200 });
     eq(tp.describe(), 'light-leak 1.2 s');
   });
+  // Another desk assigns a transition: the open page follows without a reload.
+  const heard = [];
+  const listened = [];
+  const other = Object.assign({}, stub, { on: (name, fn) => { if (name === 'event') heard.push(fn); return () => {}; }, listen: (p) => listened.push(p) });
+  const tp2 = picker({ client: other, armedScene: () => 'Wide' });
+  await tp2.load(other);
+  for (const fn of heard) fn({ name: 'fx.assigned', params: { assigned: { default: 'light-leak', scenes: {} } } });
+  test('an fx.assign made elsewhere is followed by an open page', () => {
+    eq(listened, ['fx.assigned']);
+    eq(tp2.request(tp2.ms()), { type: 'light-leak', duration_ms: 1200 });
+  });
+  tp2.close();
   tp.choose('fade');
   test('a pick on this page is shown and sent from then on', () => {
     ok(tp.el.textContent.includes('Fade'), tp.el.textContent);

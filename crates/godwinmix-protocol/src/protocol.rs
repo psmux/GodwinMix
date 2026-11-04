@@ -47,6 +47,7 @@ pub fn events() -> Vec<EventDef> {
     all.extend(crate::presence::events());
     all.extend(crate::prompter::events());
     all.extend(crate::guests::events());
+    all.push(crate::fx::assigned_event());
     all.push(health_event());
     all
 }

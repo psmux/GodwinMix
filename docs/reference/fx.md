@@ -322,6 +322,15 @@ assigned, which is what the page's Cut button sends.
 {"method": "fx.assign", "params": {"scene": "Interview"}}
 ```
 
+Every `fx.assign` sends `event/fx.assigned` with every assignment, the way
+`fx.list` answers them in `assigned`, so a page open on another desk shows the
+new default without a reload:
+
+```json
+{"method": "event/fx.assigned",
+ "params": {"assigned": {"default": "fade", "scenes": {"Interview": "light-leak"}}, "seq": 42}}
+```
+
 Two routes carry bytes:
 
 | Route | What it is |

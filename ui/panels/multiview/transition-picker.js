@@ -8,7 +8,8 @@
 // `program.transitions` adds (a collection's own names, a plugin's, the fx
 // library's imported transitions), asked once. Until the person picks one
 // here, the control shows the core's default from `fx.assign` and Take names
-// it (transition-default.js).
+// it (transition-default.js); `event/fx.assigned` keeps that current when
+// another desk assigns one.
 
 import { el } from "../../shell/dom.js";
 import { TransitionState, TYPES } from "./transition-state.js";
@@ -63,7 +64,12 @@ export function picker({ client = null, armedScene = () => null } = {}) {
   state.onChange(paint);
   paint();
   // A new armed scene may have its own transition; the panel names it first.
-  if (client && client.on) client.on("event", (e) => e && e.name === "preview.changed" && setTimeout(paint, 0));
+  if (client && client.on) client.on("event", (e) => {
+    if (e && e.name === "preview.changed") setTimeout(paint, 0);
+    // Another desk assigned a transition: the default, or a scene's own.
+    if (e && e.name === "fx.assigned" && e.params) adopt(e.params.assigned);
+  });
+  if (client && client.listen) client.listen("fx.assigned");
 
   return {
     el: control,
