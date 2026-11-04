@@ -158,3 +158,12 @@ off air went on at 15 a second.
 | `device = "gpu"` with no GPU accelerator | to use `auto` or `cpu`, or a runtime with DirectML, CoreML, CUDA or OpenVINO |
 
 Adding the filter checks all of these first, and a refusal changes nothing.
+
+A filter can still fail later, after it was accepted. Right after a mixer
+restart, for example, the runtime may not be ready yet. When that happens the
+item stays hidden instead of going on air uncut. The mixer tries the filter
+again each time it applies the scene, which is twice a second, and shows the
+item as soon as the filter goes in. The log gets one warning per item and
+filter list, `a scene item's filter could not go on; the item stays hidden
+until it does`, naming the source and the reason. Until the cutout has its
+first frame in the right format, it draws nothing either.
