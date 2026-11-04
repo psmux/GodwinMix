@@ -1817,6 +1817,16 @@ mod tests {
         assert!(page.contains(r#"name="theme-color""#));
     }
 
+    /// A guest's browser asked for /favicon.ico twice, on load and on going
+    /// live, and was answered 404 both times.
+    #[test]
+    fn the_guest_page_names_its_icons() {
+        let page = source_of("join/index.html").unwrap();
+        assert!(page.contains(r#"<link rel="icon" href="data:image/svg+xml"#));
+        let touch = r#"href="../icons/apple-touch-icon.png""#;
+        assert!(page.contains(touch) && IMAGES.iter().any(|(p, _)| *p == "icons/apple-touch-icon.png"));
+    }
+
     #[test]
     fn the_service_worker_carries_this_build_and_leaves_the_protocol_alone() {
         let source = source_of("sw.js").unwrap();
