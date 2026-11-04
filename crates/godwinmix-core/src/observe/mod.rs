@@ -38,6 +38,7 @@ pub mod laps;
 pub mod logs;
 pub mod metrics;
 pub mod session;
+mod stderr_queue;
 pub mod trace;
 
 pub use introspect::{register_pipeline, startup_report, unregister_pipeline, PROGRAMME};
