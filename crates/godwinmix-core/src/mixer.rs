@@ -5578,7 +5578,7 @@ impl Mixer {
                 // A rebuild at another size takes the old one down first, on
                 // the same worker, so there is never a moment with two mosaic
                 // encoders running.
-                self.send_mosaic_job(Some(shape));
+                self.send_mosaic_job(Some(shape))?;
             }
             Demand::Preview => {}
             Demand::Teardown => {
@@ -5588,7 +5588,7 @@ impl Mixer {
                     debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
                     return Ok(());
                 }
-                self.send_mosaic_job(None);
+                self.send_mosaic_job(None)?;
             }
         }
         // The preview lives in the mosaic's pipeline, so a mosaic that has
@@ -7259,7 +7259,7 @@ mod tests {
             full: false,
         });
         let shape = mix.mv.wanted().expect("a preview subscriber wants a mosaic too");
-        mix.multiview_demand(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
+        mix.multiview_demand_inline(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
             .expect("building the mosaic");
         mix.set_preview_cells(vec![
             crate::multiview::preview::Cell {
@@ -7935,7 +7935,7 @@ mod tests {
         let mut events = mix.events.subscribe();
         assert!(mix.status().multiview.cells.is_empty(), "no cells before a mosaic");
 
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Build(crate::multiview::MultiviewShape { fps: 8, width: 320, height: 180 }),
             generation: mix.mv.generation(),
         })
@@ -7976,7 +7976,7 @@ mod tests {
         );
 
         mix.start().expect("the programme starts");
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Build(crate::multiview::MultiviewShape {
                 fps: 5,
                 width: 320,
@@ -7988,7 +7988,7 @@ mod tests {
         assert!(mix.return_pad.is_some(), "the mosaic was built without the programme return");
         assert!(q.static_pad("sink").and_then(|p| p.peer()).is_some());
 
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Teardown,
             generation: 0,
         })
