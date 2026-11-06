@@ -1,0 +1,28 @@
+name: amd64 baseline
+description: >
+  Put a Linux x86_64 runner back on Ubuntu's baseline amd64 packages. The
+  ubuntu-26.04 image turns on apt's amd64v3 variant, so its packages and its
+  gcc are built for x86-64-v3 (Haswell, 2013): gcc then emits BMI and AVX2 by
+  default, and every library copied into the .deb and the AppImage is the v3
+  build. A release built that way dies with "Illegal instruction" on an older
+  CPU. Does nothing on a runner without the variant.
+runs:
+  using: composite
+  steps:
+    - name: Baseline amd64 packages and compiler
+      shell: bash
+      run: |
+        [ "$(uname -m)" = x86_64 ] || exit 0
+        conf=$(grep -lrs 'Architecture-Variants' /etc/apt/apt.conf.d/ || true)
+        [ -n "$conf" ] || { echo "no apt variant set here"; exit 0; }
+        echo 'APT::Architecture-Variants "amd64";' | sudo tee $conf
+        sudo apt-get update -qq
+        list() { dpkg-query -W -f='${binary:Package} ${Architecture-Variant}\n' | awk '$2 != "" && $2 != "amd64" { print $1 }'; }
+        v3=$(list)
+        echo "$(echo "$v3" | wc -w) packages were installed as a variant build; reinstalling them as baseline amd64"
+        sudo apt-get install -y -qq --reinstall $v3 > /tmp/baseline-reinstall.log 2>&1 || { tail -40 /tmp/baseline-reinstall.log; exit 1; }
+        left=$(list)
+        [ -z "$left" ] || echo "still a variant build, could not be fetched as baseline: $left"
+        march=$(gcc -Q --help=target | awk '$1 == "-march=" { print $2 }')
+        echo "gcc now defaults to -march=$march"
+        [ "$march" = x86-64 ] || { echo "::error::gcc still defaults to -march=$march"; exit 1; }
