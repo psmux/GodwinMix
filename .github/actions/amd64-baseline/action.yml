@@ -15,6 +15,8 @@ runs:
         [ "$(uname -m)" = x86_64 ] || exit 0
         conf=$(grep -lrs 'Architecture-Variants' /etc/apt/apt.conf.d/ || true)
         [ -n "$conf" ] || { echo "no apt variant set here"; exit 0; }
+        # apt warns that "amd64" is not a variant name, and then fetches the
+        # baseline lists only, which is what is wanted.
         echo 'APT::Architecture-Variants "amd64";' | sudo tee $conf
         sudo apt-get update -qq
         list() { dpkg-query -W -f='${binary:Package} ${Architecture-Variant}\n' | awk '$2 != "" && $2 != "amd64" { print $1 }'; }
@@ -22,7 +24,7 @@ runs:
         echo "$(echo "$v3" | wc -w) packages were installed as a variant build; reinstalling them as baseline amd64"
         sudo apt-get install -y -qq --reinstall $v3 > /tmp/baseline-reinstall.log 2>&1 || { tail -40 /tmp/baseline-reinstall.log; exit 1; }
         left=$(list)
-        [ -z "$left" ] || echo "still a variant build, could not be fetched as baseline: $left"
+        [ -z "$left" ] || { echo "::error::still a variant build, not fetched as baseline amd64: $left"; exit 1; }
         march=$(gcc -Q --help=target | awk '$1 == "-march=" { print $2 }')
         echo "gcc now defaults to -march=$march"
         [ "$march" = x86-64 ] || { echo "::error::gcc still defaults to -march=$march"; exit 1; }
