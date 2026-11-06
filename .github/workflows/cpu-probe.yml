@@ -1,0 +1,36 @@
+name: cpu probe
+on:
+  push:
+    branches: [diag/cpu-baseline]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Host
+        run: |
+          set -x
+          grep -m1 "model name" /proc/cpuinfo
+          apt --version
+          apt-config dump | grep -i -E "variant|architecture" || true
+          grep -ril variant /etc/apt/ || true
+          cat /etc/apt/apt.conf.d/*variant* 2>/dev/null || true
+          gcc -v 2>&1 | tail -3
+          gcc -Q --help=target | grep -E "^\s+-march="
+          echo 'int f(unsigned a,unsigned b){return a&~b;}' > t.c && gcc -O2 -c t.c && objdump -d t.o | grep -E "andn|and " || true
+          dpkg -s libgstreamer1.0-0 libgcc-s1 gcc-15 | grep -E "^(Package|Version|Architecture)" || true
+          apt-cache policy libgstreamer1.0-0 | head -12
+          zcat /usr/share/doc/gcc-15/changelog.Debian.gz 2>/dev/null | head -3 || true
+      - name: Container
+        run: |
+          docker run --rm ubuntu:26.04 sh -c 'apt --version; apt-config dump | grep -i -E "variant|architecture"; apt-get update 2>&1 | grep -c amd64v3; apt-get install -y -qq gcc binutils >/dev/null 2>&1; gcc -Q --help=target | grep -E "^\s+-march="; echo "int f(unsigned a,unsigned b){return a&~b;}" > t.c && gcc -O2 -c t.c && objdump -d t.o | grep -E "andn|and "'
+      - name: Container with variants off
+        run: |
+          docker run --rm ubuntu:26.04 sh -c 'echo "APT::Architecture-Variants \"amd64\";" > /etc/apt/apt.conf.d/99baseline; apt-get update 2>&1 | grep -c amd64v3; apt-get install -y -qq libgstreamer1.0-0 binutils >/dev/null 2>&1; objdump -d --no-show-raw-insn /usr/lib/x86_64-linux-gnu/libgstreamer-1.0.so.0 | grep -cE "\s(andn|shlx|sarx|shrx|vpbroadcast|vfmadd)" '
+      - name: Host with variants off
+        run: |
+          echo 'APT::Architecture-Variants "amd64";' | sudo tee /etc/apt/apt.conf.d/99baseline
+          sudo apt-get update 2>&1 | grep -c amd64v3 || true
+          sudo apt-get install -y -qq --reinstall libgstreamer1.0-0 gcc-15 cpp-15 libgcc-15-dev >/dev/null 2>&1
+          objdump -d --no-show-raw-insn /usr/lib/x86_64-linux-gnu/libgstreamer-1.0.so.0 | grep -cE "\s(andn|shlx|sarx|shrx|vpbroadcast|vfmadd)" || true
+          gcc -Q --help=target | grep -E "^\s+-march="
+          gcc -O2 -c t.c && objdump -d t.o | grep -E "andn|and " || true
