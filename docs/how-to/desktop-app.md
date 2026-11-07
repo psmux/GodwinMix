@@ -112,9 +112,10 @@ where the terminal has not been given automation permission. Add
 `--skip-jenkins` when driving `bundle_dmg.sh` by hand, or grant the permission;
 the image itself is fine either way.
 
-Nothing is signed or notarised. `bundle.macOS.signingIdentity` and the Windows
-certificate settings are deliberately absent: a release job adds them with its
-own secrets.
+A local build is signed ad hoc and not notarised. The release signs the Mac
+app with a Developer ID and notarises it after Tauri has built it
+([Sign the macOS builds](sign-macos-builds.md)), and signs the Windows
+installers with its own secrets ([Sign the Windows builds](sign-windows-builds.md)).
 
 ## First launch
 
@@ -594,14 +595,12 @@ shape the loader already reads.
 
 The cost of that choice is signing. Tauri signs the frameworks, the external
 binaries and the app bundle, and does not walk `Contents/Resources` looking for
-executables, so a build with a signing identity would leave the three plugin
-binaries unsigned and fail notarisation. The bundled GStreamer has the same
-hole and deals with it in the trimmer, which signs each file it rewrites.
-Nothing in this repository is signed yet, so neither hole bites today; whoever
-turns signing on signs these three before `cargo tauri build`, and adds
-`com.apple.security.device.camera` and `com.apple.security.device.audio-input`
-to an entitlements file, because the hardened runtime Tauri asks for when it
-signs refuses a camera without them.
+executables, so a build signed by Tauri alone would leave the plugin binaries
+unsigned and fail notarisation. The release does not ask Tauri to sign: once
+the app is built, `dev/sign-macos.sh` signs every program in it inside out with
+the Developer ID, with `tauri-app/entitlements.plist`. The camera and
+microphone entitlements in that file matter here, because the hardened runtime
+denies a camera to a program without them.
 
 ### How they reach the mixer
 

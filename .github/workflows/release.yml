@@ -30,13 +30,14 @@ jobs:
   core:
     name: core (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    # The Windows leg of a release tag is code signed, and only it gets the
-    # windows-signing environment and its Certum secrets. Every other leg,
-    # and a rehearsal run by hand, gets an empty name, which GitHub treats as
-    # no environment at all (sign-test.yml checks that). The environment
-    # itself admits only v* tags.
-    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
+    # 60 to build, and the notary service's queue on the macOS legs.
+    timeout-minutes: 90
+    # On a release tag the Windows leg gets the windows-signing environment
+    # and its Certum secrets, and the macOS legs get macos-signing and the
+    # Apple ones. Every other leg, and a rehearsal run by hand, gets an empty
+    # name, which GitHub treats as no environment at all (sign-test.yml checks
+    # that). Both environments admit only v* tags.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.os == 'windows-latest' && 'windows-signing' || startsWith(matrix.os, 'macos') && 'macos-signing') || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -54,6 +55,32 @@ jobs:
             archive: zip
     steps:
       - uses: actions/checkout@v4
+      # A v* tag ships a Mac build signed with the Developer ID and notarised,
+      # or nothing: `check` fails the job when a secret is missing, before an
+      # hour of building. A run by hand gets no environment and no secrets, and
+      # is signed ad hoc as before. The keychain and the notary key are
+      # checked here, in seconds. dev/sign-macos.sh and
+      # docs/how-to/sign-macos-builds.md have the rest.
+      - name: Apple signing (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            ./dev/sign-macos.sh check
+          elif [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "no Apple signing secrets in this run, so it is signed ad hoc"; exit 0
+          fi
+          ./dev/sign-macos.sh keychain
+          ./dev/sign-macos.sh preflight
+          echo "MACOS_SIGN=1" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
@@ -87,6 +114,24 @@ jobs:
 
       - name: Build
         run: cargo build --release --locked --bins
+
+      # Before the archive, like the Windows signature. A loose program cannot
+      # carry a stapled ticket, so macOS asks Apple for it the first time the
+      # program runs; the notarisation is what it finds there.
+      - name: Sign and notarise (macOS)
+        if: env.MACOS_SIGN == '1'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          ./dev/sign-macos.sh sign target/release/godwinmix target/release/gmx
+          ./dev/sign-macos.sh verify target/release/godwinmix target/release/gmx
+          (cd target/release && zip -q "$RUNNER_TEMP/core.zip" godwinmix gmx)
+          ./dev/sign-macos.sh notarize "$RUNNER_TEMP/core.zip"
 
       # Signed before they go in the archive, so the zip and SHA256SUMS are
       # made from the signed files. A release tag ships signed Windows
@@ -145,6 +190,10 @@ jobs:
         shell: pwsh
         run: ./.github/windows-signing/logout.ps1
 
+      - name: Remove the signing keychain (macOS)
+        if: always() && env.MACOS_SIGN == '1'
+        run: ./dev/sign-macos.sh cleanup
+
   # Every Linux artefact, x86_64 and arm64: the server archives, the .deb and
   # the AppImage. Built in the Ubuntu 22.04 baseline image so they run on
   # Ubuntu 22.04 and later, Debian 12 and later, Raspberry Pi OS and old CPUs,
@@ -158,13 +207,14 @@ jobs:
   desktop:
     name: desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    # The Windows leg of a release tag is code signed, and only it gets the
-    # windows-signing environment and its Certum secrets. Every other leg,
-    # and a rehearsal run by hand, gets an empty name, which GitHub treats as
-    # no environment at all (sign-test.yml checks that). The environment
-    # itself admits only v* tags.
-    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
+    # Two notarisations on the macOS legs, the app and the disk image.
+    timeout-minutes: 180
+    # On a release tag the Windows leg gets the windows-signing environment
+    # and its Certum secrets, and the macOS legs get macos-signing and the
+    # Apple ones. Every other leg, and a rehearsal run by hand, gets an empty
+    # name, which GitHub treats as no environment at all (sign-test.yml checks
+    # that). Both environments admit only v* tags.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.os == 'windows-latest' && 'windows-signing' || startsWith(matrix.os, 'macos') && 'macos-signing') || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -208,6 +258,32 @@ jobs:
       ON_DEMAND_PLUGINS_BUDGET_MB: 80
     steps:
       - uses: actions/checkout@v4
+      # A v* tag ships a Mac build signed with the Developer ID and notarised,
+      # or nothing: `check` fails the job when a secret is missing, before an
+      # hour of building. A run by hand gets no environment and no secrets, and
+      # is signed ad hoc as before. The keychain and the notary key are
+      # checked here, in seconds. dev/sign-macos.sh and
+      # docs/how-to/sign-macos-builds.md have the rest.
+      - name: Apple signing (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            ./dev/sign-macos.sh check
+          elif [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "no Apple signing secrets in this run, so it is signed ad hoc"; exit 0
+          fi
+          ./dev/sign-macos.sh keychain
+          ./dev/sign-macos.sh preflight
+          echo "MACOS_SIGN=1" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
@@ -437,6 +513,38 @@ jobs:
         # image from, and the check below and the collect step find nothing.
         run: cargo tauri build --bundles app,dmg
 
+      # Tauri signed the app ad hoc. Here every program in it is signed again
+      # with the Developer ID and the hardened runtime, inside out, and the
+      # app is notarised and stapled. The disk image is then made again from
+      # that app, signed, notarised and stapled itself, under the name Tauri
+      # gave it. The last check is the one a person's Mac makes: the app as
+      # it comes off the disk image is "Notarized Developer ID".
+      - name: Developer ID signature and notarisation (macOS)
+        if: env.MACOS_SIGN == '1'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          app=tauri-app/target/release/bundle/macos/GodwinMix.app
+          dmg=$(find tauri-app/target/release/bundle/dmg -name 'GodwinMix_*.dmg' | head -1)
+          [ -n "$dmg" ] || { echo "::error::Tauri made no disk image" >&2; exit 1; }
+          ./dev/sign-macos.sh sign "$app"
+          ./dev/sign-macos.sh verify "$app"
+          ./dev/sign-macos.sh notarize "$app"
+          ./dev/sign-macos.sh dmg "$app" "$dmg"
+          ./dev/sign-macos.sh notarize "$dmg"
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" >/dev/null
+          verdict=$(spctl -a -vv -t exec "$mnt/GodwinMix.app" 2>&1 || true)
+          hdiutil detach "$mnt" >/dev/null
+          echo "$verdict"
+          grep -q 'source=Notarized Developer ID' <<<"$verdict" \
+            || { echo "::error::Gatekeeper does not accept the app on $dmg as notarised" >&2; exit 1; }
+
       # An installer with no media stack inside it is the failure this release
       # is meant to make impossible, so the bundle is opened and looked at.
       - name: The runtime really is inside the app (macOS)
@@ -467,7 +575,9 @@ jobs:
             # library the mixer links ("different Team IDs"). The 0.3.24 app
             # shipped that way; the runner did not enforce it, so it is looked
             # for here rather than trusted to the launch below.
-            if codesign -dv "$f" 2>&1 | grep -q 'flags=.*runtime'; then
+            # A Developer ID build has the hardened runtime on every program,
+            # which the step above checked.
+            if [ "${MACOS_SIGN:-}" != 1 ] && codesign -dv "$f" 2>&1 | grep -q 'flags=.*runtime'; then
               echo "::error::$f is signed with the hardened runtime, which an ad hoc app cannot load its libraries under" >&2; exit 1
             fi
           done
@@ -525,6 +635,10 @@ jobs:
         with:
           name: desktop-${{ matrix.os }}
           path: bundles/
+
+      - name: Remove the signing keychain (macOS)
+        if: always() && env.MACOS_SIGN == '1'
+        run: ./dev/sign-macos.sh cleanup
 
       - name: Log out of Certum SimplySign (Windows)
         if: always() && runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')

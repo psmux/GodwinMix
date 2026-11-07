@@ -12,12 +12,11 @@ first web page on an Apple silicon Mac took 2 minutes, then started by itself;
 see [What the first run sets up by itself](../../CONTRIBUTING.md#what-the-first-run-sets-up-by-itself).
 The renderer's build needs CMake and Ninja: `brew install cmake ninja`.
 
-Open the disk image, drag the app to Applications, right click it the first
-time. The media stack travels inside the app, so there is nothing else to
-install.
+Open the disk image and drag the app to Applications. The media stack travels
+inside the app, so there is nothing else to install.
 
 * [Which file to download](#which-file-to-download)
-* [The Gatekeeper warning](#the-gatekeeper-warning)
+* [Signed and notarised](#signed-and-notarised)
 * [What is inside the app](#what-is-inside-the-app)
 * [Where your config and your logs live](#where-your-config-and-your-logs-live)
 * [Pointing the app at a mixer on another machine](#pointing-the-app-at-a-mixer-on-another-machine)
@@ -47,34 +46,29 @@ Check what you downloaded against `SHA256SUMS` in the same release:
 shasum -a 256 GodwinMix_0.2.0_aarch64.dmg
 ```
 
-## The Gatekeeper warning
+## Signed and notarised
 
-The app is not signed with an Apple Developer ID and not notarised, so macOS
-refuses to open it on a double click: "GodwinMix cannot be opened because the
-developer cannot be verified."
+From 0.3.32 the app, the disk image and the `godwinmix` and `gmx` in the core
+archive are signed with an Apple Developer ID and notarised by Apple, so the
+app opens on a double click. The first time, macOS says it was downloaded from
+the internet and asks whether to open it; that is the ordinary question for
+any downloaded app.
 
-The way past it, once:
-
-1. Find GodwinMix in Applications.
-2. Control click it, and choose **Open**.
-3. The same warning appears with an **Open** button on it this time. Click it.
-
-macOS remembers, and every later launch is an ordinary double click.
-
-If the dialog gives you no Open button at all, the file carries a quarantine
-flag from the browser that downloaded it. Clear it:
+To see what macOS sees:
 
 ```sh
-xattr -dr com.apple.quarantine /Applications/GodwinMix.app
+spctl -a -vv -t exec /Applications/GodwinMix.app
 ```
 
-Run that only on a file whose SHA256 you have checked against the release.
+It should say `accepted` and `source=Notarized Developer ID`.
 
-None of this is macOS finding something wrong with the app. It is macOS saying
-it does not know who built it, which is true until the project pays for a
-Developer ID and a notarisation run. `bundle.macOS.signingIdentity` is
-deliberately absent from `tauri.conf.json`; a release job will add it with its
-own secrets.
+Releases up to 0.3.31 were signed ad hoc only. macOS 26 refuses them with
+"Apple could not verify GodwinMix is free of malware", and older versions with
+"the developer cannot be verified". Install the current release instead. If
+you have to run an old one, open System Settings, Privacy and Security, and
+choose **Open Anyway** beside the message about GodwinMix, once.
+
+[Sign the macOS builds](sign-macos-builds.md) says how a release is signed.
 
 ## What is inside the app
 
@@ -188,8 +182,9 @@ gmx doctor
 
 ## When it does not start
 
-**"The developer cannot be verified".** See
-[the Gatekeeper warning](#the-gatekeeper-warning) above.
+**"Apple could not verify GodwinMix is free of malware", or "the developer
+cannot be verified".** That is a release from 0.3.31 or earlier. See
+[signed and notarised](#signed-and-notarised) above.
 
 **"The mixer did not answer within 25 seconds".** The first launch builds
 GStreamer's plugin registry. Try again: the second start uses the cache in
