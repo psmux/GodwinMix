@@ -175,8 +175,15 @@ notarize() {
   fi
   [ "$upload" = "$path" ] || rm -f "$upload"
   case "$path" in *.zip) echo "notarised $path"; return ;; esac
-  xcrun stapler staple "$path"
-  xcrun stapler validate "$path"
+  # stapler fetches the ticket from Apple's CloudKit, and a dropped connection
+  # there failed the 0.3.32 Intel job after Apple had accepted the app.
+  local try
+  for try in 1 2 3 4 5; do
+    xcrun stapler staple "$path" && xcrun stapler validate "$path" && break
+    [ "$try" -lt 5 ] || die "could not staple the ticket to $path after five tries"
+    echo "stapling $path failed, trying again in $((try * 20)) s"
+    sleep $((try * 20))
+  done
   echo "notarised and stapled $path"
 }
 
