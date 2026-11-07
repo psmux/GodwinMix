@@ -14,6 +14,9 @@
 #   * GStreamer 1.28.9, all seven modules. 22.04 has 1.20.
 #   * libnice 0.1.24, because webrtcbin in 1.28 needs 0.1.23 or later.
 #   * SVT-AV1 3.1.2, because svtav1enc needs 1.1 or later and 22.04 has 0.9.
+#   * orc 0.4.44, because 1.28 needs 0.4.34 for the SIMD paths in videoconvert,
+#     audioconvert and the compositor, and 22.04 has 0.4.32. Without it they
+#     run as plain C, which a Pi and an old CPU feel first.
 #   * FFmpeg 7.1.5, static and private to gst-libav, the way
 #     dev/build-linux-libav.sh did it on the old runner: decoders for any input,
 #     and only the AAC encoder, the one the codec catalogue selects.
@@ -37,6 +40,7 @@ declare -A SHA=(
     [ffmpeg-7.1.5.tar.xz]=de668509caf9e35e3cd162473441fdb29538c6d96ed080292b3cf9e6fc5d558f
     [libnice-0.1.24.tar.gz]=1da5ac13ed5d4e175e0d2d46ad3748c6635244f8f3eb2b8e31578ef59aa2ddce
     [SVT-AV1-v3.1.2.tar.gz]=d0d73bfea42fdcc1222272bf2b0e2319e9df5574721298090c3d28315586ecb1
+    [orc-0.4.44.tar.xz]=4aeb97aea2b58224029dc2b23d7d064cfa990cb4fb8c4da440bcbe9c95bc5d2d
 )
 
 # Fetch one tarball, check it, unpack it, and print the directory it made.
@@ -52,10 +56,25 @@ fetch() {
 
 # Everything lands in lib/, never lib/<multiarch>/, so the trimmer and the
 # loader find the prefix's libraries before the system's.
+#
+# Options a module does not define are dropped and named: the seven modules
+# share few option names, and meson stops at the first one it does not know.
+# A dropped option that mattered shows up as a missing element in
+# dev/bundle-gstreamer.sh, which fails.
 meson_build() {
     local src="$1"; shift
+    local file="$src/meson.options" kept=() arg name
+    [[ -f "$file" ]] || file="$src/meson_options.txt"
+    for arg in "$@"; do
+        name="${arg#-D}"; name="${name%%=*}"
+        if [[ "$arg" != -D* ]] || grep -q "option('$name'" "$file" 2>/dev/null; then
+            kept+=("$arg")
+        else
+            echo "${src##*/} has no option $name, left out" >&2
+        fi
+    done
     meson setup "$src/_build" "$src" --prefix="$PREFIX" --libdir=lib \
-        --buildtype=release -Db_lto=false --wrap-mode=nodownload "$@"
+        --buildtype=release -Db_lto=false --wrap-mode=nodownload "${kept[@]}"
     meson compile -C "$src/_build" -j "$JOBS"
     meson install -C "$src/_build"
 }
@@ -68,6 +87,10 @@ mkdir -p "$PREFIX"
 GSTSRC=https://gstreamer.freedesktop.org/src
 
 # --- the libraries 22.04 has too old -----------------------------------------
+
+orc="$(fetch "https://gstreamer.freedesktop.org/src/orc/orc-0.4.44.tar.xz")"
+meson_build "$orc" -Dexamples=disabled -Dtests=disabled -Dbenchmarks=disabled \
+    -Dgtk_doc=disabled -Dorc-test=disabled
 
 svt="$(fetch https://gitlab.com/AOMediaCodec/SVT-AV1/-/archive/v3.1.2/SVT-AV1-v3.1.2.tar.gz)"
 # SVT-AV1 picks its AVX2 and AVX-512 kernels at run time, so a baseline
@@ -94,6 +117,22 @@ PRIVATE="$WORK/ffmpeg-private"
     make -j"$JOBS"
     make install
 )
+# The distribution's compression archives are not PIC, so a static link of
+# them into the plugin fails. FFmpeg is embedded; these three stay shared.
+python3 - "$PRIVATE/lib/pkgconfig" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+for pc in Path(sys.argv[1]).glob("*.pc"):
+    text = pc.read_text()
+    for name in ("z", "bz2", "lzma"):
+        lib = subprocess.check_output(["gcc", f"-print-file-name=lib{name}.so"], text=True).strip()
+        if not Path(lib).is_file():
+            raise SystemExit(f"install the development package for lib{name}")
+        text = re.sub(rf"(?<!\S)-l{name}(?=\s|$)", str(Path(lib).resolve()), text)
+    pc.write_text(text)
+PY
 
 # --- GStreamer ----------------------------------------------------------------
 
