@@ -29,6 +29,12 @@ env:
   CARGO_TERM_COLOR: always
   IMAGE: ghcr.io/${{ github.repository_owner }}/godwinmix-linux-baseline
 
+# Inside a container a step runs under sh unless told otherwise, and the
+# scripts here are bash.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # The image's tag is a hash of the files it is made from, so it is built
   # once per change to them and pulled every other time.
