@@ -41,9 +41,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
@@ -57,22 +54,9 @@ jobs:
             archive: zip
     steps:
       - uses: actions/checkout@v4
-      # The ubuntu-26.04 image installs Ubuntu's amd64v3 builds, and its gcc
-      # targets x86-64-v3. Without this a Linux build dies with "Illegal
-      # instruction" on a CPU older than 2013. See the action for the detail.
-      - name: Baseline amd64 packages (Linux)
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/amd64-baseline
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
-
-      - name: GStreamer (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev
 
       - name: GStreamer (macOS)
         if: runner.os == 'macOS' && matrix.os != 'macos-15-intel'
@@ -161,42 +145,14 @@ jobs:
         shell: pwsh
         run: ./.github/windows-signing/logout.ps1
 
-  # A Raspberry Pi and any arm64 server, built on GitHub's arm64 runner. It
-  # was built in an arm64 container under QEMU on an x86 runner, which took
-  # 1 h 51 min for 0.3.1 against a two hour limit and held every release back
-  # by over an hour; natively it is a build like the x86 one. It is the
-  # reason a Pi user can install from a release instead of compiling on the
-  # board.
-  core-aarch64:
-    name: core (aarch64-unknown-linux-gnu)
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev pkg-config
-          cargo build --release --locked --bins
-          strip target/release/godwinmix target/release/gmx
-
-      - name: Package
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
-          name="godwinmix-${version}-aarch64-unknown-linux-gnu"
-          mkdir -p "pkg/$name"
-          sudo cp target/release/godwinmix target/release/gmx "pkg/$name/"
-          cp README.md LICENSE godwinmix.example.toml deploy/systemd/godwinmix.service "pkg/$name/"
-          sudo chown -R "$USER" pkg
-          tar czf "$name.tar.gz" -C pkg "$name"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: core-aarch64-unknown-linux-gnu
-          path: "*.tar.gz"
+  # Every Linux artefact, x86_64 and arm64: the server archives, the .deb and
+  # the AppImage. Built in the Ubuntu 22.04 baseline image so they run on
+  # Ubuntu 22.04 and later, Debian 12 and later, Raspberry Pi OS and old CPUs,
+  # and proved on each before publish. See the workflow.
+  linux:
+    name: linux
+    uses: ./.github/workflows/linux-packages.yml
+    secrets: inherit
 
   # ---------------------------------------------------------------- desktop --
   desktop:
@@ -213,9 +169,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: linux
-            bundles: deb,appimage
           - os: macos-latest
             platform: macos
             bundles: app
@@ -255,39 +208,9 @@ jobs:
       ON_DEMAND_PLUGINS_BUDGET_MB: 80
     steps:
       - uses: actions/checkout@v4
-      # The ubuntu-26.04 image installs Ubuntu's amd64v3 builds, and its gcc
-      # targets x86-64-v3. Without this a Linux build dies with "Illegal
-      # instruction" on a CPU older than 2013. See the action for the detail.
-      - name: Baseline amd64 packages (Linux)
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/amd64-baseline
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
-
-      # The desktop shell is a webview pointed at the mixer's own URL, so it
-      # does not link GStreamer. It does need the platform's webview toolkit,
-      # and it needs a GStreamer to cut the bundled runtime out of.
-      - name: Tauri dependencies and GStreamer (Linux)
-        if: runner.os == 'Linux'
-        # A hung package mirror sat here for 78 minutes on the v0.2.1
-        # release; the step normally takes two or three.
-        timeout-minutes: 15
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev patchelf libssl-dev libfuse2 \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            gstreamer1.0-libav gstreamer1.0-tools \
-            gstreamer1.0-nice gstreamer1.0-alsa gstreamer1.0-pipewire
-      # The last three are packages of their own on Debian and Ubuntu, outside
-      # the four plugin sets. gstreamer1.0-nice is libnice's plugin: without
-      # it the trimmed tree had no nicesrc, and the v0.2.0 AppImage and .deb
-      # could take no phone camera. -pipewire is screen capture on Wayland,
-      # -alsa the audio fallback with no PulseAudio. plugins-ugly is x264enc,
-      # which the HLS ladder and file conversion make by name.
 
       # libnice-gstreamer is the same plugin as a Homebrew formula of its own.
       - name: GStreamer (macOS)
@@ -386,7 +309,6 @@ jobs:
             # see until the next one.
             Windows) choco install -y --no-progress cmake ninja
                      export PATH="/c/Program Files/CMake/bin:$PATH" ;;
-            *) sudo apt-get install -y cmake ninja-build ;;
           esac
           ./dev/bundle-browser.sh
 
@@ -394,22 +316,9 @@ jobs:
       # bundle.resources. Without this step the installers go out expecting
       # the operator to install a 527 MB GStreamer first, which is the thing
       # this whole arrangement exists to avoid.
-      - name: Build private FFmpeg for the Linux runtime
-        if: runner.os == 'Linux'
-        run: |
-          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get update
-          sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm zlib1g-dev libbz2-dev liblzma-dev
-          ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
-
       - name: The bundled GStreamer (Unix)
         if: runner.os != 'Windows'
-        run: |
-          if [ "${{ runner.os }}" = Linux ]; then
-            ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb "$RUNTIME_BUDGET_MB"
-          else
-            ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
-          fi
+        run: ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
 
       - name: The bundled GStreamer (Windows)
         if: runner.os == 'Windows'
@@ -666,7 +575,7 @@ jobs:
   # --------------------------------------------------------------- release ---
   publish:
     name: publish the release
-    needs: [core, core-aarch64, desktop, image]
+    needs: [core, linux, desktop, image]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -722,12 +631,16 @@ jobs:
 
             Desktop: the `.dmg` on macOS (`_aarch64` for Apple silicon, `_x64`
             for Intel); the `-setup.exe` or the `.msi` on
-            Windows; the `.deb` on Debian and Ubuntu, or the `.AppImage` on any
-            other Linux. Each carries its own trimmed GStreamer, so nothing
-            else needs installing (see the README, Platforms).
+            Windows; the `.deb` on Debian, Ubuntu and Raspberry Pi OS
+            (`_amd64` for a PC, `_arm64` for a Pi 4 or 5), or the `.AppImage`
+            on any other Linux. The Linux ones run on Ubuntu 22.04, Debian 12
+            and later, with or without a GPU, on any 64 bit CPU. Each carries
+            its own trimmed GStreamer, so nothing else needs installing (see
+            the README, Platforms).
 
             Server: the archive for your platform holds `godwinmix` and `gmx`,
             the same binary under two names, plus the example config. The
-            distribution's GStreamer packages are the only dependency.
+            distribution's GStreamer packages, 1.20 or later, are the only
+            dependency.
 
             Check what you downloaded against `SHA256SUMS`.

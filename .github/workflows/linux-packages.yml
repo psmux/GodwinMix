@@ -1,0 +1,249 @@
+name: linux packages
+
+# Every Linux artefact a release ships, for x86_64 and arm64, built where it
+# runs on the most machines, then proved on them.
+#
+#   * The build runs inside dev/linux-baseline/Dockerfile: Ubuntu 22.04,
+#     glibc 2.35, baseline x86-64, GStreamer 1.28.9 built from source. Built
+#     on a runner's own Ubuntu instead, 0.3.30 needed glibc 2.43 and 0.3.29 a
+#     2013 or newer CPU, and neither started on most Linux machines or any
+#     Raspberry Pi.
+#   * dev/check-linux-baseline.py fails the job if any file inside the
+#     archive, the .deb or the AppImage needs more than that.
+#   * The .deb is installed on Ubuntu 22.04 and 24.04 and Debian 12 and 13,
+#     and its --headless-check has to pass on each. On x86_64 the mixer and
+#     the bundled GStreamer also run under QEMU as a Nehalem, a 2008 CPU with
+#     no AVX and no BMI.
+#
+# Called by release.yml, which publishes what this uploads, and by
+# platforms.yml, so a branch that breaks the baseline fails before a tag does.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  CARGO_TERM_COLOR: always
+  IMAGE: ghcr.io/${{ github.repository_owner }}/godwinmix-linux-baseline
+
+jobs:
+  # The image's tag is a hash of the files it is made from, so it is built
+  # once per change to them and pulled every other time.
+  tag:
+    name: baseline image tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: echo "tag=$(cat dev/linux-baseline/* | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+  image:
+    name: baseline image (${{ matrix.arch }})
+    needs: tag
+    runs-on: ${{ matrix.runner }}
+    # About 25 minutes when GStreamer has to be compiled, seconds otherwise.
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push, unless this tag is already there
+        env:
+          REF: ${{ env.IMAGE }}:${{ needs.tag.outputs.tag }}-${{ matrix.arch }}
+        run: |
+          if docker manifest inspect "$REF" >/dev/null 2>&1; then
+            echo "$REF is already built"
+            exit 0
+          fi
+          docker build --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -t "$REF" dev/linux-baseline
+          docker push "$REF"
+
+  build:
+    name: build (${{ matrix.arch }})
+    needs: [tag, image]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/godwinmix-linux-baseline:${{ needs.tag.outputs.tag }}-${{ matrix.arch }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, triple: x86_64-unknown-linux-gnu, runner: ubuntu-latest }
+          - { arch: arm64, triple: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm }
+    env:
+      # The same numbers release.yml uses for the other platforms.
+      RUNTIME_BUDGET_MB: 160
+      PLUGINS_BUDGET_MB: 20
+      ON_DEMAND_PLUGINS_BUDGET_MB: 80
+      # No FUSE in a container. The AppImage tools run unpacked instead.
+      APPIMAGE_EXTRACT_AND_RUN: 1
+    steps:
+      - uses: actions/checkout@v4
+      # The image's toolchain is whatever was stable when it was built.
+      - name: Rust stable
+        run: rustup update --no-self-update stable && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: baseline-${{ needs.tag.outputs.tag }}
+          workspaces: |
+            .
+            tauri-app
+
+      - name: The mixer
+        run: |
+          cargo build --release --locked --bins
+          strip target/release/godwinmix target/release/gmx
+
+      # For a server or a Pi with no desktop: the two binaries and the
+      # example config. The distribution's GStreamer, 1.20 or later, is the
+      # one dependency, which is what the mixer was compiled against.
+      - name: The server archive
+        run: |
+          # The tag without its v, or the commit on a branch or a rehearsal.
+          version="${GITHUB_REF_NAME#v}"
+          [ "$version" = "$GITHUB_REF_NAME" ] && version="${GITHUB_SHA::7}"
+          name="godwinmix-${version}-${{ matrix.triple }}"
+          mkdir -p "pkg/$name" out
+          cp target/release/godwinmix target/release/gmx "pkg/$name/"
+          cp README.md LICENSE godwinmix.example.toml deploy/systemd/godwinmix.service "pkg/$name/"
+          tar czf "out/$name.tar.gz" -C pkg "$name"
+
+      - name: The mixer, as a sidecar
+        run: cp target/release/godwinmix "tauri-app/binaries/godwinmix-${{ matrix.triple }}"
+
+      - name: The device plugins, inside the app
+        run: |
+          ./dev/bundle-plugins.sh --budget-mb "$PLUGINS_BUDGET_MB"
+          ./dev/bundle-plugins.sh --on-demand --budget-mb "$ON_DEMAND_PLUGINS_BUDGET_MB"
+
+      - name: The browser renderer, inside the app
+        run: ./dev/bundle-browser.sh
+
+      # The image's GStreamer 1.28, trimmed. va, nvcodec and v4l2codecs are
+      # kept by name, so a machine with an Intel, AMD or NVIDIA GPU, or a Pi's
+      # encoder, gets hardware H.264 even though this runner has no GPU.
+      - name: The bundled GStreamer
+        run: ./dev/bundle-gstreamer.sh --from /opt/gst --budget-mb "$RUNTIME_BUDGET_MB"
+
+      - name: The cutout models and runtime, inside the app
+        run: bash dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
+
+      - name: Tauri CLI
+        run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
+
+      - name: Bundle
+        working-directory: tauri-app
+        run: cargo tauri build --bundles deb,appimage
+
+      - name: Collect
+        run: |
+          find tauri-app/target/release/bundle -type f \( -name '*.deb' -o -name '*.AppImage' \) \
+            -exec cp {} out/ \;
+          ls -la out
+
+      # The gate. Any file in any of the three that needs a newer glibc or
+      # libstdc++ than Ubuntu 22.04's, or a CPU level above baseline x86-64,
+      # fails the job and is named.
+      - name: Nothing needs more than the baseline
+        run: python3 dev/check-linux-baseline.py out/*
+
+      - name: Sizes
+        run: |
+          printf '### linux %s\n\n| artefact | size |\n|---|---|\n' "${{ matrix.arch }}" >> "$GITHUB_STEP_SUMMARY"
+          for f in out/*; do echo "| $(basename "$f") | $(du -m "$f" | cut -f1) MB |" >> "$GITHUB_STEP_SUMMARY"; done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core-${{ matrix.triple }}
+          path: out/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-${{ matrix.arch }}
+          path: |
+            out/*.deb
+            out/*.AppImage
+
+  # The .deb on the systems people actually have, each a plain image with
+  # nothing added but the package and a virtual screen.
+  compat:
+    name: runs on ${{ matrix.distro }} (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    container: ${{ matrix.distro }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        distro: ["ubuntu:22.04", "ubuntu:24.04", "debian:12", "debian:13"]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-linux-${{ matrix.arch }}
+          path: pkg
+      - name: Install the .deb
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y ./pkg/*.deb xvfb xauth
+      - name: The mixer starts
+        run: godwinmix --version
+      - name: --headless-check passes
+        run: xvfb-run -a godwinmix-desktop --headless-check
+
+  # A 2008 CPU: no AVX, no BMI, no MOVBE. qemu-user runs each program with the
+  # host's kernel, so this is the instruction set and nothing else.
+  old-cpu:
+    name: runs on a Nehalem (x86_64, 2008)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ubuntu:22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-linux-amd64
+          path: pkg
+      - name: Install the .deb and QEMU
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y ./pkg/*.deb qemu-user
+      - name: The mixer and the bundled GStreamer, on a Nehalem
+        run: |
+          G=/usr/lib/GodwinMix/gstreamer/linux
+          qemu-x86_64 -cpu Nehalem /usr/bin/godwinmix --version
+          # Plugins load inside the emulated process, not in a scanner that
+          # would run on the runner's own CPU and prove nothing.
+          export GST_REGISTRY=/tmp/registry.bin GST_REGISTRY_FORK=no \
+            GST_PLUGIN_SYSTEM_PATH=$G/lib/gstreamer-1.0 LD_LIBRARY_PATH=$G/lib
+          for element in compositor x264enc openh264enc webrtcbin srtsink rtmp2sink avdec_h264; do
+            qemu-x86_64 -cpu Nehalem $G/bin/gst-inspect-1.0 "$element" > /dev/null
+            echo "$element ok"
+          done
+          # A real encode, which is where a stray AVX instruction would be.
+          qemu-x86_64 -cpu Nehalem $G/bin/gst-launch-1.0 -q videotestsrc num-buffers=30 \
+            ! video/x-raw,width=640,height=360 ! x264enc ! h264parse ! fakesink
+          echo "x264 encode ok"

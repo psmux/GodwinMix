@@ -16,6 +16,9 @@
 #   docker build -t gmx-linux-baseline dev/linux-baseline
 #   docker run --rm -v "$PWD:/work" -w /work gmx-linux-baseline cargo build --release
 #
+# dev/check-linux-baseline.py then proves what came out needs no more than
+# this image's glibc and baseline x86-64.
+#
 # The release workflow builds this once per architecture and keeps it in
 # GHCR under a tag made from these files, so it is rebuilt only when they
 # change.
@@ -54,11 +57,16 @@ COPY build-gstreamer.sh /usr/local/bin/build-gstreamer.sh
 RUN /usr/local/bin/build-gstreamer.sh /opt/gst
 
 # The 1.28 prefix first, for pkg-config and for running anything built here.
+# Rust in fixed places: a GitHub container job runs with HOME=/github/home,
+# where a rustup that looked in ~ would find nothing.
 ENV PKG_CONFIG_PATH=/opt/gst/lib/pkgconfig \
-    PATH=/opt/gst/bin:/root/.cargo/bin:$PATH \
+    RUSTUP_HOME=/opt/rust/rustup CARGO_HOME=/opt/rust/cargo \
+    PATH=/opt/gst/bin:/opt/rust/cargo/bin:$PATH \
     LD_LIBRARY_PATH=/opt/gst/lib \
     GST_PLUGIN_SYSTEM_PATH=/opt/gst/lib/gstreamer-1.0 \
     GST_PLUGIN_SCANNER=/opt/gst/libexec/gstreamer-1.0/gst-plugin-scanner
 
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable \
-    && /root/.cargo/bin/rustup component add llvm-tools
+        --no-modify-path \
+    && rustup component add llvm-tools \
+    && chmod -R a+rwX /opt/rust
