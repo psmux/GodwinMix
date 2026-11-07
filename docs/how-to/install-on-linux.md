@@ -29,11 +29,32 @@ From the [releases page](https://github.com/psmux/GodwinMix/releases):
 
 | File | For |
 |---|---|
-| `godwinmix_<version>_amd64.deb` | Debian, Ubuntu and their derivatives |
-| `godwinmix_<version>_amd64.AppImage` | Fedora, Arch, openSUSE, anything else |
+| `GodwinMix_<version>_amd64.deb` | Debian, Ubuntu and their derivatives on a PC |
+| `GodwinMix_<version>_arm64.deb` | Raspberry Pi OS on a Pi 4 or 5, and Debian or Ubuntu on any arm64 board |
+| `GodwinMix_<version>_amd64.AppImage` | Fedora, Arch, openSUSE, anything else on a PC |
+| `GodwinMix_<version>_aarch64.AppImage` | the same on an arm64 machine |
 | `godwinmix-<version>-x86_64-unknown-linux-gnu.tar.gz` | a server: the mixer and `gmx`, no desktop app |
-| `godwinmix-<version>-aarch64-unknown-linux-gnu.tar.gz` | a Raspberry Pi or an arm64 server |
+| `godwinmix-<version>-aarch64-unknown-linux-gnu.tar.gz` | a Raspberry Pi or an arm64 server, no desktop app |
 | `ghcr.io/psmux/godwinmix:<version>` | a container, which carries its own GStreamer |
+
+### What it runs on
+
+Every Linux file is built on Ubuntu 22.04, so it needs glibc 2.35 or later:
+
+* Ubuntu 22.04 and later, Linux Mint 21 and later, Pop!_OS 22.04 and later
+* Debian 12 and later, and Raspberry Pi OS bookworm and later
+* Fedora 36 and later, and any rolling distribution
+
+Any 64 bit x86 CPU will do, including ones from before 2013 with no AVX, such
+as a Xeon X5670 or a Core 2. Every release is started under an emulated 2008
+Nehalem before it is published, and CI fails one that needs a newer glibc or a
+newer CPU than this. The server archive also needs the distribution's
+GStreamer, 1.20 or later, which every system on that list has.
+
+A GPU is optional. The bundled GStreamer carries the VA-API plugin for Intel
+and AMD, NVIDIA's encoder plugin, and the V4L2 one for a Raspberry Pi's
+encoder, and each comes on only when its hardware and driver are there. With
+none of them, x264 encodes on the CPU.
 
 Check what you downloaded against `SHA256SUMS` in the same release:
 
