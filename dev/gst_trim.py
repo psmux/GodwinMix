@@ -384,6 +384,15 @@ def is_system(name: str, platform: str) -> bool:
         "ld-linux-aarch64.so.1", "libresolv.so.2", "libutil.so.1",
         "libgl.so.1", "libgl.so", "libegl.so.1", "libx11.so.6", "libxext.so.6",
         "libdrm.so.2", "libgbm.so.1", "libwayland-client.so.0",
+        # Each of these talks to a service or loads a driver from the machine,
+        # and has to be the machine's own version to agree with it. A bundled
+        # libpulse from the build image asked for its libpulsecommon-15.99.so,
+        # which a system with PulseAudio 16 does not have, and libva refuses
+        # drivers newer than itself, which took the Intel and AMD encoders
+        # with it.
+        "libpulse.so.0", "libpulse-simple.so.0", "libpipewire-0.3.so.0",
+        "libasound.so.2", "libva.so.2", "libva-drm.so.2", "libva-x11.so.2",
+        "libva-wayland.so.2", "libvulkan.so.1",
     }
 
 

@@ -12,7 +12,8 @@
 #
 # Built here rather than taken from the distribution:
 #   * GStreamer 1.28.9, all seven modules. 22.04 has 1.20.
-#   * libnice 0.1.24, because webrtcbin in 1.28 needs 0.1.23 or later.
+#   * libnice 0.1.24 and its plugin, because webrtcbin in 1.28 needs 0.1.23
+#     or later.
 #   * SVT-AV1 3.1.2, because svtav1enc needs 1.1 or later and 22.04 has 0.9.
 #   * orc 0.4.44, because 1.28 needs 0.4.34 for the SIMD paths in videoconvert,
 #     audioconvert and the compositor, and 22.04 has 0.4.32. Without it they
@@ -101,10 +102,6 @@ cmake -S "$svt" -B "$svt/_build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build "$svt/_build" -j "$JOBS"
 cmake --install "$svt/_build"
 
-nice="$(fetch https://gitlab.freedesktop.org/libnice/libnice/-/archive/0.1.24/libnice-0.1.24.tar.gz)"
-meson_build "$nice" -Dgupnp=disabled -Dgstreamer=disabled -Dexamples=disabled \
-    -Dtests=disabled -Dintrospection=disabled -Dcrypto-library=openssl
-
 ffmpeg="$(fetch https://ffmpeg.org/releases/ffmpeg-7.1.5.tar.xz)"
 PRIVATE="$WORK/ffmpeg-private"
 (
@@ -145,6 +142,13 @@ meson_build "$(fetch "$GSTSRC/gstreamer/gstreamer-$GST.tar.xz")" "${COMMON[@]}" 
 meson_build "$(fetch "$GSTSRC/gst-plugins-base/gst-plugins-base-$GST.tar.xz")" "${COMMON[@]}" \
     -Dgl_api=opengl,gles2 -Dgl_platform=glx,egl -Dgl_winsys=x11,egl,wayland,gbm \
     -Dcdparanoia=disabled -Dtremor=disabled -Dlibvisual=disabled
+
+# libnice after the core and base, so its own GStreamer plugin (nicesrc and
+# nicesink, which webrtcbin builds by name) is built against 1.28. Before
+# gst-plugins-bad, whose webrtc library links it.
+nice="$(fetch https://gitlab.freedesktop.org/libnice/libnice/-/archive/0.1.24/libnice-0.1.24.tar.gz)"
+meson_build "$nice" -Dgupnp=disabled -Dgstreamer=enabled -Dexamples=disabled \
+    -Dtests=disabled -Dintrospection=disabled -Dcrypto-library=openssl
 
 meson_build "$(fetch "$GSTSRC/gst-plugins-good/gst-plugins-good-$GST.tar.xz")" "${COMMON[@]}" \
     -Dqt5=disabled -Dqt6=disabled -Dgtk3=disabled -Daalib=disabled -Dlibcaca=disabled \
