@@ -58,6 +58,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The Linux packages exactly as a release builds them, in the Ubuntu 22.04
+  # baseline image, checked for glibc and CPU level and started on four
+  # distributions and an emulated 2008 CPU. Not on a tag: release.yml runs the
+  # same workflow there.
+  linux-baseline:
+    name: linux baseline
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/linux-packages.yml
+    secrets: inherit
+
   platform:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
