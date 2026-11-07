@@ -116,6 +116,18 @@ PLATFORM = {
 # have to travel. GStreamer will not start without the first two.
 ALWAYS_PLUGINS = ["coreelements", "typefindfunctions", "playback", "app"]
 
+# Hardware plugins, kept by name whenever the runtime has them. Each one asks
+# the GPU driver what it can do when it loads, and registers no element on a
+# machine without that GPU. A CI runner has none, so looked up by element
+# name, as PLATFORM above is, they were never found: no Linux bundle before
+# 0.3.31 carried vah264enc or nvh264enc, and the person with the GPU got
+# x264 on the CPU.
+HARDWARE_PLUGINS = {
+    "windows": ["nvcodec", "qsv", "amfcodec", "d3d11", "d3d12", "mediafoundation"],
+    "macos": ["applemedia"],
+    "linux": ["va", "nvcodec", "v4l2codecs", "video4linux2"],
+}
+
 # Whole directories that never belong in a bundle, matched on any path part.
 NEVER = [
     "include", "pkgconfig", "gtk-doc", "man", "doc", "docs", "gir-1.0",
@@ -719,6 +731,17 @@ def code_elements(repo: Path) -> set[str]:
     return found
 
 
+def hardware_plugins(plugins: Path, platform: str) -> set[str]:
+    """The HARDWARE_PLUGINS for this platform whose file is in the runtime,
+    whatever the build machine's registry says about their elements."""
+    names = set()
+    for name in HARDWARE_PLUGINS.get(platform, []):
+        for leaf in (f"libgst{name}.so", f"libgst{name}.dylib", f"gst{name}.dll"):
+            if (plugins / leaf).is_file():
+                names.add(name)
+    return names
+
+
 def wanted_plugins(prefix: Path, plugins: Path, registry: Path,
                    platform: str, codecs: Path) -> tuple[list[str], list[str]]:
     """The plugins to keep, and the elements that asked for them."""
@@ -727,7 +750,7 @@ def wanted_plugins(prefix: Path, plugins: Path, registry: Path,
                       | plugin_elements(codecs.parent / "plugins")
                       | code_elements(codecs.parent))
     where = element_map(prefix, plugins, registry)
-    keep = set(ALWAYS_PLUGINS)
+    keep = set(ALWAYS_PLUGINS) | hardware_plugins(plugins, platform)
     absent = []
     for element in elements:
         plugin = where.get(element)
