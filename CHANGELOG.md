@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.31 (2026-11-07)
+
+The Linux downloads start on far more machines, including the Raspberry Pi, and use a GPU when one is there.
+
+* 0.3.30 needed glibc 2.43, so it started only on the newest distributions. Ubuntu 22.04 and 24.04, Debian 12 and 13, Linux Mint and Raspberry Pi OS refused it. Every Linux download is now built in an Ubuntu 22.04 image with its own GStreamer 1.28.9, and runs on glibc 2.35 or newer.
+* There is now an arm64 `.deb` and AppImage of the desktop app, for a Raspberry Pi 4 or 5 on 64 bit Pi OS and other arm64 boards. On a Pi 4 the Pi's own H.264 encoder does 1080p30 at about 1.7 times realtime.
+* The Linux bundle carries the VA (Intel and AMD), NVIDIA and V4L2 hardware encoders. Each one turns on only when its hardware is present, and without a GPU the app encodes on the CPU as before. The Windows bundle now keeps the NVIDIA, Intel and AMD encoders the same way.
+* Every release now stops before publishing if any Linux file needs a newer glibc or newer CPU instructions than that baseline. It also installs the `.deb` and runs the app's startup check on Ubuntu 22.04 and 24.04 and Debian 12 and 13, on x86_64 and arm64, and runs the engine on an emulated 2008 Nehalem CPU.
+
 ## 0.3.30 (2026-11-07)
 
 The Linux downloads run on x86_64 CPUs older than 2013 again.
