@@ -539,7 +539,13 @@ jobs:
           ./dev/sign-macos.sh notarize "$dmg"
           mnt=$(mktemp -d)
           hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" >/dev/null
-          verdict=$(spctl -a -vv -t exec "$mnt/GodwinMix.app" 2>&1 || true)
+          # An app whose ticket could not be stapled is looked up online,
+          # over the same flaky connection, so the verdict is asked for again.
+          for try in 1 2 3 4; do
+            verdict=$(spctl -a -vv -t exec "$mnt/GodwinMix.app" 2>&1 || true)
+            grep -q 'source=Notarized Developer ID' <<<"$verdict" && break
+            sleep 30
+          done
           hdiutil detach "$mnt" >/dev/null
           echo "$verdict"
           grep -q 'source=Notarized Developer ID' <<<"$verdict" \

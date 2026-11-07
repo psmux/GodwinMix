@@ -175,16 +175,19 @@ notarize() {
   fi
   [ "$upload" = "$path" ] || rm -f "$upload"
   case "$path" in *.zip) echo "notarised $path"; return ;; esac
-  # stapler fetches the ticket from Apple's CloudKit, and a dropped connection
-  # there failed the 0.3.32 Intel job after Apple had accepted the app.
+  # stapler fetches the ticket from Apple's CloudKit, and on the Intel runner
+  # the connection dropped twice running, after Apple had accepted the app.
+  # The notarisation stands without the staple: Gatekeeper looks the ticket up
+  # online at first launch, and the release checks for exactly that verdict.
   local try
-  for try in 1 2 3 4 5; do
-    xcrun stapler staple "$path" && xcrun stapler validate "$path" && break
-    [ "$try" -lt 5 ] || die "could not staple the ticket to $path after five tries"
-    echo "stapling $path failed, trying again in $((try * 20)) s"
-    sleep $((try * 20))
+  for try in 1 2 3 4 5 6; do
+    if xcrun stapler staple "$path" && xcrun stapler validate "$path"; then
+      echo "notarised and stapled $path"; return
+    fi
+    [ "$try" -lt 6 ] && { echo "stapling $path failed, trying again in $((try * 30)) s"; sleep $((try * 30)); }
   done
-  echo "notarised and stapled $path"
+  echo "::warning::$path is notarised, but Apple's ticket server would not hand over the ticket to staple; macOS fetches it online on first launch instead"
+  return 0
 }
 
 RUNNER_TEMP="${RUNNER_TEMP:-$(mktemp -d)}"
