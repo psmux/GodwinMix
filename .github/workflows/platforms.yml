@@ -84,6 +84,12 @@ jobs:
             bundles: msi,nsis
     steps:
       - uses: actions/checkout@v4
+      # The ubuntu-26.04 image installs Ubuntu's amd64v3 builds, and its gcc
+      # targets x86-64-v3. Without this a Linux build dies with "Illegal
+      # instruction" on a CPU older than 2013. See the action for the detail.
+      - name: Baseline amd64 packages (Linux)
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/amd64-baseline
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
