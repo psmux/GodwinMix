@@ -72,7 +72,15 @@ jobs:
           fi
           docker build --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
             -t "$REF" dev/linux-baseline
-          docker push "$REF"
+          # The first push of a new tag set creates the package, and the two
+          # architectures race to do it: the one that loses is told "denied".
+          # The package exists a few seconds later and the same push succeeds.
+          for attempt in 1 2 3 4; do
+            docker push "$REF" && exit 0
+            echo "push $attempt refused, trying again in 30 s"
+            sleep 30
+          done
+          exit 1
 
   build:
     name: build (${{ matrix.arch }})
