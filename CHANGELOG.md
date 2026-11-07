@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.30 (2026-11-07)
+
+The Linux downloads run on x86_64 CPUs older than 2013 again.
+
+* The 0.3.29 core archive, `.deb` and AppImage stopped with `Illegal instruction` at startup on a CPU without AVX2 and BMI, which is every Intel chip before Haswell (2013), many later Pentium, Celeron and Atom chips, and AMD before Excavator. The `.deb` and AppImage's own GStreamer would not load there either. They were built on GitHub's Ubuntu 26.04 image, which installs Ubuntu's x86-64-v3 package builds and a compiler that targets x86-64-v3 by default. The release now puts that machine back on Ubuntu's baseline amd64 packages before it builds anything, and stops if any v3 build is left. Checked on a 2010 Xeon X5670: the app's startup check passes from its own GStreamer, and a 1080p30 programme streams over RTMP.
+* macOS, Windows and the container image were not affected.
+
 ## 0.3.29 (2026-11-04)
 
 Calls keep getting answers in the seconds after a mixer restart.
