@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* The Mac app, its disk image and the core archive's `godwinmix` and `gmx` are signed with a Developer ID and notarised by Apple, so the app opens on a double click. Until now they were signed ad hoc only, and macOS 26 refused to open them with "Apple could not verify GodwinMix is free of malware". Every program inside the app is signed with the hardened runtime, and a release tag without the Apple secrets now fails rather than shipping an ad hoc build again.
+
 ## 0.3.31 (2026-11-07)
 
 The Linux downloads start on far more machines, including the Raspberry Pi, and use a GPU when one is there.
