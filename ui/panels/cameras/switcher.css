@@ -39,6 +39,7 @@
 .cam-pro-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .cam-row-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .cam-pro .cam-field span { white-space: nowrap; }
+.cam-text { min-height: 40px; border-radius: 10px; padding: 0 10px; background: var(--bg); border: 1px solid var(--line); width: 100%; max-width: 280px; }
 .cam-rate { width: 5em; min-height: 40px; border-radius: 10px; padding: 0 8px; background: var(--bg); border: 1px solid var(--line); }
 .cam-tbar { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
 .cam-tbar-fill { height: 100%; width: 0; background: var(--accent); }

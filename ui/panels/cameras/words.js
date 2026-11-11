@@ -12,14 +12,11 @@ const STYLE_WORDS = { close: "close up", waist: "waist up", full: "full length",
 
 /** "Following: full length", from a track/state answer. */
 export function trackWords(t) {
+  if (t && t.state === "error") return "No picture to track. Check the camera's source";
   if (!t || !t.on) return "Tracking off";
   switch (t.state) {
     case "following":
       return `Following: ${STYLE_WORDS[t.style] || t.style || "waist up"}`;
-    case "manual":
-      return "Steering by hand";
-    case "holding":
-      return "Holding the spot you tapped";
     case "lost":
       return "Lost them, holding the shot";
     default:

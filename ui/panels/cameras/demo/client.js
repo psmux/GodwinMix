@@ -2,7 +2,9 @@
 // with people walking about, two ATEM switchers, and GodwinMix's own
 // programme. It has the shape of the real client (call, on, onRender,
 // listen), so the panel and api.js cannot tell the difference, and it
-// counts every call so a test can read what was sent.
+// counts every call so a test can read what was sent. Its camera tools
+// answer in the ptz plugin's own shapes, so the demo goes through the same
+// translation in shapes.js as a real camera does.
 //
 // The clock runs only between start() and stop(), which the panel calls
 // while it is on screen. A test passes {clock: false} and steps it by hand.
@@ -83,7 +85,9 @@ export function demoClient(opts = {}) {
       if (method !== "tool.call") return core(method, params);
       const key = BY_NAME[params.name];
       if (!key) throw new Error(`no plugin has a tool called '${params.name}'`);
-      return { structuredContent: tools[key](params.arguments || {}) };
+      // The core passes a plugin's answer on as it came: MCP's shape, snake case.
+      const facts = tools[key](params.arguments || {});
+      return { content: [{ type: "text", text: `${params.name} answered.` }], structured_content: facts };
     },
     on(name, fn) {
       if (!listeners.has(name)) listeners.set(name, new Set());
@@ -118,7 +122,7 @@ export function demoClient(opts = {}) {
   for (const c of d.cams) for (const [slot, w] of [[0, 1], [1, 0.5], [2, 0.3]]) {
     const v = c.view;
     c.view = { cx: 0.5, cy: w === 1 ? 0.5 : 0.62, w: c.id === "cam-wide" ? Math.max(w, 0.6) : w };
-    tools.presetSave({ camera: c.id, slot, name: ["Wide", "Stage", "Lectern"][slot] });
+    tools.presetSave({ camera: c.id, preset: slot + 1, name: ["Wide", "Stage", "Lectern"][slot] });
     c.view = v;
   }
   tally();

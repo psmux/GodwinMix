@@ -22,6 +22,7 @@ export class Model {
     this.cams = [];
     this.next = null;
     this.seen = new Map();
+    this.resting = new Map();
     this.track = new Map();
     this.presets = new Map();
     this.atems = [];
@@ -104,7 +105,11 @@ export class Model {
   }
 
   async people() {
-    const seen = await Promise.all(this.cams.map((c) => this.api.observe(c.id).catch(() => null)));
+    // A camera whose picture cannot be read (no source yet) is asked again
+    // every five seconds rather than eight times a second.
+    const now = Date.now();
+    const ask = (c) => (this.resting.get(c.id) > now ? null : this.api.observe(c.id).catch(() => (this.resting.set(c.id, now + 5000), null)));
+    const seen = await Promise.all(this.cams.map(ask));
     this.cams.forEach((c, i) => this.seen.set(c.id, seen[i]));
     this.changed("people");
   }

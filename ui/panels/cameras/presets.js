@@ -9,10 +9,10 @@ export function presetGrid(on) {
   let key = "";
 
   function tile(p) {
-    const pic = p.thumbnail ? el("img", { src: p.thumbnail, alt: "", draggable: "false" }) : el("div.cam-nopic", { text: String(p.slot + 1) });
+    const pic = p.thumbnail ? el("img", { src: p.thumbnail, alt: "", draggable: "false" }) : el("div.cam-nopic", { text: String(p.slot) });
     return el("button.cam-preset", { type: "button", title: `Go to ${p.name}`, onclick: () => on.recall(p) }, [
       pic,
-      el("span.cam-preset-name", { text: p.name || `Shot ${p.slot + 1}` }),
+      el("span.cam-preset-name", { text: p.name || `Shot ${p.slot}` }),
     ]);
   }
 
@@ -20,7 +20,7 @@ export function presetGrid(on) {
     root,
     show(cam, presets) {
       const list = presets || [];
-      const next = list.reduce((m, p) => Math.max(m, p.slot + 1), 0);
+      const next = list.reduce((m, p) => Math.max(m, p.slot + 1), 1);
       const k = (cam ? cam.id : "") + list.map((p) => p.slot + p.name + (p.thumbnail || "").length).join();
       if (k === key) return;
       key = k;
