@@ -22,7 +22,6 @@ ureq = { version = "3", optional = true }
 ring = { workspace = true, optional = true }
 
 [dev-dependencies]
-criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [features]

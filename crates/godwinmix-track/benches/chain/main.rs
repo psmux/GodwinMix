@@ -9,7 +9,7 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use common::{detections, paint, time, Walker};
-use criterion::{criterion_group, criterion_main, Criterion};
+use harness::Criterion;
 use godwinmix_track::{
     frame_target, Choose, ChooseConfig, Chooser, CropConfig, CropSteer, Detection, Detector, FollowConfig,
     FollowOutput, Follower, FrameRef, FrameStyle, MotionDetector, PixelFormat, PtzConfig, PtzSteer, Rect, Tracker,
@@ -96,5 +96,8 @@ fn stages(c: &mut Criterion) {
 #[cfg(feature = "tract")]
 mod tract;
 
-criterion_group!(benches, stages);
-criterion_main!(benches);
+mod harness;
+
+fn main() {
+    stages(&mut Criterion::default());
+}

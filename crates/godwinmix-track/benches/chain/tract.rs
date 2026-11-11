@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use criterion::Criterion;
+use super::harness::Criterion;
 use godwinmix_track::{Detector, FollowConfig, FollowOutput, Follower, FrameRef, PixelFormat};
 
 use crate::common::time;
