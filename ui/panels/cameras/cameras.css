@@ -75,7 +75,7 @@
 .cam-trackdot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); flex: none; }
 .cam-trackdot.following { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
 .cam-trackdot.searching, .cam-trackdot.lost { background: var(--warn); }
-.cam-trackdot.manual, .cam-trackdot.holding { background: var(--accent); }
+.cam-trackdot.error { background: var(--bad); }
 
 /* Step two's layout. */
 .cam-frame-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }

@@ -4,6 +4,8 @@
 // buses while this is open.
 
 import { el } from "../../shell/dom.js";
+import { save } from "./head.js";
+import { LOWER_THIRD } from "./take.js";
 
 const STYLES = [["mix", "Mix"], ["dip", "Dip"], ["wipe", "Wipe"]];
 const MODES = [["own", "On its own"], ["follow", "Follows GodwinMix"], ["lead", "Leads GodwinMix"]];
@@ -24,13 +26,21 @@ export function proView(model, act) {
   const auxes = el("div.cam-pro-aux");
   const macros = el("div.cam-row-wrap");
   const mode = seg(MODES, (m) => act(() => model.api.atemMode(sw(), m)));
-  const root = el("section.cam-pro", { "aria-label": "Pro view" }, [
+  const scene = el("input.cam-text", { type: "text", placeholder: LOWER_THIRD, "aria-label": "Lower third scene", spellcheck: "false" });
+  scene.addEventListener("change", () => {
+    model.lowerThird = scene.value.trim() || LOWER_THIRD;
+    save({ lower: model.lowerThird });
+  });
+  const ours = group("Lower third scene", scene, el("span.dim.sm", { text: "The GodwinMix scene the Lower third button puts up as a key." }));
+  const root = el("section.cam-pro", { "aria-label": "Pro view" }, [ours]);
+  const theirs = [
     group("Transition", el("div.cam-row-wrap", {}, [style, el("label.cam-field", {}, [el("span", { text: "Rate, frames" }), rate]), cut, auto]), bar),
     group("Upstream keys", usks),
     group("Aux outputs", auxes),
     group("Macros", macros),
     group("How it works with GodwinMix", mode),
-  ]);
+  ];
+  root.append(...theirs);
   const keys = { usk: "", aux: "", mac: "" };
 
   function rebuild(atem) {
@@ -61,8 +71,10 @@ export function proView(model, act) {
     root,
     sync() {
       const atem = model.atem;
-      root.hidden = !model.pro || !atem || !atem.mes;
-      if (root.hidden) return;
+      root.hidden = !model.pro;
+      if (document.activeElement !== scene) scene.value = model.lowerThird || LOWER_THIRD;
+      for (const g of theirs) g.hidden = !atem || !atem.mes;
+      if (root.hidden || !atem || !atem.mes) return;
       rebuild(atem);
       const me = atem.mes[0];
       check(style, me.style);

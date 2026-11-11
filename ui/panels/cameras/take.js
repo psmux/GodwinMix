@@ -7,13 +7,13 @@
 import { el } from "../../shell/dom.js";
 import { inputOf, route } from "./words.js";
 
-/** The scene GodwinMix keys as the lower third. */
+/** The scene GodwinMix keys as the lower third, until Pro view names another. */
 export const LOWER_THIRD = "Lower third";
 
 const PICKS = [["mix", "GodwinMix"], ["atem", "Switcher"], ["both", "Both"]];
 
 /** The calls for one action, as functions, so a test can read them without a DOM. */
-export function plan(action, { api, cam, atem, pick, lower }) {
+export function plan(action, { api, cam, atem, pick, lower, scene }) {
   const r = route(atem, pick);
   const sw = atem && atem.id;
   const input = inputOf(atem, cam);
@@ -29,7 +29,7 @@ export function plan(action, { api, cam, atem, pick, lower }) {
     if (r.mix) steps.push(() => api.black());
     if (r.atem) steps.push(() => api.atemFtb(sw));
   } else if (action === "lower") {
-    if (r.mix) steps.push(() => api.key(LOWER_THIRD, !lower));
+    if (r.mix) steps.push(() => api.key(scene || LOWER_THIRD, !lower));
     if (r.atem) steps.push(() => api.atemDsk(sw, 0, "auto"));
   }
   return steps;
@@ -50,7 +50,7 @@ export function takeStep(model, act) {
 
   function run(action) {
     const atem = model.atem && model.atem.connected !== false ? model.atem : null;
-    const steps = plan(action, { api: model.api, cam: model.current, atem, pick, lower });
+    const steps = plan(action, { api: model.api, cam: model.current, atem, pick, lower, scene: model.lowerThird });
     if (action === "lower") lower = !lower;
     act(async () => {
       for (const s of steps) await s();
@@ -68,6 +68,7 @@ export function takeStep(model, act) {
     const up = dsk ? dsk.on : lower;
     strap.classList.toggle("on", up);
     strap.setAttribute("aria-pressed", String(up));
+    strap.title = r.mix ? `Puts the scene '${model.lowerThird || LOWER_THIRD}' up as a key, or takes it down` : "Downstream key 1 on or off";
     strap.querySelector(".cam-take-sub").textContent = up ? "Up now, tap to take down" : "Name on screen";
     const ftb = atem && r.atem && atem.ftb && atem.ftb.on;
     black.classList.toggle("on", !!ftb);

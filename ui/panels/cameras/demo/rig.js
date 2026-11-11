@@ -13,8 +13,8 @@ export function camera(id, name, view, look) {
     id, name, source: id, model: "Demo PTZ", connected: true, look: look || {},
     view: { ...view }, goal: null,
     vel: { pan: 0, tilt: 0, zoom: 0, at: -1e9, zoomAt: -1e9 },
-    tracking: { on: false, person: null, point: null, style: "waist", handUntil: 0 },
-    presets: [], exposure: { mode: "auto", brightness: 0 }, focus: { auto: true, near: 0.5 },
+    tracking: { on: false, person: null, style: "waist", handUntil: 0 },
+    presets: [], exposure: { mode: "auto", iris: 11, shutter: 7, gain: 0, brightness: 0 }, focus: { mode: "auto" },
   };
 }
 
@@ -62,21 +62,4 @@ export function stepCamera(cam, w, dt, now) {
     if (Math.abs(v.cx - cam.goal.cx) + Math.abs(v.w - cam.goal.w) < 0.002) cam.goal = null;
   }
   clampView(v);
-}
-
-/** What the tracker says it is doing, in the shape track/state answers. */
-export function trackState(cam, now) {
-  const t = cam.tracking;
-  let state = "off";
-  if (t.on && now < t.handUntil) state = "manual";
-  else if (t.on && t.person) state = "following";
-  else if (t.on && t.point) state = "holding";
-  else if (t.on) state = "searching";
-  return { camera: cam.id, on: t.on, state, person: t.person, style: t.style };
-}
-
-/** Aim at a point of the picture, given as fractions of it. */
-export function aimAt(cam, x, y) {
-  const v = cam.view;
-  cam.goal = clampView({ cx: v.cx + (x - 0.5) * v.w, cy: v.cy + (y - 0.5) * v.w, w: v.w });
 }

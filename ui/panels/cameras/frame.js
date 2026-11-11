@@ -17,28 +17,34 @@ export function frameStep(model, drive, act) {
   const chips = STYLES.map(([style, label, tip]) =>
     el("button.cam-chip", { type: "button", text: label, title: tip, "aria-pressed": "false", onclick: () => frameAs(style) }));
   const local = new Map();
-  const remember = (id, r) => r && local.set(id, { ...(local.get(id) || {}), ...r });
+  const remember = (id, r) => local.set(id, { ...(local.get(id) || {}), ...r });
+  const pick = (r, keys) => Object.fromEntries(keys.filter((k) => r && r[k] !== undefined && r[k] !== null).map((k) => [k, r[k]]));
   const presets = presetGrid({
     recall: (p) => act(() => model.api.presetRecall(model.current.id, p.slot)),
     save: (slot) => act(async () => {
       const id = model.current.id;
-      await model.api.presetSave(id, slot, `Shot ${slot + 1}`);
+      await model.api.presetSave(id, slot, `Shot ${slot}`);
       await model.loadPresets(id);
     }),
   });
   const more = drawer({
-    exposure: (e) => act(async () => remember(model.current.id, await model.api.exposure(model.current.id, e))),
-    focus: (f) => act(async () => remember(model.current.id, await model.api.focus(model.current.id, f))),
+    exposure: (e) => act(async () => {
+      const r = await model.api.exposure(model.current.id, e);
+      const was = (local.get(model.current.id) || {}).exposure || {};
+      remember(model.current.id, { exposure: { ...was, ...e, ...pick(r, ["mode", "iris", "shutter", "gain"]) } });
+    }),
+    focus: (mode, speed) => act(async () => {
+      await model.api.focus(model.current.id, mode, speed);
+      if (!["near", "far", "stop"].includes(mode)) remember(model.current.id, { focus: { mode: mode === "auto" ? "auto" : "manual" } });
+    }),
   });
 
+  /** A framing chip: the style for tracking, which it turns on when it is off. */
   function frameAs(style) {
     const cam = model.current;
     if (!cam) return;
-    act(async () => {
-      await model.api.framing(cam.id, style);
-      const t = model.track.get(cam.id);
-      if (!t || !t.on) await model.api.track(cam.id, true);
-    });
+    const t = model.track.get(cam.id);
+    act(() => (t && t.on ? model.api.framing(cam.id, style) : model.api.track(cam.id, true, style)));
   }
 
   const root = el("section.cam-step.cam-step-frame", {}, [
@@ -72,7 +78,7 @@ export function frameStep(model, drive, act) {
         c.classList.toggle("on", on);
       });
       presets.show(cam, cam && model.presets.get(cam.id));
-      more.show(cam && { ...cam, ...(local.get(cam.id) || {}) });
+      more.show(cam && local.get(cam.id));
     },
     release() {
       stick.release();

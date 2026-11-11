@@ -23,10 +23,10 @@ export class CameraView {
     this.running = false;
     const m = this.model;
     m.pro = !!saved().pro;
+    m.lowerThird = saved().lower || "Lower third";
     this.drive = new Drive({
-      move: (c, p, t) => m.api.move(c, p, t),
-      stop: (c) => m.api.stop(c),
-      zoom: (c, s) => m.api.zoom(c, s),
+      move: (c, p, t, z) => m.api.move(c, p, t, z),
+      still: (c) => m.api.still(c),
     });
     this.drive.onError = (e) => this.fail(e);
     const act = (fn) => this.act(fn);

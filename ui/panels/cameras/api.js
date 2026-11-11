@@ -1,25 +1,26 @@
-// Every call the camera window makes, in one place. The ptz and atem plugins
-// are built alongside this panel and their tool names may still move; when
-// they do, the TOOLS table below is the only thing to change. Each call goes
-// through the core's public `tool.call` or a protocol method, the same way an
-// agent or `gmx ctl` would make it.
+// Every call the camera window makes, in one place. The camera tools are the
+// ptz plugin's (plugins/ptz/gmx-plugin.toml), reached as `ptz/<tool>` through
+// the core's public `tool.call`, the way an agent or `gmx ctl` reaches them.
+// The atem names are still a guess while that plugin is being built; when a
+// name moves, the TOOLS table below is the only thing to change.
+
+import * as shape from "./shapes.js";
 
 export const TOOLS = {
   cameras: "ptz/camera_list",
-  move: "ptz/move", // {camera, pan, tilt}: velocities from -1 to 1, stops by itself after 300 ms
-  stop: "ptz/stop",
-  zoom: "ptz/zoom", // {camera, speed}: -1 wide to 1 tight, 0 stops
-  focus: "ptz/focus", // {camera, auto} or {camera, speed}
-  exposure: "ptz/exposure", // {camera, mode, brightness}
-  presets: "ptz/preset_list",
-  presetSave: "ptz/preset_save", // answers with the preset and its thumbnail
-  presetRecall: "ptz/preset_recall",
-  track: "ptz/tracking", // {camera, on}
-  framing: "ptz/framing", // {camera, style: close | waist | full | wide}
-  observe: "track/observe", // {camera}: the people in the picture now
-  follow: "track/follow", // {camera, person} or {camera, point: [x, y]}
-  trackStop: "track/stop",
-  trackState: "track/state",
+  move: "ptz/move", // {camera, pan, tilt, zoom}: -1 to 1, held 300 ms
+  stop: "ptz/stop", // stops the camera and turns its tracking off
+  focus: "ptz/focus", // {camera, mode: auto | manual | one_push | near | far | stop, speed}
+  exposure: "ptz/exposure", // {camera, mode: auto | manual | shutter | iris, iris, shutter, gain}
+  position: "ptz/position",
+  presets: "ptz/preset_list", // {camera, pictures: true}
+  presetSave: "ptz/preset_save", // {camera, preset, name}
+  presetRecall: "ptz/preset_recall", // {camera, preset}
+  follow: "ptz/track_follow", // {camera, framing, target | point: {x, y}}: tracking on
+  trackStop: "ptz/track_stop",
+  framing: "ptz/track_framing", // {camera, framing}
+  trackState: "ptz/track_state",
+  observe: "ptz/track_observe", // {camera, wait_ms}
   atemList: "atem/list",
   atemState: "atem/state",
   cut: "atem/cut",
@@ -35,16 +36,23 @@ export const TOOLS = {
   mode: "atem/mode",
 };
 
-/** A tool's answer: MCP's structured content, its JSON text, or the object itself. */
+/**
+ * A tool's answer. The core hands back what the plugin answered, in MCP's
+ * shape with snake case keys: {content, structured_content, is_error}. The
+ * facts are in structured_content; content is a sentence for a person,
+ * which is what a refusal flagged with is_error says.
+ */
 export function unwrap(r) {
   if (!r || typeof r !== "object") return r;
+  const text = Array.isArray(r.content) ? r.content.filter((c) => c && c.type === "text").map((c) => c.text).join(" ") : "";
+  if (r.is_error || r.isError) throw new Error(text || "the tool refused");
+  if (r.structured_content !== undefined && r.structured_content !== null) return r.structured_content;
   if (r.structuredContent !== undefined) return r.structuredContent;
-  const text = Array.isArray(r.content) && r.content.find((c) => c.type === "text");
   if (text) {
     try {
-      return JSON.parse(text.text);
+      return JSON.parse(text);
     } catch {
-      return text.text;
+      return { text };
     }
   }
   return r;
@@ -54,27 +62,28 @@ const list = (r, key) => (Array.isArray(r) ? r : (r && r[key]) || []);
 
 export function cameraApi(client) {
   const tool = async (key, args) => unwrap(await client.call("tool.call", { name: TOOLS[key], arguments: args || {} }));
-  const cam = (key) => (camera, more) => tool(key, { camera, ...more });
   const sw = (key) => (switcher, more) => tool(key, { switcher, ...more });
   return {
     client,
     tool,
-    cameras: async () => list(await tool("cameras"), "cameras"),
-    move: (camera, pan, tilt) => tool("move", { camera, pan, tilt }),
-    stop: cam("stop"),
-    zoom: (camera, speed) => tool("zoom", { camera, speed }),
-    focus: cam("focus"),
-    exposure: cam("exposure"),
-    presets: async (camera) => list(await tool("presets", { camera }), "presets"),
-    presetSave: (camera, slot, name) => tool("presetSave", { camera, slot, name }),
-    presetRecall: (camera, slot) => tool("presetRecall", { camera, slot }),
-    track: (camera, on) => tool("track", { camera, on }),
-    framing: (camera, style) => tool("framing", { camera, style }),
-    observe: cam("observe"),
-    followPerson: (camera, person) => tool("follow", { camera, person }),
-    followPoint: (camera, x, y) => tool("follow", { camera, point: [x, y] }),
-    trackStop: cam("trackStop"),
-    trackState: cam("trackState"),
+    cameras: async () => list(await tool("cameras"), "cameras").map(shape.camera),
+    move: (camera, pan, tilt, zoom = 0) => tool("move", { camera, pan, tilt, zoom }),
+    /** Let go: zero speeds, which leaves tracking as it was. The stop tool would turn it off. */
+    still: (camera) => tool("move", { camera, pan: 0, tilt: 0, zoom: 0 }),
+    stop: (camera) => tool("stop", { camera }),
+    focus: (camera, mode, speed) => tool("focus", speed === undefined ? { camera, mode } : { camera, mode, speed }),
+    exposure: (camera, set) => tool("exposure", { camera, ...set }),
+    presets: async (camera) => list(await tool("presets", { camera, pictures: true }), "presets").map(shape.preset),
+    presetSave: (camera, preset, name) => tool("presetSave", { camera, preset, name }),
+    presetRecall: (camera, preset) => tool("presetRecall", { camera, preset }),
+    /** Tracking on (following whoever is central, or `framing`'s next follow) or off. */
+    track: (camera, on, framing) => (on ? tool("follow", framing ? { camera, framing, target: "central" } : { camera, target: "central" }) : tool("trackStop", { camera })),
+    framing: (camera, framing) => tool("framing", { camera, framing }),
+    observe: async (camera) => shape.people(await tool("observe", { camera, wait_ms: 0 })),
+    followPerson: (camera, target) => tool("follow", { camera, target }),
+    followPoint: (camera, x, y) => tool("follow", { camera, point: { x, y } }),
+    trackStop: (camera) => tool("trackStop", { camera }),
+    trackState: async (camera) => shape.tracking(await tool("trackState", { camera })),
     atems: async () => list(await tool("atemList").catch(() => []), "switchers"),
     atemState: sw("atemState"),
     atemCut: sw("cut"),

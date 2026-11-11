@@ -12,10 +12,29 @@ export async function cameraTests(test, eq, ok) {
   const { route, tallyOf, trackWords } = await import("../panels/cameras/words.js");
   const { plan, LOWER_THIRD } = await import("../panels/cameras/take.js");
 
-  test("a tool's answer is read as MCP structured content, as JSON text, or as it came", () => {
+  test("a tool's answer is read from structured_content, as the core passes the plugin's on", () => {
+    eq(unwrap({ content: [{ type: "text", text: "two cameras." }], structured_content: { cameras: [] } }), { cameras: [] });
     eq(unwrap({ structuredContent: { a: 1 } }), { a: 1 });
     eq(unwrap({ content: [{ type: "text", text: '{"b":2}' }] }), { b: 2 });
-    eq(unwrap({ c: 3 }), { c: 3 });
+    let said = "";
+    try {
+      unwrap({ content: [{ type: "text", text: "cam-x has no source." }], is_error: true });
+    } catch (e) {
+      said = e.message;
+    }
+    eq(said, "cam-x has no source.", "a refusal flagged is_error throws its sentence");
+  });
+
+  const { camera, people, tracking } = await import("../panels/cameras/shapes.js");
+  test("the ptz plugin's shapes become the window's", () => {
+    eq(camera({ id: "cam-pulpit", protocol: "visca-ip", source: "pulpit", last_error: null, tracking: true }).name, "Pulpit");
+    const s = { camera: "cam-a", mode: "following", state: "holding", framing: "full", target: "person-3",
+      tracks: [{ id: "person-3", box: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, confidence: 0.9, state: "confirmed", followed: true }], error: null };
+    eq(people(s).people[0].box, [0.1, 0.2, 0.3, 0.4]);
+    eq(people(s).following, "person-3");
+    eq(trackWords(tracking(s)), "Lost them, holding the shot");
+    eq(trackWords(tracking({ camera: "cam-a", mode: "stopped", tracks: [] })), "Tracking off");
+    eq(trackWords(tracking({ ...s, state: "following" })), "Following: full length");
   });
 
   const demo = demoClient({ clock: false });
@@ -24,6 +43,7 @@ export async function cameraTests(test, eq, ok) {
   test("every camera call goes through tool.call under the name in TOOLS", () => {
     eq(cams.map((c) => c.id), ["cam-wide", "cam-centre", "cam-side"]);
     ok(demo.calls.every((c) => c.method === "tool.call" && Object.values(TOOLS).includes(c.params.name)), "only names from the table");
+    ok(Object.values(TOOLS).filter((n) => !n.startsWith("atem/")).every((n) => n.startsWith("ptz/")), "every camera tool is the ptz plugin's");
   });
 
   await api.followPerson("cam-centre", "person-1");
@@ -40,9 +60,8 @@ export async function cameraTests(test, eq, ok) {
   });
 
   await api.trackStop("cam-wide");
-  await api.move("cam-wide", 1, 0);
   const x0 = demo.demo.cams[0].view.cx;
-  await api.zoom("cam-wide", 1);
+  await api.move("cam-wide", 1, 0, 1);
   for (let i = 0; i < 4; i++) demo.step(0.05);
   const x1 = demo.demo.cams[0].view.cx;
   for (let i = 0; i < 20; i++) demo.step(0.05);
@@ -54,7 +73,7 @@ export async function cameraTests(test, eq, ok) {
   });
 
   const sent = [];
-  const drive = new Drive({ move: (c, p, t) => sent.push(["move", p, t]), stop: () => sent.push(["stop"]), zoom: (c, s) => sent.push(["zoom", s]) });
+  const drive = new Drive({ move: (c, p, t, z) => sent.push(["move", p, t, z]), still: () => sent.push(["stop"]) });
   drive.use("cam-wide");
   const t0 = performance.now();
   while (performance.now() - t0 < 600) {
@@ -65,7 +84,7 @@ export async function cameraTests(test, eq, ok) {
   const moves = sent.filter((s) => s[0] === "move").length;
   drive.stopAll();
   await wait(10);
-  test("the joystick sends at most fifteen moves a second, and a stop when let go", () => {
+  test("the joystick sends at most fifteen moves a second, and zero speeds when let go", () => {
     ok(moves >= 5 && moves <= Math.ceil(0.65 * RATE) + 1, `${moves} moves in 600 ms`);
     eq(sent[sent.length - 1], ["stop"]);
   });
@@ -160,10 +179,33 @@ async function panelTests(test, eq, ok) {
   stick.dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, bubbles: true }));
   await wait(50);
   const names = client.calls.filter((c) => c.method === "tool.call").map((c) => c.params.name);
-  test("dragging the joystick sends moves to the chosen camera, and letting go sends a stop", () => {
+  test("dragging the joystick sends moves to the chosen camera, and letting go sends zero speeds", () => {
     ok(names.includes("ptz/move"), names.join());
-    eq(names.filter((n) => n === "ptz/move" || n === "ptz/stop").pop(), "ptz/stop");
-    eq(client.calls.find((c) => c.params.name === "ptz/move").params.arguments.camera, "cam-side");
+    const moves = client.calls.filter((c) => c.params.name === "ptz/move").map((c) => c.params.arguments);
+    eq(moves[0].camera, "cam-side");
+    eq(moves[moves.length - 1], { camera: "cam-side", pan: 0, tilt: 0, zoom: 0 }, "let go is zero speeds");
+    ok(!names.includes("ptz/stop"), "never the stop tool, which would turn tracking off");
+  });
+
+  await until(() => (view.model.seen.get("cam-wide") || {}).people?.length);
+  const who = view.model.seen.get("cam-wide").people[0];
+  const pic = host.querySelector('.cam-card[data-cam="cam-wide"] canvas').getBoundingClientRect();
+  client.calls.length = 0;
+  host.querySelector('.cam-card[data-cam="cam-wide"] canvas').dispatchEvent(new MouseEvent("click", {
+    bubbles: true, clientX: pic.left + (who.box[0] + who.box[2] / 2) * pic.width, clientY: pic.top + (who.box[1] + who.box[3] / 2) * pic.height,
+  }));
+  await until(() => client.calls.some((c) => c.params.name === "ptz/track_follow"));
+  test("tapping a person in the picture follows them", () => {
+    eq(client.calls.find((c) => c.params.name === "ptz/track_follow").params.arguments, { camera: "cam-wide", target: who.id });
+    eq(view.model.next, "cam-wide");
+  });
+
+  view.model.lowerThird = "Name strap";
+  client.calls.length = 0;
+  host.querySelector(".cam-take.lower").click();
+  await until(() => client.calls.some((c) => c.method === "program.key.set"));
+  test("Lower third keys the scene the window is set to", () => {
+    eq(client.calls.find((c) => c.method === "program.key.set").params, { scene: "Name strap", on: true });
   });
 
   view.destroy();

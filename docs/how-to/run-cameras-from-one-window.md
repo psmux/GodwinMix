@@ -13,8 +13,10 @@ close it or switch to another workspace.
 ![The Cameras window in the dark theme: the switcher bar at the top, three cameras with the one on air in red and the next one in green, and the Frame it and Take it live steps below](../media/cameras/window-dark.png)
 
 The cameras come from the `ptz` plugin and the switcher from the `atem`
-plugin. Both are being built on their own branches as this is written, so
-on a mixer without them the window says so and offers the demo.
+plugin, which is still being built as this is written. On a mixer without
+the `ptz` plugin the window says so and offers the demo. A camera needs its
+`source`, the GodwinMix source that shows its picture, for the picture on
+its card, for saved shots with pictures and for tracking.
 
 ## Try it with the demo
 
@@ -44,9 +46,8 @@ camera is doing by itself:
 | Tracking off | the camera stays where you put it |
 | Following: waist up | it is following the person in the green box, in that framing |
 | Looking for someone | tracking is on and nobody is chosen yet |
-| Steering by hand | you are using the joystick; it goes back to following when you let go |
-| Holding the spot you tapped | it is pointing at a place rather than a person |
 | Lost them, holding the shot | the person left the picture; it keeps the shot for now |
+| No picture to track | the camera has no source, or its source has no picture |
 
 The boxes over the picture are the people the camera can see. The bold
 green one, labelled **Following**, is the one it follows. Tap any other
@@ -59,17 +60,23 @@ Everything in this step works on the camera that is next.
 * **The joystick.** Drag the blue ball and the camera turns that way,
   slowly near the middle and fast at the edge. Let go and it springs back
   and the camera stops. With the joystick selected, the arrow keys do the
-  same.
+  same. If the camera was following someone, it goes back to following
+  them when you let go.
 * **Zoom.** Slide the blue thumb toward **Closer** or **Wider**, or hold
   either button. Let go and the zoom stops.
-* **Track a person.** Turns following on and off.
+* **Track a person.** Turns following on and off. On, it follows whoever
+  is nearest the middle of the picture until you tap somebody else.
 * **Close, Waist, Full, Wide.** How much of the person to show. Choosing
   one also turns tracking on.
 * **Saved shots.** Each saved position is a picture. Tap it and the camera
   goes there. The **+** tile saves where the camera points now as the next
   shot, with a picture taken at that moment.
-* **Exposure and focus.** Open the drawer for brightness, automatic or
-  manual exposure, and focus. Most services never need it.
+* **Exposure and focus.** Open the drawer for the exposure mode (Auto,
+  Manual, Shutter or Iris) and, off Auto, the iris, shutter and gain in the
+  steps the camera's manual numbers them. Focus is automatic until you
+  switch it off; then **Nearer** and **Farther** move it while held, and
+  **Focus once** sharpens on the middle of the picture and holds. Most
+  services never need the drawer.
 
 A camera never keeps turning on its own. The window sends the joystick
 about fifteen times a second while you hold it and a stop the moment you
@@ -89,7 +96,7 @@ through the mixer's API.
 | **Cut** | the next camera goes on air at once | preview to the next camera, then cut |
 | **Fade** | the next camera mixes in | preview to the next camera, then auto |
 | **Black** | the programme goes to black | fade to black, and back when pressed again |
-| **Lower third** | the scene called `Lower third` goes up as a key, or comes down | downstream key 1 on or off |
+| **Lower third** | the lower third scene goes up as a key, or comes down | downstream key 1 on or off |
 
 The line under the buttons says where they go, which depends on how the
 switcher is set to work with GodwinMix:
@@ -104,6 +111,9 @@ switcher is set to work with GodwinMix:
 
 With no switcher, every take goes to GodwinMix.
 
+The lower third scene is called `Lower third` unless you name another in
+Pro view, under **Lower third scene**. This browser remembers the name.
+
 ## The switcher bar
 
 When a switcher is connected a bar at the top shows it. The dot is green
@@ -116,10 +126,11 @@ name.
 
 ## Pro view
 
-Turn on **Pro view** for every input on both rows (black, colour bars and
-the media player included) and a panel with the transition style and rate
-and its progress, the upstream keys, every aux output, the macros, and how
-the switcher works with GodwinMix.
+Turn on **Pro view** for the lower third scene's name, every input on
+both switcher rows (black, colour bars and the media player included), and
+a panel with the transition style and rate and its progress, the upstream
+keys, every aux output, the macros, and how the switcher works with
+GodwinMix.
 
 ![Pro view in the dark theme: every input on both rows, and the transition, upstream keys, aux outputs, macros and mode below](../media/cameras/pro-dark.png)
 
