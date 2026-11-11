@@ -1,4 +1,4 @@
-//! The tools agents and the camera window call, as `atem/<tool>` through the
+//! The tools agents and the UI call, as `atem/<tool>` through the
 //! core's `tool.call`. Every one answers a sentence for a person in
 //! `content` and the facts in `structured_content`, and every refusal says
 //! what is wrong and what to do.

@@ -15,7 +15,7 @@
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "A slug naming the switcher, such as atem-main or atem-overflow." },
           "address": { "type": "string", "description": "The switcher's IP address or host name, with :port only when it is not 9910." },
           "name": { "type": "string", "description": "A name for people. The id when left out." },
-          "mode": { "type": "string", "enum": ["own", "follow", "lead"], "default": "own", "description": "own: driven only from the camera window and agents. follow: a take in GodwinMix also cuts the switcher to the mapped input. lead: a cut on the switcher moves GodwinMix to the mapped source." },
+          "mode": { "type": "string", "enum": ["own", "follow", "lead"], "default": "own", "description": "own: driven only from its properties in the UI and by agents. follow: a take in GodwinMix also cuts the switcher to the mapped input. lead: a cut on the switcher moves GodwinMix to the mapped source." },
           "map": {
             "type": "object",
             "title": "Source map",

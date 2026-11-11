@@ -20,7 +20,7 @@ it too.
 | Tracking engine | `crates/godwinmix-track/` | `feat/camera-track` | no |
 | ATEM client | `crates/godwinmix-atem/` and `plugins/atem/` | `feat/camera-atem` | no |
 | PTZ drivers and the follow loop | `crates/godwinmix-ptz/` and `plugins/ptz/` | `feat/camera-ptz` | only the plugin's frame input |
-| Camera window | `ui/panels/cameras/` | `feat/camera-ui` | no |
+| Camera controls in Sources and Preview | `ui/panels/camera/` | `feat/camera-ui` | no |
 
 Each branch starts from `feat/camera-control`, where this file lives, and goes
 back into it. `main` gets the whole thing in one merge once the four work
@@ -110,13 +110,13 @@ More than one switcher at once, each with its own slug (`atem-main`,
 
 How it fits the mixer, set per switcher:
 
-* `own`: GodwinMix mixes, the ATEM is driven from the camera window on its own.
+* `own`: GodwinMix mixes, the ATEM is driven from switcher properties on its own.
 * `follow`: a take in GodwinMix also cuts the ATEM to the mapped input, so one
   button drives both. The map says which GodwinMix source is which ATEM input.
 * `lead`: a cut on the ATEM panel moves GodwinMix's programme to match, so
   the hardware panel stays in charge and GodwinMix records and streams.
 
-ATEM tally feeds GodwinMix's tally and the camera window's red and green
+ATEM tally feeds GodwinMix's tally and the source tiles' red and green
 borders, so the operator sees the same thing whichever box cut.
 
 Tests: a fake switcher in the test that speaks the handshake, sends a real

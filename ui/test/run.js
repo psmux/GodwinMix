@@ -3101,7 +3101,7 @@ tileLevelTests(test, eq, ok)
   .then(() => cameraTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
-    line("fail", "the camera window suite threw: " + e.message);
+    line("fail", "the camera suite threw: " + e.message);
     console.error(e);
   })
   .then(() => browserDeviceTests(test, eq, ok))
