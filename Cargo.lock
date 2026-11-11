@@ -1670,6 +1670,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-ptz"
+version = "0.3.32"
+dependencies = [
+ "base64",
+ "ring",
+]
+
+[[package]]
 name = "godwinmix-render"
 version = "0.3.32"
 dependencies = [
