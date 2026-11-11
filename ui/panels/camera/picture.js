@@ -69,6 +69,8 @@ export function drawPeople(ctx, W, H, seen, colours) {
   if (!seen || !seen.people) return;
   const k = W / 640;
   const placed = [];
+  // The placeholder line centres its text; the tags start at their left.
+  ctx.textAlign = "left";
   for (const p of seen.people) {
     const [x, y, w, h] = [p.box[0] * W, p.box[1] * H, p.box[2] * W, p.box[3] * H];
     const followed = p.id === seen.following;

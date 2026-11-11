@@ -131,9 +131,11 @@ in `shapes.js` turns it into `inputs` (`id`, `name`, `short`), `mes`
 `auxes`, `macros` and `lastMacro`. The chip shows `short` for the inputs on
 programme and preview.
 
-A camera's picture in camera properties is the core's snapshot of the
-GodwinMix source the camera is (`source` in `ptz/camera_list`), fetched
-about three times a second while the drawer is open. The Preview overlay
+A camera's picture in camera properties is the cell of the GodwinMix source
+the camera is (`source` in `ptz/camera_list`) in the multiview the monitors
+already receive, so it costs the mixer nothing more. With no monitor on the
+page it is the core's snapshot of that source, asked for no more often than
+`[snapshot] min_interval_secs` allows, while the drawer is open. The Preview overlay
 draws only the boxes, over the Preview monitor's own picture.
 
 ## The demo
