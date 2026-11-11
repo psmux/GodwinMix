@@ -4,11 +4,6 @@ use std::time::{Duration, Instant};
 
 use crate::wire::{Flags, MAX_PACKET_ID};
 
-/// How long to wait for an acknowledgement before sending again.
-pub const RESEND_AFTER: Duration = Duration::from_millis(200);
-/// How many times to send again before giving up on the session.
-pub const MAX_RESENDS: u32 = 10;
-
 struct Pending {
     id: u16,
     bytes: Vec<u8>,
@@ -48,19 +43,19 @@ impl Inflight {
     }
 
     /// When the next resend falls due.
-    pub fn deadline(&self) -> Option<Instant> {
-        self.pending.iter().map(|p| p.sent_at + RESEND_AFTER).min()
+    pub fn deadline(&self, after: Duration) -> Option<Instant> {
+        self.pending.iter().map(|p| p.sent_at + after).min()
     }
 
     /// Packets due again, marked as retransmits. `Err` when one has been sent
     /// too often, which ends the session.
-    pub fn due(&mut self, now: Instant) -> Result<Vec<Vec<u8>>, ()> {
+    pub fn due(&mut self, now: Instant, after: Duration, most: u32) -> Result<Vec<Vec<u8>>, ()> {
         let mut out = Vec::new();
         for p in &mut self.pending {
-            if now < p.sent_at + RESEND_AFTER {
+            if now < p.sent_at + after {
                 continue;
             }
-            if p.resends >= MAX_RESENDS {
+            if p.resends >= most {
                 return Err(());
             }
             p.bytes[0] |= Flags::RETRANSMIT.0 << 3;
@@ -84,6 +79,9 @@ impl Inflight {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const RESEND_AFTER: Duration = Duration::from_millis(200);
+    const MAX_RESENDS: u32 = 10;
 
     #[test]
     fn covered_counts_across_the_wrap() {
@@ -113,9 +111,9 @@ mod tests {
         let mut now = start;
         for _ in 0..MAX_RESENDS {
             now += RESEND_AFTER;
-            let again = inflight.due(now).unwrap();
+            let again = inflight.due(now, RESEND_AFTER, MAX_RESENDS).unwrap();
             assert_eq!(again[0][0], 0x28);
         }
-        assert!(inflight.due(now + RESEND_AFTER).is_err());
+        assert!(inflight.due(now + RESEND_AFTER, RESEND_AFTER, MAX_RESENDS).is_err());
     }
 }

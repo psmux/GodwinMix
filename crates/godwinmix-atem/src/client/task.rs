@@ -8,33 +8,36 @@ use tokio::sync::{mpsc, watch};
 
 use super::{Reply, Snapshot};
 use crate::command::Command;
-use crate::session::{Link, Session};
+use crate::session::{Link, Session, Timing};
 
 /// How long to wait before trying a socket or a name lookup again.
 const RETRY: std::time::Duration = std::time::Duration::from_secs(2);
 
 pub(super) async fn run(
     address: String,
+    timing: Timing,
     publish: watch::Sender<Snapshot>,
     mut inbox: mpsc::UnboundedReceiver<(Vec<Command>, Reply)>,
 ) {
     loop {
-        let (socket, peer) = match open(&address).await {
-            Ok(pair) => pair,
+        let socket = match open(&address).await {
+            Ok(socket) => socket,
             Err(reason) => {
                 publish.send_modify(|s| s.link = Link { reason: Some(reason), ..Link::connecting() });
                 tokio::time::sleep(RETRY).await;
                 continue;
             }
         };
-        if serve(&socket, peer, &publish, &mut inbox).await.is_none() {
+        if serve(&socket, timing, &publish, &mut inbox).await.is_none() {
             return;
         }
     }
 }
 
-/// Resolve the address and bind a socket for it.
-async fn open(address: &str) -> Result<(UdpSocket, SocketAddr), String> {
+/// Resolve the address, bind a socket and connect it, so the socket hears
+/// only the switcher and an ICMP "nothing listens here" comes back as an
+/// error on the next receive.
+async fn open(address: &str) -> Result<UdpSocket, String> {
     let target = with_port(address);
     let peer = tokio::net::lookup_host(&target)
         .await
@@ -45,24 +48,28 @@ async fn open(address: &str) -> Result<(UdpSocket, SocketAddr), String> {
     let socket = UdpSocket::bind(local)
         .await
         .map_err(|e| format!("cannot open a UDP socket: {e}"))?;
-    Ok((socket, peer))
+    socket
+        .connect(peer)
+        .await
+        .map_err(|e| format!("cannot reach {peer}: {e}. Check this computer has a route to it"))?;
+    Ok(socket)
 }
 
 /// Run one socket's worth. `None` when the handle has gone and the task
 /// should end.
 async fn serve(
     socket: &UdpSocket,
-    peer: SocketAddr,
+    timing: Timing,
     publish: &watch::Sender<Snapshot>,
     inbox: &mut mpsc::UnboundedReceiver<(Vec<Command>, Reply)>,
 ) -> Option<()> {
-    let mut session = Session::new(seed(), Instant::now());
+    let mut session = Session::with_timing(seed(), Instant::now(), timing);
     let mut buffer = vec![0u8; 2048];
     loop {
         while let Some(datagram) = session.poll_transmit() {
             // A failed send is a lost packet, which the protocol already
             // survives; the silence timer catches a link that stays down.
-            let _ = socket.send_to(&datagram, peer).await;
+            let _ = socket.send(&datagram).await;
         }
         if session.take_changed() {
             publish.send_modify(|s| {
@@ -72,13 +79,12 @@ async fn serve(
         }
         let deadline = tokio::time::Instant::from_std(session.poll_timeout());
         tokio::select! {
-            received = socket.recv_from(&mut buffer) => {
-                if let Ok((length, from)) = received {
-                    if from == peer {
-                        session.handle_datagram(&buffer[..length], Instant::now());
-                    }
-                }
-            }
+            received = socket.recv(&mut buffer) => match received {
+                Ok(length) => session.handle_datagram(&buffer[..length], Instant::now()),
+                Err(e) if refused(&e) => session.handle_unreachable(),
+                // Anything else is a lost packet as far as the session goes.
+                Err(_) => {}
+            },
             _ = tokio::time::sleep_until(deadline) => session.handle_timeout(Instant::now()),
             request = inbox.recv() => {
                 let (commands, reply) = request?;
@@ -86,6 +92,11 @@ async fn serve(
             }
         }
     }
+}
+
+fn refused(e: &std::io::Error) -> bool {
+    use std::io::ErrorKind::{ConnectionRefused, ConnectionReset};
+    matches!(e.kind(), ConnectionRefused | ConnectionReset)
 }
 
 /// The address with port 9910 added when it has none.

@@ -16,7 +16,7 @@ use serde::Serialize;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::command::Command;
-use crate::session::{Link, NotUp};
+use crate::session::{Link, NotUp, Timing};
 use crate::state::State;
 use crate::Error;
 
@@ -48,6 +48,11 @@ impl Atem {
 
     /// The same, on a runtime handle, for a caller outside the runtime.
     pub fn connect_on(runtime: &tokio::runtime::Handle, id: &str, address: &str) -> Atem {
+        Atem::connect_with(runtime, id, address, Timing::default())
+    }
+
+    /// The same with other waits, which a test on loopback shortens.
+    pub fn connect_with(runtime: &tokio::runtime::Handle, id: &str, address: &str, timing: Timing) -> Atem {
         let first = Snapshot {
             id: id.to_string(),
             address: address.to_string(),
@@ -56,7 +61,7 @@ impl Atem {
         };
         let (publish, snapshot) = watch::channel(first);
         let (requests, inbox) = mpsc::unbounded_channel();
-        let task = runtime.spawn(task::run(address.to_string(), publish, inbox));
+        let task = runtime.spawn(task::run(address.to_string(), timing, publish, inbox));
         Atem { id: id.to_string(), requests, snapshot, task: task.abort_handle() }
     }
 

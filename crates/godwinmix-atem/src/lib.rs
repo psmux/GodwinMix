@@ -41,8 +41,8 @@ pub use client::{Atem, Snapshot};
 pub use command::{Command, RateStyle, TransitionStyle};
 pub use error::Error;
 pub use registry::Switchers;
-pub use session::{Link, LinkStatus, Session};
-pub use state::State;
+pub use session::{Link, LinkStatus, Session, Timing};
+pub use state::{State, Version};
 
 /// The port every ATEM listens on.
 pub const PORT: u16 = 9910;

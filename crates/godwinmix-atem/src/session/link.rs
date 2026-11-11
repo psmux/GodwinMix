@@ -48,7 +48,8 @@ impl Link {
 pub mod reasons {
     pub const NO_ANSWER: &str = "no answer to the hello. Check the switcher is on, that the \
         address is right, and that this computer can reach it (ping it, and check no firewall \
-        blocks UDP port 9910). Retrying every second";
+        blocks UDP port 9910). Trying again, every second at first and then less often, up to         every eight seconds";
+    pub const REFUSED: &str = "the address answered that nothing listens on UDP port 9910.         Check it is the switcher's address and not another device's, and that the switcher has         finished starting up. Trying again";
     pub const FULL: &str = "the switcher refused the session because every client slot is in \
         use. Close ATEM Software Control, a panel or another program connected to it. Retrying \
         in five seconds";

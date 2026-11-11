@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use super::{covered, reasons, LinkStatus, Phase, Session, FULL_BACKOFF};
+use super::{covered, reasons, LinkStatus, Phase, Session};
 use crate::state::State;
 use crate::wire::{Blocks, Flags, Header, HEADER_LEN, MAX_PACKET_ID};
 
@@ -42,7 +42,7 @@ impl Session {
         self.session = header.session;
         match payload.first().copied() {
             Some(HELLO_FULL) => {
-                self.restart(now, reasons::FULL, FULL_BACKOFF);
+                self.restart(now, reasons::FULL, self.timing.full_backoff);
                 return;
             }
             Some(HELLO_ACCEPTED) | None => {}

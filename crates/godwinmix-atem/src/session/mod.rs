@@ -8,6 +8,8 @@
 mod inflight;
 mod link;
 mod receive;
+mod timer;
+mod timing;
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -16,29 +18,26 @@ use crate::command::Command;
 use crate::state::State;
 use crate::wire::{Flags, Header, MAX_PACKET_ID};
 
-pub use inflight::{covered, MAX_RESENDS, RESEND_AFTER};
+pub use inflight::covered;
 pub use link::{reasons, Link, LinkStatus};
+pub use timer::hello;
+pub use timing::Timing;
 
-/// How often to send the hello while nothing answers.
-pub const HELLO_EVERY: Duration = Duration::from_secs(1);
-/// Silence for this long ends a session.
-pub const SILENT_AFTER: Duration = Duration::from_secs(5);
-/// How long to wait after the switcher said it was full.
-pub const FULL_BACKOFF: Duration = Duration::from_secs(5);
 /// The largest payload put in one packet; the length field allows 2047.
 const MAX_PAYLOAD: usize = 1400;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     /// Sending hellos. `next` is when the next one goes, `since` when the
-    /// first did.
-    Hello { next: Instant, since: Instant },
+    /// first did, `wait` the gap after the next one.
+    Hello { next: Instant, since: Instant, wait: Duration },
     /// The switcher answered; its state is arriving or has arrived.
     Open,
 }
 
 /// One session, and the state it has built up.
 pub struct Session {
+    timing: Timing,
     phase: Phase,
     hello_session: u16,
     session: u16,
@@ -60,8 +59,13 @@ impl Session {
     /// A session that starts by sending a hello at `now`. `hello_session` is
     /// the session id the hello carries; the switcher picks the real one.
     pub fn new(hello_session: u16, now: Instant) -> Session {
+        Session::with_timing(hello_session, now, Timing::default())
+    }
+
+    pub fn with_timing(hello_session: u16, now: Instant, timing: Timing) -> Session {
         Session {
-            phase: Phase::Hello { next: now, since: now },
+            timing,
+            phase: Phase::Hello { next: now, since: now, wait: timing.hello_every },
             hello_session: hello_session & 0x7fff,
             session: hello_session & 0x7fff,
             next_id: 1,
@@ -83,6 +87,10 @@ impl Session {
         &self.link
     }
 
+    pub fn timing(&self) -> Timing {
+        self.timing
+    }
+
     /// True once since the last call if the state or the link changed.
     pub fn take_changed(&mut self) -> bool {
         std::mem::take(&mut self.changed)
@@ -97,22 +105,24 @@ impl Session {
     pub fn poll_timeout(&self) -> Instant {
         let mut at = match self.phase {
             Phase::Hello { next, .. } => next,
-            Phase::Open => self.last_heard + SILENT_AFTER,
+            Phase::Open => self.last_heard + self.timing.silent_after,
         };
-        if let Some(resend) = self.inflight.deadline() {
+        if let Some(resend) = self.inflight.deadline(self.timing.resend_after) {
             at = at.min(resend);
         }
         at
     }
 
-    /// Queue commands. They go in as few packets as fit, in order.
+    /// Queue commands. They go in as few packets as fit, in order, laid out
+    /// for the protocol version the switcher reported.
     pub fn send(&mut self, commands: &[Command], now: Instant) -> Result<(), NotUp> {
         if !self.link.is_up() {
             return Err(NotUp(self.link.clone()));
         }
+        let protocol = self.state.protocol;
         let mut payload = Vec::new();
         for command in commands {
-            let block = command.encode();
+            let block = command.encode_for(protocol);
             if !payload.is_empty() && payload.len() + block.len() > MAX_PAYLOAD {
                 self.queue_reliable(std::mem::take(&mut payload), now);
             }
@@ -132,52 +142,9 @@ impl Session {
         self.inflight.push(id, bytes.clone(), now);
         self.outbox.push_back(bytes);
     }
-
-    /// Time has passed: resend, send a hello, or give up on a silent switcher.
-    pub fn handle_timeout(&mut self, now: Instant) {
-        match self.phase {
-            Phase::Hello { next, since } if now >= next => {
-                let silent = now.saturating_duration_since(since) >= SILENT_AFTER;
-                if silent && self.link.reason.as_deref() != Some(reasons::NO_ANSWER) {
-                    self.set_reason(Some(reasons::NO_ANSWER));
-                }
-                self.outbox.push_back(hello(self.hello_session));
-                self.phase = Phase::Hello { next: now + HELLO_EVERY, since };
-            }
-            Phase::Hello { .. } => {}
-            Phase::Open if now >= self.last_heard + SILENT_AFTER => {
-                self.restart(now, reasons::SILENT, Duration::ZERO)
-            }
-            Phase::Open => match self.inflight.due(now) {
-                Ok(again) => self.outbox.extend(again),
-                Err(()) => self.restart(now, reasons::UNACKED, Duration::ZERO),
-            },
-        }
-    }
-
-    /// Drop the session and start again with a hello after `wait`.
-    fn restart(&mut self, now: Instant, reason: &str, wait: Duration) {
-        self.inflight.clear();
-        self.outbox.clear();
-        self.phase = Phase::Hello { next: now + wait, since: now + wait };
-        self.session = self.hello_session;
-        self.link.status = LinkStatus::Connecting;
-        self.set_reason(Some(reason));
-    }
-
-    fn set_reason(&mut self, reason: Option<&str>) {
-        self.link.reason = reason.map(str::to_string);
-        self.changed = true;
-    }
-}
-
-/// The hello that opens a session: the hello flag, length 20, our session
-/// id, and the eight byte payload open implementations send. Bytes 8 and 9
-/// carry 0x00 0x3a in every known client; what they mean is not known.
-pub fn hello(session: u16) -> Vec<u8> {
-    let s = session.to_be_bytes();
-    vec![0x10, 0x14, s[0], s[1], 0, 0, 0, 0, 0, 0x3a, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0]
 }
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_timer;

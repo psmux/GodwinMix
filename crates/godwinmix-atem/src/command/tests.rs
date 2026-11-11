@@ -3,6 +3,7 @@
 //! by the encoder, so a change to a layout fails here first.
 
 use super::{Command, RateStyle, TransitionStyle};
+use crate::state::Version;
 
 fn check(command: Command, expected: &[u8]) {
     assert_eq!(command.encode(), expected, "{command:?}");
@@ -57,7 +58,13 @@ fn transition_style_and_rates() {
 #[test]
 fn downstream_keyers() {
     check(Command::DskOnAir { dsk: 1, on_air: true }, &[0, 12, 0, 0, b'C', b'D', b's', b'L', 1, 1, 0, 0]);
-    check(Command::DskAuto { dsk: 0 }, &[0, 12, 0, 0, b'D', b'D', b's', b'A', 0, 0, 0, 0]);
+    check(Command::DskAuto { dsk: 1 }, &[0, 12, 0, 0, b'D', b'D', b's', b'A', 0, 1, 0, 0]);
+    let old = Some(Version { major: 2, minor: 28 });
+    assert_eq!(
+        Command::DskAuto { dsk: 1 }.encode_for(old),
+        [0, 12, 0, 0, b'D', b'D', b's', b'A', 1, 0, 0, 0],
+        "before 2.29 the keyer is the first byte"
+    );
     check(Command::DskTie { dsk: 0, tie: true }, &[0, 12, 0, 0, b'C', b'D', b's', b'T', 0, 1, 0, 0]);
     check(Command::DskRate { dsk: 1, frames: 20 }, &[0, 12, 0, 0, b'C', b'D', b's', b'R', 1, 20, 0, 0]);
 }

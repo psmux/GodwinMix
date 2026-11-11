@@ -3,14 +3,21 @@
 use std::collections::BTreeMap;
 
 use crate::client::{Atem, Snapshot};
+use crate::session::Timing;
 use crate::Error;
 
 #[derive(Default)]
 pub struct Switchers {
     by_id: BTreeMap<String, Atem>,
+    timing: Timing,
 }
 
 impl Switchers {
+    /// Switchers whose sessions use other waits, for tests on loopback.
+    pub fn with_timing(timing: Timing) -> Switchers {
+        Switchers { by_id: BTreeMap::new(), timing }
+    }
+
     /// Connect a switcher on the current tokio runtime.
     pub fn add(&mut self, id: &str, address: &str) -> Result<&Atem, Error> {
         self.add_on(&tokio::runtime::Handle::current(), id, address)
@@ -33,7 +40,7 @@ impl Switchers {
             let why = "it is empty".to_string();
             return Err(Error::BadAddress { address: address.to_string(), why });
         }
-        let atem = Atem::connect_on(runtime, id, address.trim());
+        let atem = Atem::connect_with(runtime, id, address.trim(), self.timing);
         Ok(self.by_id.entry(id.to_string()).or_insert(atem))
     }
 

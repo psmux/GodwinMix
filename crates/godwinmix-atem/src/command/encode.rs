@@ -1,6 +1,10 @@
 //! Command bodies, one small function per layout.
 
 use super::{Command, RateStyle};
+use crate::state::Version;
+
+/// Protocol 2.29 (firmware 8.0.1) put a mask byte in front of `DDsA`.
+const DSK_AUTO_MASKED: Version = Version { major: 2, minor: 29 };
 
 pub(super) fn name(command: &Command) -> &'static [u8; 4] {
     match command {
@@ -37,7 +41,7 @@ fn four(a: u8, b: u8, c: u8) -> Vec<u8> {
     vec![a, b, c, 0]
 }
 
-pub(super) fn body(command: &Command) -> Vec<u8> {
+pub(super) fn body(command: &Command, protocol: Option<Version>) -> Vec<u8> {
     match command {
         Command::Program { me, source } | Command::Preview { me, source } => {
             byte_pad_word(*me, *source)
@@ -50,6 +54,9 @@ pub(super) fn body(command: &Command) -> Vec<u8> {
         Command::TransitionStyle { me, style } => vec![0x01, *me, *style as u8, 0],
         Command::TransitionRate { me, style, frames } => rate(*me, *style, *frames),
         Command::DskOnAir { dsk, on_air } => four(*dsk, u8::from(*on_air), 0),
+        // From 2.29 a mask byte comes first; zero leaves the direction to the
+        // switcher, which is a plain toggle.
+        Command::DskAuto { dsk } if !matches!(protocol, Some(v) if v < DSK_AUTO_MASKED) => four(0, *dsk, 0),
         Command::DskAuto { dsk } => four(*dsk, 0, 0),
         Command::DskTie { dsk, tie } => four(*dsk, u8::from(*tie), 0),
         Command::DskRate { dsk, frames } => four(*dsk, *frames, 0),

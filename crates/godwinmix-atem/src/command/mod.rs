@@ -9,6 +9,8 @@ mod encode;
 
 use serde::{Deserialize, Serialize};
 
+use crate::state::Version;
+
 /// The five transition styles, numbered as the switcher numbers them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -94,9 +96,16 @@ impl Command {
         encode::name(self)
     }
 
-    /// The whole command block, header included.
+    /// The whole command block, header included, as the newest firmware
+    /// takes it.
     pub fn encode(&self) -> Vec<u8> {
-        crate::wire::block(self.name(), &encode::body(self))
+        self.encode_for(None)
+    }
+
+    /// The whole block for a switcher that reported `protocol` in `_ver`.
+    /// A few layouts changed between versions; `None` means the newest.
+    pub fn encode_for(&self, protocol: Option<Version>) -> Vec<u8> {
+        crate::wire::block(self.name(), &encode::body(self, protocol))
     }
 }
 

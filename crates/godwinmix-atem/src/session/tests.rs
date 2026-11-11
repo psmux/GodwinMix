@@ -3,13 +3,19 @@
 
 use std::time::{Duration, Instant};
 
+const RESEND_AFTER: Duration = Duration::from_millis(200);
+const SILENT_AFTER: Duration = Duration::from_secs(5);
+
 use super::*;
 use crate::wire::block;
 
-const SESSION: u16 = 0x1234;
+const MAX_RESENDS: u32 = 10;
+const FULL_BACKOFF: Duration = Duration::from_secs(5);
+
+pub(super) const SESSION: u16 = 0x1234;
 const REAL: u16 = 0x8123;
 
-fn switcher_hello(accept: u8) -> Vec<u8> {
+pub(super) fn switcher_hello(accept: u8) -> Vec<u8> {
     vec![0x10, 0x14, 0x12, 0x34, 0, 0, 0, 0, 0, 0, 0, 0, accept, 0, 0, 0, 0, 0, 0, 0]
 }
 
@@ -17,12 +23,12 @@ fn reliable(id: u16, payload: &[u8]) -> Vec<u8> {
     Header { flags: Flags::ACK_REQUEST, session: REAL, packet_id: id, ..Header::default() }.packet(payload)
 }
 
-fn drain(session: &mut Session) -> Vec<Vec<u8>> {
+pub(super) fn drain(session: &mut Session) -> Vec<Vec<u8>> {
     std::iter::from_fn(|| session.poll_transmit()).collect()
 }
 
 /// A session that has said hello and been answered, and has had the dump.
-fn opened(now: Instant) -> Session {
+pub(super) fn opened(now: Instant) -> Session {
     let mut s = Session::new(SESSION, now);
     s.handle_timeout(now);
     s.handle_datagram(&switcher_hello(2), now);
@@ -96,17 +102,6 @@ fn a_command_while_down_is_refused_with_the_link() {
     let mut s = Session::new(SESSION, now);
     let refused = s.send(&[Command::Cut { me: 0 }], now).unwrap_err();
     assert_eq!(refused.0.status, LinkStatus::Connecting);
-}
-
-#[test]
-fn no_answer_says_so_and_keeps_trying() {
-    let start = Instant::now();
-    let mut s = Session::new(SESSION, start);
-    for second in 0..=6 {
-        s.handle_timeout(start + Duration::from_secs(second));
-    }
-    assert_eq!(drain(&mut s).len(), 7, "one hello a second");
-    assert_eq!(s.link().reason.as_deref(), Some(reasons::NO_ANSWER));
 }
 
 #[test]

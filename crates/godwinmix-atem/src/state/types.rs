@@ -4,7 +4,8 @@ use serde::Serialize;
 
 use crate::command::TransitionStyle;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+/// Ordered major first, so `>=` reads as "this firmware or newer".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct Version {
     pub major: u16,
     pub minor: u16,
