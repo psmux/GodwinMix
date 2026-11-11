@@ -65,6 +65,7 @@ impl Default for PtzConfig {
 struct AxisCtl {
     moving: bool,
     speed: f32,
+    rate: f32,
     last_err: Option<f32>,
     settled_at: Option<Instant>,
 }
@@ -75,6 +76,7 @@ impl AxisCtl {
             None => {
                 self.moving = false;
                 self.last_err = None;
+                self.rate = 0.0;
                 0.0
             }
             Some(e) => self.desired(e, gain, dead, cfg, t, dt),
@@ -88,10 +90,12 @@ impl AxisCtl {
     }
 
     fn desired(&mut self, e: f32, gain: f32, dead: f32, cfg: &PtzConfig, t: Instant, dt: f32) -> f32 {
-        let rate = match (self.last_err, dt > 0.0) {
-            (Some(l), true) => (e - l) / dt,
-            _ => 0.0,
-        };
+        // The error is measured, so it is noisy; its rate of change is
+        // noisier still and is smoothed before it is used.
+        if let (Some(l), true) = (self.last_err, dt > 0.0) {
+            self.rate += ((e - l) / dt - self.rate) * 0.2;
+        }
+        let rate = self.rate;
         self.last_err = Some(e);
         if self.moving && e.abs() < dead * cfg.settle {
             self.moving = false;
