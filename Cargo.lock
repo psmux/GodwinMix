@@ -1603,10 +1603,10 @@ version = "0.3.32"
 dependencies = [
  "base64 0.22.1",
  "gmx-netkit",
+ "godwinmix-ptz",
  "godwinmix-sdk",
  "gstreamer",
  "gstreamer-app",
- "ring",
  "serde_json",
 ]
 
@@ -1649,6 +1649,19 @@ dependencies = [
  "godwinmix-sdk",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "gmx-ptz"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "godwinmix-framebus",
+ "godwinmix-ptz",
+ "godwinmix-sdk",
+ "godwinmix-track",
+ "image",
+ "serde_json",
 ]
 
 [[package]]
@@ -1910,7 +1923,7 @@ dependencies = [
 name = "godwinmix-ptz"
 version = "0.3.32"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "ring",
 ]
 
