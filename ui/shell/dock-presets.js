@@ -40,6 +40,7 @@ export const READY = [{
 
 /** Put a ready made layout up: its panels, every other one closed. */
 export function useReady(workspace, preset) {
+  if (!workspace) return;
   const shown = new Set(leaves(preset.tree).flatMap(n => n.tabs));
   const hidden = list().filter(s => !s.slots.includes('header') && !s.slots.includes('modal') && !shown.has(s.id)).map(s => s.id);
   apply(workspace, { version: 1, tree: preset.tree, hidden });

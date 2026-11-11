@@ -123,7 +123,7 @@ function commands(client) {
     cmd("edit.delete", "Delete the selection", "Edit"),
     cmd("view.panel", "Show or hide a panel", "View", "", true),
     cmd("view.studio", "Studio mode on or off", "View"),
-    cmd("view.volunteer", "Volunteer layout: Preview, Programme and the source tiles", "View"),
+    cmd("view.volunteer", "Volunteer layout", "View"),
     cmd("view.reset-layout", "Reset the layout", "View"),
     cmd("view.theme", "Choose a theme", "View", "", true),
     cmd("source.add-kind", "Add a source of one kind", "Sources", "", true),

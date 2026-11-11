@@ -567,7 +567,7 @@ class SourcesPanel extends HTMLElement {
     return openInteract(this.client, source);
   }
 
-  /** Camera properties: a tile's camera button or Camera on its menu. */
+  /** Camera properties, for a PTZ camera's source. */
   openCamera(id) {
     const source = this.client.store.source(id);
     if (source) import("../camera/props.js").then((m) => m.openCamera(this.client, source));

@@ -124,7 +124,6 @@ class ProgramPanel extends HTMLElement {
 
     this.applyMode();
     this.render(this.client.state);
-    // ATEM switchers' chips, after the name.
     import("../camera/atem-chip.js").then((m) => (this.atem = m.atemChips(this)));
   }
 

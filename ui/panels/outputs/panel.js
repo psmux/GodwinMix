@@ -128,7 +128,6 @@ class OutputsPanel extends HTMLElement {
       ]),
       this.list
     );
-    // ATEM switchers, under the destinations.
     import("../camera/atem-card.js").then((m) => (this.atem = m.switcherCards(this)));
     this.offs = [
       this.client.onRender((s) => this.render(s)),
