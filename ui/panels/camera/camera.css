@@ -10,7 +10,7 @@
 .tile-follow {
   position: absolute; top: 5px; right: 5px; display: inline-flex; align-items: center; gap: 5px;
   padding: 1px 7px 1px 6px; border-radius: 999px; font-size: var(--fs-sm); color: #fff;
-  background: var(--overlay); pointer-events: none;
+  background: rgba(0, 0, 0, 0.62); pointer-events: none;
 }
 .tile-follow i { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
 .tile-follow.following i { background: var(--ok); }
@@ -70,7 +70,7 @@
 
 /* The zoom rocker. */
 .cam-zoom { display: flex; align-items: center; gap: 6px; width: 100%; }
-.cam-zoom-end { flex: none; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--raise); border: var(--border) solid var(--line); line-height: 1.2; }
+.cam-zoom-end { flex: none; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--raise); color: var(--text); border: var(--border) solid var(--line); line-height: 1.2; }
 .cam-zoom-end:active { background: var(--accent); color: var(--on-accent); }
 .cam-zoom-track {
   position: relative; flex: 1 1 auto; height: 28px; border-radius: 999px; touch-action: none; cursor: ew-resize;
