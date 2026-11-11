@@ -1,0 +1,97 @@
+/* The camera window: layout, the camera cards and the three steps. Theme
+   values only, so dark, light and high contrast all work. The controls
+   themselves are in parts.css. */
+
+.cam-panel {
+  --cam-touch: 48px;
+  --cam-r: 14px;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 14px; min-width: 0; box-sizing: border-box;
+  color: var(--text); background: var(--bg);
+  -webkit-user-select: none; user-select: none;
+}
+.cam-panel *, .cam-panel *::before, .cam-panel *::after { box-sizing: border-box; }
+.cam-panel button { min-height: var(--cam-touch); touch-action: manipulation; }
+.cam-panel [hidden] { display: none !important; }
+
+.cam-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cam-title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.01em; }
+.cam-status { font-size: var(--fs); }
+.cam-demo-badge {
+  padding: 3px 10px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 700;
+  background: var(--warn); color: #1a1200; text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+.cam-step {
+  display: flex; flex-direction: column; gap: 12px; min-width: 0;
+  padding: 14px; border-radius: var(--cam-r);
+  background: var(--panel); border: 1px solid var(--line-soft); box-shadow: 0 1px 0 var(--line-soft);
+}
+.cam-step-pick { background: transparent; border: 0; box-shadow: none; padding: 0; }
+.cam-step.none { opacity: 0.5; pointer-events: none; }
+.cam-steptitle { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 17px; font-weight: 700; }
+.cam-stepno {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex: none;
+  background: var(--accent); color: var(--on-accent); font-size: 15px; font-weight: 800;
+}
+.cam-framing-name { padding: 3px 12px; border-radius: 999px; background: var(--panel2); color: var(--dim); font-size: 14px; font-weight: 700; }
+.cam-framing-name:empty { display: none; }
+.cam-steps { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.cam-panel.wide .cam-steps { grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); align-items: start; }
+
+/* Camera strip. */
+.cam-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.cam-panel.narrow .cam-strip {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch; margin: 0 -14px; padding-left: 14px; padding-right: 14px;
+}
+.cam-panel.narrow .cam-card { flex: 0 0 84%; scroll-snap-align: center; }
+.cam-empty { padding: 28px; border: 2px dashed var(--line); border-radius: var(--cam-r); text-align: center; }
+.cam-empty p { margin: 4px 0; }
+.cam-try { margin-top: 10px; padding: 0 22px; border-radius: 999px; border: 0; font-weight: 700; background: var(--accent); color: var(--on-accent); }
+
+.cam-card {
+  position: relative; display: flex; flex-direction: column; cursor: pointer; overflow: hidden;
+  border-radius: var(--cam-r); background: var(--panel); border: 4px solid var(--line-soft);
+  transition: border-color var(--anim, 0.15s), box-shadow var(--anim, 0.15s), transform 0.12s;
+  outline: none;
+}
+.cam-card:hover { border-color: var(--line); }
+.cam-card:active { transform: scale(0.99); }
+.cam-card:focus-visible { box-shadow: 0 0 0 3px var(--select); }
+.cam-card.preview { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok), 0 6px 22px color-mix(in srgb, var(--ok) 30%, transparent); }
+.cam-card.program { border-color: var(--live); box-shadow: 0 0 0 1px var(--live), 0 6px 26px color-mix(in srgb, var(--live) 38%, transparent); }
+.cam-picwrap { position: relative; background: #000; aspect-ratio: 16 / 9; }
+.cam-pic { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+.cam-top { position: absolute; inset: 8px 8px auto 8px; display: flex; justify-content: space-between; align-items: center; pointer-events: none; }
+.cam-name, .cam-tally {
+  padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 13px;
+  background: rgba(0, 0, 0, 0.6); color: #fff; backdrop-filter: blur(6px);
+}
+.cam-tally { text-transform: uppercase; letter-spacing: 0.06em; font-size: 12px; }
+.cam-card.program .cam-tally { background: var(--live); }
+.cam-card.preview .cam-tally { background: var(--ok); color: #04140b; }
+.cam-under { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 14px; font-weight: 600; min-height: 44px; }
+.cam-trackdot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); flex: none; }
+.cam-trackdot.following { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+.cam-trackdot.searching, .cam-trackdot.lost { background: var(--warn); }
+.cam-trackdot.error { background: var(--bad); }
+
+/* Step two's layout. */
+.cam-frame-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }
+.cam-panel.narrow .cam-frame-grid { grid-template-columns: 1fr; }
+.cam-panel.narrow .cam-frame-move { width: 100%; }
+.cam-frame-move { width: 260px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.cam-frame-auto { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cam-hint { margin: 0; font-size: var(--fs); }
+.cam-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 6px; }
+
+/* Step three's layout. */
+.cam-takes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cam-routerow { display: flex; flex-direction: column; gap: 8px; }
+.cam-route { margin: 0; font-size: 14px; color: var(--dim); }
+.cam-route::before { content: "Sends to: "; font-weight: 700; color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cam-card, .cam-knob.spring, .cam-zoom-thumb.spring { transition: none !important; }
+}

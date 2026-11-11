@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "camera_list",
+  "description": "List the cameras with what each can do, how each is moving, its last error and whether it is tracking.",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

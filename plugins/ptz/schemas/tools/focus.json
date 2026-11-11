@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "focus",
+  "description": "Focus: auto, manual, one_push (focus once on the middle, then hold), or near, far and stop to drive it by hand, which needs manual focus first.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "manual",
+        "one_push",
+        "near",
+        "far",
+        "stop"
+      ],
+      "description": "What to do.",
+      "examples": [
+        "auto"
+      ]
+    },
+    "speed": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "How fast near and far drive, 0 to 1.",
+      "examples": [
+        0.5
+      ]
+    }
+  },
+  "required": [
+    "mode"
+  ],
+  "additionalProperties": false
+}

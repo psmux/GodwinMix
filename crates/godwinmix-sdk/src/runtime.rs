@@ -18,6 +18,7 @@ use crate::framing::{FramingError, Reader, Writer};
 use crate::handshake::{check_ready, initialize_params, Machine};
 use crate::manifest::Manifest;
 use crate::plugin::{Handler, Reporter};
+use crate::reply::Reply;
 use crate::wire::{codes, Health, Id, Message, Ready, Request, RpcError, Transport};
 
 /// What can end a run.
@@ -196,6 +197,13 @@ fn spawn_worker<H: Handler + 'static>(
             let mut failure: Option<String> = None;
             while let Ok(job) = rx.recv() {
                 match job {
+                    Job::Call { id, method, params } if failure.is_none() && handler.answers_later(&method) => {
+                        let reply = Reply::new(Arc::clone(&writer), id, &method);
+                        if let Err(error) = guarded(&method, || handler.on_call_later(&method, params, reply)) {
+                            failure = Some(error.message.clone());
+                            *health.lock().unwrap_or_else(|e| e.into_inner()) = Health::failing(error.message);
+                        }
+                    }
                     Job::Call { id, method, params } => {
                         let outcome = if let Some(detail) = &failure {
                             Err(callback_error(&method, format!(
@@ -696,3 +704,7 @@ settings = "settings.json"
         assert!(err.to_string().contains("closed stdin"), "{err}");
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_later_tests.rs"]
+mod later_tests;

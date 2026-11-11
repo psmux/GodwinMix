@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "position",
+  "description": "Where the camera points: pan and tilt -1 to 1 across its range, zoom 0 (widest) to 1, and the protocol's own numbers.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

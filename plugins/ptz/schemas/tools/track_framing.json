@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "track_framing",
+  "description": "Set the framing style tracking uses: close, waist, full or wide. Applies now when tracking is on, and to the next follow.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "framing": {
+      "type": "string",
+      "enum": [
+        "close",
+        "waist",
+        "full",
+        "wide"
+      ],
+      "title": "Framing",
+      "description": "close is head and shoulders, waist is from the waist up, full is the whole person, wide is the person and the space around them.",
+      "examples": [
+        "waist"
+      ]
+    }
+  },
+  "required": [
+    "framing"
+  ],
+  "additionalProperties": false
+}

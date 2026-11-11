@@ -1,0 +1,193 @@
+[plugin]
+name = "ptz"
+version = "0.1.0"
+api = 1
+description = "PTZ cameras: VISCA, ONVIF and Canon control, a joystick that stops by itself, presets with pictures, and tracking that keeps a person in shot"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "singleton"
+
+# Staged into bin/ by `dev/plugins.sh build` or `./build`: a workspace
+# member's target directory sits above the plugin, and a manifest path may not
+# climb out of the plugin's own directory.
+[run]
+bin = { "linux-x86_64" = "bin/gmx-ptz", "linux-aarch64" = "bin/gmx-ptz", "macos-aarch64" = "bin/gmx-ptz", "macos-x86_64" = "bin/gmx-ptz", "windows-x86_64" = "bin/gmx-ptz.exe" }
+
+[[provides]]
+kind = "service"
+id = "ptz"
+settings = "schemas/ptz.json"
+skill = "skills/ptz/SKILL.md"
+capabilities = ["health"]
+
+[[tools]]
+name = "camera_add"
+description = "Add a PTZ camera, or replace one added before with the same id. VISCA over IP, raw VISCA over TCP, ONVIF and Canon CR-N are spoken; fake is a camera with no hardware, for trying the window. Give `source`, the mixer source that shows the camera, for presets with pictures and for tracking. Example: camera_add {id: \"cam-pulpit\", protocol: \"visca-ip\", address: \"192.0.2.20\", source: \"pulpit\"}."
+input = "schemas/tools/camera_add.json"
+output = "schemas/tools/camera_add.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "camera_list"
+description = "List the cameras with what each can do, how each is moving, its last error and whether it is tracking. Example: camera_list {} answers [{id: \"cam-pulpit\", protocol: \"visca-ip\", tracking: false, ...}]."
+input = "schemas/tools/camera_list.json"
+output = "schemas/tools/camera_list.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "camera_remove"
+description = "Remove a camera added with camera_add. It is stopped on the way out. Cameras from the plugin's settings are removed there instead. Example: camera_remove {camera: \"cam-pulpit\"}."
+input = "schemas/tools/camera_remove.json"
+output = "schemas/tools/camera_remove.out.json"
+annotations = { readOnlyHint = false, destructiveHint = true, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "move"
+description = "The joystick: pan, tilt and zoom at these speeds, -1 to 1, for 300 ms. Call it again every 100 ms or so while the stick is held; when the calls stop the camera stops by itself, so a closed tab never leaves a camera turning. While it is held the follow loop's speeds are ignored. Example: move {camera: \"cam-pulpit\", pan: 0.4, tilt: -0.1}."
+input = "schemas/tools/move.json"
+output = "schemas/tools/move.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "stop"
+description = "Stop the camera now, and turn its tracking off. Example: stop {camera: \"cam-pulpit\"}."
+input = "schemas/tools/stop.json"
+output = "schemas/tools/stop.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "zoom"
+description = "Zoom at a speed until told otherwise: -1 wider to 1 tighter, 0 stops. For a zoom that stops by itself use move with zoom. Example: zoom {camera: \"cam-pulpit\", speed: 0.5}."
+input = "schemas/tools/zoom.json"
+output = "schemas/tools/zoom.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "focus"
+description = "Focus: auto, manual, one_push (focus once on the middle, then hold), or near, far and stop to drive it by hand, which needs manual focus first. Example: focus {camera: \"cam-pulpit\", mode: \"one_push\"}."
+input = "schemas/tools/focus.json"
+output = "schemas/tools/focus.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "exposure"
+description = "Exposure, where the protocol has it: the mode (auto, manual, shutter, iris) and the iris, shutter and gain in the camera's own steps as its manual numbers them. Only what is given changes. Example: exposure {camera: \"cam-pulpit\", mode: \"manual\", shutter: 7}."
+input = "schemas/tools/exposure.json"
+output = "schemas/tools/exposure.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "position"
+description = "Where the camera points: pan and tilt -1 to 1 across its range, zoom 0 (widest) to 1, and the protocol's own numbers. Example: position {camera: \"cam-pulpit\"} answers {pan: 0.12, tilt: -0.05, zoom: 0.4}."
+input = "schemas/tools/position.json"
+output = "schemas/tools/position.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "goto"
+description = "Go to a position, in the same numbers position answers with. What is left out stays as it is. Example: goto {camera: \"cam-pulpit\", pan: 0, tilt: 0, zoom: 0}."
+input = "schemas/tools/goto.json"
+output = "schemas/tools/goto.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "preset_save"
+description = "Store the current shot as a preset on the camera, with a name and a thumbnail taken from the mixer now, so the window shows presets as pictures. Saving a number again replaces it. Example: preset_save {camera: \"cam-pulpit\", preset: 1, name: \"Pulpit close\"}."
+input = "schemas/tools/preset_save.json"
+output = "schemas/tools/preset_save.out.json"
+annotations = { readOnlyHint = false, destructiveHint = true, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "preset_recall"
+description = "Move the camera to a preset. Tracking, if it was on, is turned off. Example: preset_recall {camera: \"cam-pulpit\", preset: 1}."
+input = "schemas/tools/preset_recall.json"
+output = "schemas/tools/preset_recall.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "preset_list"
+description = "The presets saved through this plugin, with their names and thumbnails' paths; pictures: true adds each thumbnail as a data URL. Example: preset_list {camera: \"cam-pulpit\", pictures: true}."
+input = "schemas/tools/preset_list.json"
+output = "schemas/tools/preset_list.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "track_follow"
+description = "Turn tracking on: the camera follows a person by itself. Who: target person-3 (an id from track_observe), largest or central, or point {x, y} where somebody tapped the picture, 0 to 1 from the top left. Example: track_follow {camera: \"cam-pulpit\", framing: \"waist\", point: {x: 0.6, y: 0.4}}."
+input = "schemas/tools/track_follow.json"
+output = "schemas/tools/track_follow.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "track_stop"
+description = "Turn tracking off. The camera stops where it is. Example: track_stop {camera: \"cam-pulpit\"}."
+input = "schemas/tools/track_stop.json"
+output = "schemas/tools/track_stop.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "track_framing"
+description = "Set the framing style tracking uses: close, waist, full or wide. Applies now when tracking is on, and to the next follow. Example: track_framing {camera: \"cam-pulpit\", framing: \"full\"}."
+input = "schemas/tools/track_framing.json"
+output = "schemas/tools/track_framing.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "track_state"
+description = "What tracking is doing: who is followed, the framing, the state (following, holding, fallback), the people in view and how fast it runs. With no camera, every camera. Example: track_state {camera: \"cam-pulpit\"}."
+input = "schemas/tools/track_state.json"
+output = "schemas/tools/track_state.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "track_observe"
+description = "What a camera sees now, without moving it: each person's id, box (0 to 1 from the top left) and confidence. Starts looking if nothing is, and stops looking 15 s after the last ask. Example: track_observe {camera: \"cam-pulpit\"} answers tracks: [{id: \"person-3\", box: {x: 0.6, y: 0.2, w: 0.1, h: 0.6}, confidence: 0.8}]."
+input = "schemas/tools/track_observe.json"
+output = "schemas/tools/track_observe.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+# `gmx plugin add ./plugins/ptz` runs this when bin/gmx-ptz is not there.
+# The command runs in the directory you named: this plugin is a workspace
+# member and its dependencies are path dependencies two levels up.
+[build]
+command = "sh build"
+output = "bin/gmx-ptz"

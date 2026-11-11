@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "zoom",
+  "description": "Zoom at a speed until told otherwise: -1 wider to 1 tighter, 0 stops. For a zoom that stops by itself use move with zoom.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "speed": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "-1 wider to 1 tighter; 0 stops.",
+      "examples": [
+        0.5
+      ]
+    }
+  },
+  "required": [
+    "speed"
+  ],
+  "additionalProperties": false
+}
