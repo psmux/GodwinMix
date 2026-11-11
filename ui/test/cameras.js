@@ -34,6 +34,18 @@ export async function cameraTests(test, eq, ok) {
   });
 
   const { camera, people, tracking, atem: atemShape } = await import("../panels/cameras/shapes.js");
+  test("people the tracker has lost, or who left the picture, are not drawn", () => {
+    const seen = people({ camera: "cam-b", tracks: [
+      { id: "person-1", box: { x: 0.2, y: 0.1, w: 0.2, h: 0.8 }, state: "confirmed" },
+      { id: "person-2", box: { x: 0.5, y: 0.1, w: 0.2, h: 0.8 }, state: "lost" },
+      { id: "person-3", box: { x: -0.3, y: 0.1, w: 0.31, h: 0.8 }, state: "confirmed" },
+      { id: "person-4", box: { x: 0.9, y: 0.1, w: 0.3, h: 0.8 }, state: "confirmed" },
+    ] });
+    eq(seen.people.map((p) => p.id), ["person-1", "person-4"]);
+    const watching = people({ camera: "cam-b", mode: "observing", target: "person-1", tracks: [{ id: "person-1", box: { x: 0.2, y: 0.1, w: 0.2, h: 0.8 }, state: "confirmed", followed: true }] });
+    eq([watching.following, watching.people[0].followed], [null, false], "only a steering camera follows anyone");
+    ok(Math.abs(seen.people[1].box[2] - 0.1) < 1e-9, "a box half out of the picture is cut at its edge");
+  });
   test("the atem plugin's state becomes the window's", () => {
     const w = atemShape({
       id: "atem-main", name: "Main switcher", connected: true, why: null, mode: "follow", product: "ATEM Mini Pro", firmware: "8.1.1",

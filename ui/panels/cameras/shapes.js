@@ -30,9 +30,22 @@ export function preset(p) {
 }
 
 /** The people a track answer lists, with boxes as [x, y, w, h]. */
+/** A box clipped to the picture, as [x, y, w, h] fractions of it. */
+function inside(b) {
+  if (b.x >= 0 && b.y >= 0 && b.x + b.w <= 1 && b.y + b.h <= 1) return [b.x, b.y, b.w, b.h];
+  const x0 = Math.max(0, b.x), y0 = Math.max(0, b.y);
+  const x1 = Math.min(1, b.x + b.w), y1 = Math.min(1, b.y + b.h);
+  return [x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0)];
+}
+
 export function people(s) {
   const tracks = (s && s.tracks) || [];
-  const list = tracks.map((t) => ({ id: t.id, box: [t.box.x, t.box.y, t.box.w, t.box.h], score: t.confidence, followed: !!t.followed }));
+  // While only observing, the plugin still picks someone; nobody is followed
+  // until the camera is steering.
+  const steering = !!s && s.mode === "following";
+  // A lost track's box is the tracker's guess at where someone went, often
+  // past the edge; the window draws only people it can see, inside the picture.
+  const list = tracks.filter((t) => t.state !== "lost").map((t) => ({ id: t.id, box: inside(t.box), score: t.confidence, followed: steering && !!t.followed })).filter((t) => t.box[2] > 0.02 && t.box[3] > 0.02);
   const followed = list.find((t) => t.followed);
   return {
     camera: s && s.camera,
