@@ -139,8 +139,9 @@ impl Session {
         self.next_id = (self.next_id + 1) % MAX_PACKET_ID;
         let header = Header { flags: Flags::ACK_REQUEST, session: self.session, packet_id: id, ..Header::default() };
         let bytes = header.packet(&payload);
-        self.inflight.push(id, bytes.clone(), now);
-        self.outbox.push_back(bytes);
+        if let Some(go) = self.inflight.push(id, bytes, now) {
+            self.outbox.push_back(go);
+        }
     }
 }
 

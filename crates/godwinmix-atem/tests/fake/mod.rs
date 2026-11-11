@@ -78,6 +78,7 @@ async fn run(socket: UdpSocket, seen: Arc<Mutex<Seen>>, lose_every: u32) {
     let mut w = Wire { peer: None, session: 0x8a01, next_id: 1, expect: 1, inflight: Vec::new(), count: 0x2545_f491, lose_every };
     let mut buf = [0u8; 2048];
     let mut tick = tokio::time::interval(Duration::from_millis(10));
+    let mut last_ping = Instant::now();
     loop {
         tokio::select! {
             got = socket.recv_from(&mut buf) => {
@@ -95,6 +96,13 @@ async fn run(socket: UdpSocket, seen: Arc<Mutex<Seen>>, lose_every: u32) {
                     .map(|p| { p.2 = Instant::now(); p.1[0] |= Flags::RETRANSMIT.0 << 3; p.1.clone() })
                     .collect();
                 for out in due { w.send(&socket, out).await; }
+                // A real switcher pings a quiet client, so an idle session
+                // is not a silent one.
+                if w.peer.is_some() && w.inflight.is_empty() && last_ping.elapsed() >= Duration::from_millis(100) {
+                    last_ping = Instant::now();
+                    let ping = w.reliable(Vec::new());
+                    w.send(&socket, ping).await;
+                }
             }
         }
     }

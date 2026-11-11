@@ -27,7 +27,7 @@ impl Wire {
         }
     }
 
-    fn reliable(&mut self, payload: Vec<u8>) -> Vec<u8> {
+    pub(super) fn reliable(&mut self, payload: Vec<u8>) -> Vec<u8> {
         let id = self.next_id;
         self.next_id = (self.next_id + 1) % MAX_PACKET_ID;
         let bytes = Header { flags: Flags::ACK_REQUEST, session: self.session, packet_id: id, ..Header::default() }.packet(&payload);

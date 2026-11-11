@@ -1,5 +1,11 @@
 //! Packets this client sent that the switcher has not acknowledged yet.
+//!
+//! At most [`WINDOW`] are out at once and the rest wait their turn. A
+//! switcher takes packets in order only, so a burst of forty with one lost
+//! near the front throws away the other thirty nine, and every resend round
+//! would do the same.
 
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crate::wire::{Flags, MAX_PACKET_ID};
@@ -11,9 +17,13 @@ struct Pending {
     resends: u32,
 }
 
+/// How many packets may wait for an acknowledgement at once.
+pub const WINDOW: usize = 8;
+
 #[derive(Default)]
 pub struct Inflight {
     pending: Vec<Pending>,
+    waiting: VecDeque<(u16, Vec<u8>)>,
 }
 
 /// True when `id` is at or before `newest`, counting the wrap at 0x8000:
@@ -24,17 +34,39 @@ pub fn covered(newest: u16, id: u16) -> bool {
 }
 
 impl Inflight {
-    pub fn push(&mut self, id: u16, bytes: Vec<u8>, now: Instant) {
-        self.pending.push(Pending { id, bytes, sent_at: now, resends: 0 });
+    /// Take a packet; answers it when it may go now, or keeps it until the
+    /// switcher has caught up.
+    pub fn push(&mut self, id: u16, bytes: Vec<u8>, now: Instant) -> Option<Vec<u8>> {
+        if self.pending.len() >= WINDOW || !self.waiting.is_empty() {
+            self.waiting.push_back((id, bytes));
+            return None;
+        }
+        self.pending.push(Pending { id, bytes: bytes.clone(), sent_at: now, resends: 0 });
+        Some(bytes)
     }
 
     /// The switcher acknowledged `id`, and with it everything before.
-    pub fn ack(&mut self, id: u16) {
+    /// Answers the waiting packets that may go now. A switcher that is still
+    /// acknowledging is alive, so the packets left start counting again.
+    pub fn ack(&mut self, id: u16, now: Instant) -> Vec<Vec<u8>> {
+        let before = self.pending.len();
         self.pending.retain(|p| !covered(id, p.id));
+        if self.pending.len() == before {
+            return Vec::new();
+        }
+        self.pending.iter_mut().for_each(|p| p.resends = 0);
+        let mut out = Vec::new();
+        while self.pending.len() < WINDOW {
+            let Some((id, bytes)) = self.waiting.pop_front() else { break };
+            self.pending.push(Pending { id, bytes: bytes.clone(), sent_at: now, resends: 0 });
+            out.push(bytes);
+        }
+        out
     }
 
     pub fn clear(&mut self) {
         self.pending.clear();
+        self.waiting.clear();
     }
 
     #[cfg(test)]
@@ -77,43 +109,5 @@ impl Inflight {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const RESEND_AFTER: Duration = Duration::from_millis(200);
-    const MAX_RESENDS: u32 = 10;
-
-    #[test]
-    fn covered_counts_across_the_wrap() {
-        assert!(covered(5, 5));
-        assert!(covered(5, 1));
-        assert!(!covered(5, 6));
-        assert!(covered(2, 0x7ffe));
-        assert!(!covered(0x7ffe, 2));
-    }
-
-    #[test]
-    fn an_ack_clears_everything_up_to_it() {
-        let now = Instant::now();
-        let mut inflight = Inflight::default();
-        for id in [0x7ffe, 0x7fff, 0, 1] {
-            inflight.push(id, vec![0x08, 12], now);
-        }
-        inflight.ack(0);
-        assert_eq!(inflight.len(), 1);
-    }
-
-    #[test]
-    fn a_packet_is_resent_as_a_retransmit_and_then_given_up_on() {
-        let start = Instant::now();
-        let mut inflight = Inflight::default();
-        inflight.push(1, vec![0x08, 12], start);
-        let mut now = start;
-        for _ in 0..MAX_RESENDS {
-            now += RESEND_AFTER;
-            let again = inflight.due(now, RESEND_AFTER, MAX_RESENDS).unwrap();
-            assert_eq!(again[0][0], 0x28);
-        }
-        assert!(inflight.due(now + RESEND_AFTER, RESEND_AFTER, MAX_RESENDS).is_err());
-    }
-}
+#[path = "tests_inflight.rs"]
+mod tests;

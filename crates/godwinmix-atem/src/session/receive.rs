@@ -30,7 +30,8 @@ impl Session {
             self.outbox.extend(again);
         }
         if header.flags.has(Flags::ACK_REPLY) {
-            self.inflight.ack(header.ack_id);
+            let next = self.inflight.ack(header.ack_id, now);
+            self.outbox.extend(next);
         }
         if header.flags.has(Flags::ACK_REQUEST) {
             self.reliable(&header, payload);
