@@ -1,5 +1,7 @@
 import { el } from './dom.js';
-import { clean, leaves, save } from './dock-model.js';
+import { clean, leaves, save, leaf } from './dock-model.js';
+import { list } from './registry.js';
+import { setSetting } from './settings.js';
 
 const KEY = 'gmx.workspace.layouts.v1';
 function stored() {
@@ -24,6 +26,35 @@ function apply(workspace, value) {
   workspace.sync();
   save(workspace.state);
 }
+/**
+ * Layouts that ship with GodwinMix. Volunteer is for a simple service: Studio
+ * mode's Preview and Programme above, Sources with the camera tiles below,
+ * and every other panel closed. It adds nothing; View brings any panel back.
+ */
+export const READY = [{
+  name: 'Volunteer',
+  about: 'Preview and Programme above, the source tiles below. Tap a camera to put it in Preview, steer it there, then Take.',
+  tree: { axis: 'y', ratio: 0.58, a: leaf(['core/program']), b: leaf(['core/sources']) },
+  studio: true,
+}];
+
+/** Put a ready made layout up: its panels, every other one closed. */
+export function useReady(workspace, preset) {
+  const shown = new Set(leaves(preset.tree).flatMap(n => n.tabs));
+  const hidden = list().filter(s => !s.slots.includes('header') && !s.slots.includes('modal') && !shown.has(s.id)).map(s => s.id);
+  apply(workspace, { version: 1, tree: preset.tree, hidden });
+  if (preset.studio) setSetting('producer', true);
+}
+
+export function readyLayouts(workspace, close) {
+  return el('section.col', {}, [el('h3', { text: 'Ready made' }),
+    ...READY.map(p => el('div.row', {}, [
+      el('button.btn', { text: p.name, onclick: () => { useReady(workspace, p); close(); } }),
+      el('span.sm.dim.grow', { text: p.about }),
+    ])),
+  ]);
+}
+
 export function savedLayouts(workspace, close) {
   const name = el('input', { type: 'text', maxlength: 64, placeholder: 'Sunday service', 'aria-label': 'Layout name' });
   const status = el('p.sm.dim', { role: 'status' });

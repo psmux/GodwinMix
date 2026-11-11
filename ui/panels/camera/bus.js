@@ -3,8 +3,8 @@
 
 import { el } from "../../shell/dom.js";
 
-/** Cameras and plain inputs; black, bars and the media players only in Pro. */
-export const plainInputs = (atem) => (atem.inputs || []).filter((i) => i.id > 0 && i.id < 1000);
+/** Black, the cameras and plain inputs; bars and the media players stay in the aux lists. */
+export const plainInputs = (atem) => (atem.inputs || []).filter((i) => i.id >= 0 && i.id < 1000);
 
 export function bus(label, kind, onPick) {
   const row = el("div.cam-bus-keys", { role: "radiogroup", "aria-label": label });

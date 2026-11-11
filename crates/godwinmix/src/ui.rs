@@ -106,40 +106,40 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
     ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
     ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
-    ("panels/cameras/api.js", include_str!("../../../ui/panels/cameras/api.js")),
-    ("panels/cameras/atem-bar.js", include_str!("../../../ui/panels/cameras/atem-bar.js")),
-    ("panels/cameras/bus.js", include_str!("../../../ui/panels/cameras/bus.js")),
-    ("panels/cameras/cameras.css", include_str!("../../../ui/panels/cameras/cameras.css")),
-    ("panels/cameras/card.js", include_str!("../../../ui/panels/cameras/card.js")),
-    ("panels/cameras/demo/atem.js", include_str!("../../../ui/panels/cameras/demo/atem.js")),
-    ("panels/cameras/demo/client.js", include_str!("../../../ui/panels/cameras/demo/client.js")),
-    ("panels/cameras/demo/paint.js", include_str!("../../../ui/panels/cameras/demo/paint.js")),
-    ("panels/cameras/demo/ptz.js", include_str!("../../../ui/panels/cameras/demo/ptz.js")),
-    ("panels/cameras/demo/rig.js", include_str!("../../../ui/panels/cameras/demo/rig.js")),
-    ("panels/cameras/demo/tools.js", include_str!("../../../ui/panels/cameras/demo/tools.js")),
-    ("panels/cameras/demo/view.js", include_str!("../../../ui/panels/cameras/demo/view.js")),
-    ("panels/cameras/demo/world.js", include_str!("../../../ui/panels/cameras/demo/world.js")),
-    ("panels/cameras/drawer.js", include_str!("../../../ui/panels/cameras/drawer.js")),
-    ("panels/cameras/drive.js", include_str!("../../../ui/panels/cameras/drive.js")),
-    ("panels/cameras/entry.js", include_str!("../../../ui/panels/cameras/entry.js")),
-    ("panels/cameras/frame.js", include_str!("../../../ui/panels/cameras/frame.js")),
-    ("panels/cameras/gamepad.js", include_str!("../../../ui/panels/cameras/gamepad.js")),
-    ("panels/cameras/head.js", include_str!("../../../ui/panels/cameras/head.js")),
-    ("panels/cameras/joystick.js", include_str!("../../../ui/panels/cameras/joystick.js")),
-    ("panels/cameras/model.js", include_str!("../../../ui/panels/cameras/model.js")),
-    ("panels/cameras/mount.js", include_str!("../../../ui/panels/cameras/mount.js")),
-    ("panels/cameras/panel.js", include_str!("../../../ui/panels/cameras/panel.js")),
-    ("panels/cameras/parts.css", include_str!("../../../ui/panels/cameras/parts.css")),
-    ("panels/cameras/picture.js", include_str!("../../../ui/panels/cameras/picture.js")),
-    ("panels/cameras/presets.js", include_str!("../../../ui/panels/cameras/presets.js")),
-    ("panels/cameras/pro.js", include_str!("../../../ui/panels/cameras/pro.js")),
-    ("panels/cameras/shapes.js", include_str!("../../../ui/panels/cameras/shapes.js")),
-    ("panels/cameras/strip.js", include_str!("../../../ui/panels/cameras/strip.js")),
-    ("panels/cameras/switch.js", include_str!("../../../ui/panels/cameras/switch.js")),
-    ("panels/cameras/switcher.css", include_str!("../../../ui/panels/cameras/switcher.css")),
-    ("panels/cameras/take.js", include_str!("../../../ui/panels/cameras/take.js")),
-    ("panels/cameras/words.js", include_str!("../../../ui/panels/cameras/words.js")),
-    ("panels/cameras/zoom.js", include_str!("../../../ui/panels/cameras/zoom.js")),
+    ("panels/camera/api.js", include_str!("../../../ui/panels/camera/api.js")),
+    ("panels/camera/atem-card.js", include_str!("../../../ui/panels/camera/atem-card.js")),
+    ("panels/camera/atem-chip.js", include_str!("../../../ui/panels/camera/atem-chip.js")),
+    ("panels/camera/bus.js", include_str!("../../../ui/panels/camera/bus.js")),
+    ("panels/camera/camera.css", include_str!("../../../ui/panels/camera/camera.css")),
+    ("panels/camera/controls.js", include_str!("../../../ui/panels/camera/controls.js")),
+    ("panels/camera/demo/atem.js", include_str!("../../../ui/panels/camera/demo/atem.js")),
+    ("panels/camera/demo/client.js", include_str!("../../../ui/panels/camera/demo/client.js")),
+    ("panels/camera/demo/paint.js", include_str!("../../../ui/panels/camera/demo/paint.js")),
+    ("panels/camera/demo/ptz.js", include_str!("../../../ui/panels/camera/demo/ptz.js")),
+    ("panels/camera/demo/rig.js", include_str!("../../../ui/panels/camera/demo/rig.js")),
+    ("panels/camera/demo/tools.js", include_str!("../../../ui/panels/camera/demo/tools.js")),
+    ("panels/camera/demo/view.js", include_str!("../../../ui/panels/camera/demo/view.js")),
+    ("panels/camera/demo/world.js", include_str!("../../../ui/panels/camera/demo/world.js")),
+    ("panels/camera/drive.js", include_str!("../../../ui/panels/camera/drive.js")),
+    ("panels/camera/exposure.js", include_str!("../../../ui/panels/camera/exposure.js")),
+    ("panels/camera/gamepad.js", include_str!("../../../ui/panels/camera/gamepad.js")),
+    ("panels/camera/hub-read.js", include_str!("../../../ui/panels/camera/hub-read.js")),
+    ("panels/camera/hub.js", include_str!("../../../ui/panels/camera/hub.js")),
+    ("panels/camera/joystick.js", include_str!("../../../ui/panels/camera/joystick.js")),
+    ("panels/camera/live.js", include_str!("../../../ui/panels/camera/live.js")),
+    ("panels/camera/look.js", include_str!("../../../ui/panels/camera/look.js")),
+    ("panels/camera/picture.js", include_str!("../../../ui/panels/camera/picture.js")),
+    ("panels/camera/presets.js", include_str!("../../../ui/panels/camera/presets.js")),
+    ("panels/camera/preview.js", include_str!("../../../ui/panels/camera/preview.js")),
+    ("panels/camera/props-empty.js", include_str!("../../../ui/panels/camera/props-empty.js")),
+    ("panels/camera/props.js", include_str!("../../../ui/panels/camera/props.js")),
+    ("panels/camera/shapes.js", include_str!("../../../ui/panels/camera/shapes.js")),
+    ("panels/camera/switcher-connect.js", include_str!("../../../ui/panels/camera/switcher-connect.js")),
+    ("panels/camera/switcher-more.js", include_str!("../../../ui/panels/camera/switcher-more.js")),
+    ("panels/camera/switcher.js", include_str!("../../../ui/panels/camera/switcher.js")),
+    ("panels/camera/tiles.js", include_str!("../../../ui/panels/camera/tiles.js")),
+    ("panels/camera/words.js", include_str!("../../../ui/panels/camera/words.js")),
+    ("panels/camera/zoom.js", include_str!("../../../ui/panels/camera/zoom.js")),
     // Guests: the entry loads with the page, the rest when the panel is first shown.
     ("panels/guests/entry.js", include_str!("../../../ui/panels/guests/entry.js")),
     ("panels/guests/panel.js", include_str!("../../../ui/panels/guests/panel.js")),
@@ -273,6 +273,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/multiview/fx-gallery.js", include_str!("../../../ui/panels/multiview/fx-gallery.js")),
     ("panels/multiview/studio.css", include_str!("../../../ui/panels/multiview/studio.css")),
     ("panels/multiview/studio-armed.js", include_str!("../../../ui/panels/multiview/studio-armed.js")),
+    ("panels/multiview/studio-camera.js", include_str!("../../../ui/panels/multiview/studio-camera.js")),
     ("panels/multiview/studio-picture.js", include_str!("../../../ui/panels/multiview/studio-picture.js")),
     ("panels/multiview/monitor-rate.js", include_str!("../../../ui/panels/multiview/monitor-rate.js")),
     ("panels/multiview/studio-next.js", include_str!("../../../ui/panels/multiview/studio-next.js")),
@@ -1575,10 +1576,26 @@ mod tests {
         // panel's entry fetches the panel the first time it is shown.
         reachable.extend(closure_of("prompter/page.js"));
         reachable.extend(closure_of("panels/prompter/panel.js"));
-        // Cameras: the entry imports mount.js when the window is first shown,
-        // and the Demo switch fetches the simulated rig.
-        reachable.extend(closure_of("panels/cameras/mount.js"));
-        reachable.extend(closure_of("panels/cameras/demo/client.js"));
+        // PTZ cameras and ATEM switchers: Sources fetches the tiles' part
+        // after it draws, the camera button and Camera on a tile's menu fetch
+        // camera properties (and its empty state), Studio mode fetches the
+        // Preview overlay when Preview holds a camera, the Programme header
+        // and Outputs fetch the switcher chips and rows, those fetch switcher
+        // properties and its connect form, and Try with simulated cameras
+        // fetches the demo.
+        for entry in [
+            "panels/camera/tiles.js",
+            "panels/camera/props.js",
+            "panels/camera/props-empty.js",
+            "panels/camera/preview.js",
+            "panels/camera/atem-chip.js",
+            "panels/camera/atem-card.js",
+            "panels/camera/switcher.js",
+            "panels/camera/switcher-connect.js",
+            "panels/camera/demo/client.js",
+        ] {
+            reachable.extend(closure_of(entry));
+        }
         // Guests: the entry imports the panel when it is first shown.
         reachable.extend(closure_of("panels/guests/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));

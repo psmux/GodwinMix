@@ -1,19 +1,15 @@
-// Exposure and focus, out of the way in a drawer: most services never open
-// it. Exposure is the camera's own mode and, off automatic, its iris,
+// Exposure and focus, folded away at the foot of camera properties: most
+// services never open it. Exposure is the camera's own mode and, off automatic, its iris,
 // shutter and gain in the steps its manual numbers them. Focus is automatic
 // unless switched off; then Nearer and Farther drive it while held, and
 // Focus once sharpens on the middle of the picture and holds.
 
 import { el } from "../../shell/dom.js";
-
-function sw(label, onchange) {
-  const input = el("input", { type: "checkbox", role: "switch", onchange: () => onchange(input.checked) });
-  return { input, root: el("label.cam-switch", {}, [input, el("span.cam-switch-track", { "aria-hidden": "true" }), el("span", { text: label })]) };
-}
+import { switchControl as sw } from "./controls.js";
 
 /** A button that does `down` while pressed and `up` when let go. */
 function hold(text, down, up) {
-  const b = el("button.btn.cam-hold", { type: "button", text });
+  const b = el("button.btn.sm.cam-hold", { type: "button", text });
   let held = false;
   const off = () => held && ((held = false), up());
   b.addEventListener("pointerdown", () => ((held = true), down()));
@@ -24,23 +20,23 @@ function hold(text, down, up) {
 const MODES = [["auto", "Auto"], ["manual", "Manual"], ["shutter", "Shutter"], ["iris", "Iris"]];
 
 function step(label, key, on) {
-  const input = el("input.cam-rate.num", { type: "number", min: "0", step: "1", "aria-label": label });
+  const input = el("input.num", { type: "number", min: "0", step: "1", "aria-label": label });
   input.addEventListener("change", () => input.value !== "" && on.exposure({ [key]: Math.round(Number(input.value)) }));
   return { key, input, root: el("label.cam-field", {}, [el("span", { text: label }), input]) };
 }
 
-export function drawer(on) {
+export function exposureFocus(on) {
   const mode = el("div.cam-seg", { role: "radiogroup", "aria-label": "Exposure mode" },
-    MODES.map(([v, t]) => el("button", { type: "button", role: "radio", text: t, "data-v": v, onclick: () => on.exposure({ mode: v }) })));
+    MODES.map(([v, t]) => el("button.btn.sm", { type: "button", role: "radio", text: t, "data-v": v, onclick: () => on.exposure({ mode: v }) })));
   const steps = [step("Iris", "iris", on), step("Shutter", "shutter", on), step("Gain", "gain", on)];
   const manual = el("div.cam-row-wrap", {}, steps.map((s) => s.root));
   const autoFocus = sw("Automatic focus", (v) => on.focus(v ? "auto" : "manual"));
-  const once = el("button.btn.cam-hold", { type: "button", text: "Focus once", title: "Sharpen on the middle of the picture, then hold", onclick: () => on.focus("one_push") });
+  const once = el("button.btn.sm.cam-hold", { type: "button", text: "Focus once", title: "Sharpen on the middle of the picture, then hold", onclick: () => on.focus("one_push") });
   const near = hold("Nearer", () => on.focus("near", 0.5), () => on.focus("stop"));
   const far = hold("Farther", () => on.focus("far", 0.5), () => on.focus("stop"));
-  const root = el("details.cam-drawer", {}, [
+  const root = el("details.panel-section.cam-more", {}, [
     el("summary", { text: "Exposure and focus" }),
-    el("div.cam-drawer-body", {}, [
+    el("div.col.pad", {}, [
       el("div.cam-label", { text: "Exposure" }),
       mode,
       manual,
@@ -65,5 +61,3 @@ export function drawer(on) {
     },
   };
 }
-
-export { sw as switchControl };

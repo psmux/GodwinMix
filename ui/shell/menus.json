@@ -149,12 +149,6 @@
         },
         {
           "command": "view.panel",
-          "arg": "core/cameras",
-          "title": "Cameras",
-          "check": "panel"
-        },
-        {
-          "command": "view.panel",
           "arg": "core/guests",
           "title": "Guests",
           "check": "panel"
@@ -195,6 +189,10 @@
           "command": "view.flowmap",
           "title": "Flow map",
           "check": "flowmap"
+        },
+        {
+          "command": "view.volunteer",
+          "title": "Volunteer layout"
         },
         {
           "command": "view.reset-layout",

@@ -1,0 +1,167 @@
+/* PTZ cameras and ATEM switchers where they sit in GodwinMix: the camera
+   button and badge on a source tile, camera properties and switcher
+   properties in the side drawer, the overlay on Preview, the chips in the
+   Programme header and the rows in Outputs. Theme values only, so dark,
+   light and high contrast all work. Loaded with the first of them. */
+
+/* Source tiles. */
+.tile .gear.camera { opacity: 0.9; color: var(--text); line-height: 0; }
+.tile .gear.camera:hover { color: var(--accent); }
+.tile-follow {
+  position: absolute; top: 5px; right: 5px; display: inline-flex; align-items: center; gap: 5px;
+  padding: 1px 7px 1px 6px; border-radius: 999px; font-size: var(--fs-sm); color: #fff;
+  background: var(--overlay); pointer-events: none;
+}
+.tile-follow i { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.tile-follow.following i { background: var(--ok); }
+.tile-follow.error i { background: var(--bad); }
+
+/* The drawers. */
+.cam-props { gap: 10px; -webkit-user-select: none; user-select: none; }
+.cam-props p { margin: 0; }
+.cam-props label.sm { display: flex; flex-direction: column; gap: 3px; }
+.cam-pill { padding: 1px 7px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 600; background: var(--panel2); color: var(--dim); white-space: nowrap; }
+.cam-pill.program { background: var(--live); color: #fff; }
+.cam-pill.preview { background: var(--ok); color: #04140b; }
+.cam-pill.demo { background: var(--warn); color: #1a1200; }
+.cam-pic { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
+.cam-live { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+.cam-state { gap: 6px; font-size: var(--fs-sm); margin-top: -4px; }
+.cam-trackdot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.cam-trackdot.following { background: var(--ok); }
+.cam-trackdot.searching, .cam-trackdot.lost { background: var(--warn); }
+.cam-trackdot.error { background: var(--bad); }
+.cam-hand { display: flex; align-items: center; gap: 14px; }
+.cam-auto { flex: 1 1 auto; min-width: 0; }
+.cam-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.cam-label { font-size: var(--fs-sm); font-weight: 600; color: var(--dim); letter-spacing: 0.04em; }
+.cam-row-wrap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cam-field { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--dim); }
+.cam-field input { width: 5em; }
+.cam-more { margin: 0; }
+.cam-more > summary { padding: 7px 10px; }
+.cam-demo-foot { padding-top: 8px; border-top: var(--border) solid var(--line-soft); }
+
+/* A segmented choice: one of a few, the chosen one lit. */
+.cam-seg { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--bg); border: var(--border) solid var(--line); }
+.cam-seg .btn { flex: 1 1 auto; border-color: transparent; background: transparent; }
+.cam-seg .btn[aria-checked="true"] { background: var(--accent); color: var(--on-accent); }
+.cam-mode-words { margin: 0; }
+
+/* The joystick. */
+.cam-stick {
+  position: relative; width: 124px; height: 124px; border-radius: 50%; flex: none; touch-action: none; cursor: grab;
+  background: radial-gradient(circle at 50% 42%, var(--raise), var(--panel2) 70%);
+  border: var(--border) solid var(--line); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.cam-stick.held { cursor: grabbing; }
+.cam-stick-ring { position: absolute; inset: 24%; border-radius: 50%; border: 1px dashed var(--line); }
+.cam-stick-arrow { position: absolute; width: 0; height: 0; border: 6px solid transparent; opacity: 0.7; }
+.cam-stick-arrow.up { top: 5px; left: calc(50% - 6px); border-bottom-color: var(--dim); }
+.cam-stick-arrow.down { bottom: 5px; left: calc(50% - 6px); border-top-color: var(--dim); }
+.cam-stick-arrow.left { left: 5px; top: calc(50% - 6px); border-right-color: var(--dim); }
+.cam-stick-arrow.right { right: 5px; top: calc(50% - 6px); border-left-color: var(--dim); }
+.cam-knob {
+  position: absolute; left: 50%; top: 50%; width: 36%; height: 36%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 38% 32%, color-mix(in srgb, var(--accent) 40%, #fff) 0, var(--accent) 45%, color-mix(in srgb, var(--accent) 70%, #000) 100%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+.cam-knob.spring { transition: transform 0.22s cubic-bezier(0.3, 1.5, 0.5, 1); }
+
+/* The zoom rocker. */
+.cam-zoom { display: flex; align-items: center; gap: 6px; width: 100%; }
+.cam-zoom-end { flex: none; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--raise); border: var(--border) solid var(--line); line-height: 1.2; }
+.cam-zoom-end:active { background: var(--accent); color: var(--on-accent); }
+.cam-zoom-track {
+  position: relative; flex: 1 1 auto; height: 28px; border-radius: 999px; touch-action: none; cursor: ew-resize;
+  background: var(--bg); border: var(--border) solid var(--line);
+}
+.cam-zoom-track::after { content: ""; position: absolute; left: 50%; top: 7px; bottom: 7px; width: 1px; background: var(--line); }
+.cam-zoom-thumb { position: absolute; left: 50%; top: 3px; bottom: 3px; width: 26px; border-radius: 999px; z-index: 1; pointer-events: none; background: var(--accent); }
+.cam-zoom-thumb.spring { transition: transform 0.2s cubic-bezier(0.3, 1.5, 0.5, 1); }
+
+/* A switch. */
+.cam-switch { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; min-height: 26px; }
+.cam-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cam-switch-track { position: relative; width: 32px; height: 18px; border-radius: 999px; background: var(--raise); border: var(--border) solid var(--line); flex: none; transition: background var(--anim); }
+.cam-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4); transition: transform var(--anim); }
+.cam-switch input:checked + .cam-switch-track { background: var(--ok); border-color: var(--ok); }
+.cam-switch input:checked + .cam-switch-track::after { transform: translateX(14px); }
+.cam-switch input:focus-visible + .cam-switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Saved shots. */
+.cam-presetwrap { display: flex; flex-direction: column; gap: 6px; }
+.cam-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.cam-preset { display: flex; flex-direction: column; gap: 3px; padding: 3px; border-radius: var(--radius-sm); background: var(--panel2); border: var(--border) solid var(--line); color: var(--text); min-width: 0; }
+.cam-preset:hover { border-color: var(--accent); }
+.cam-preset img, .cam-nopic { width: 100%; aspect-ratio: 16 / 9; border-radius: 3px; display: grid; place-items: center; object-fit: cover; background: #000; color: var(--dim); }
+.cam-preset-name { font-size: var(--fs-sm); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+.cam-preset-add { border-style: dashed; background: transparent; align-items: center; justify-content: center; }
+.cam-plus { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); font-size: 18px; line-height: 1; }
+
+/* Switcher properties. */
+.cam-bus { display: flex; flex-direction: column; gap: 4px; }
+.cam-bus-label { font-size: var(--fs-sm); font-weight: 600; color: var(--dim); }
+.cam-bus-keys { display: flex; flex-wrap: wrap; gap: 4px; }
+.cam-key { min-width: 46px; padding: 5px 7px; border-radius: var(--radius-sm); font-size: var(--fs-sm); font-weight: 600; background: var(--raise); color: var(--text); border: var(--border) solid var(--line); }
+.cam-key:hover { border-color: var(--dim); }
+.cam-bus.pgm .cam-key.on, .cam-key.ftb.on { background: var(--live); border-color: var(--live); color: #fff; }
+.cam-bus.pvw .cam-key.on { background: var(--ok); border-color: var(--ok); color: #04140b; }
+.cam-key.on { background: var(--warn); border-color: var(--warn); color: #1a1200; }
+.cam-key.ftb.on { animation: cam-blink 1s steps(2, start) infinite; }
+@keyframes cam-blink { to { opacity: 0.5; } }
+.cam-maprow { gap: 8px; font-size: var(--fs); }
+.cam-maprow select { width: 52%; flex: none; }
+.cam-rate { width: 5em; }
+.cam-tbar { height: 6px; border-radius: 999px; background: var(--bg); border: var(--border) solid var(--line); overflow: hidden; }
+.cam-tbar-fill { height: 100%; width: 0; background: var(--accent); }
+
+/* The Programme header's chips and the Outputs rows. */
+.atem-chips { display: inline-flex; gap: 6px; min-width: 0; overflow: hidden; }
+.atem-chip {
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0; height: 22px; padding: 0 4px 0 7px;
+  border-radius: 999px; border: var(--border) solid var(--line); background: var(--panel); font-size: var(--fs-sm);
+}
+.atem-chip:hover { border-color: var(--dim); }
+.atem-chip > .ellipsis { max-width: 12em; }
+.atem-bus { padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; line-height: 16px; }
+.atem-bus.pgm { background: var(--live); color: #fff; }
+.atem-bus.pvw { background: var(--ok); color: #04140b; }
+.atem-bus:empty { display: none; }
+.out-switchers { border-top: var(--border) solid var(--line); }
+.out-switchers.away { display: none; }
+.atem-row .row { flex-wrap: wrap; }
+
+/* The camera over Preview. Dark glass over the picture in every theme. */
+.cam-boxes { position: absolute; left: 0; top: 0; z-index: 1; }
+.cam-ov {
+  position: absolute; left: 8px; bottom: 8px; z-index: 2; display: flex; align-items: flex-end; gap: 8px;
+  max-width: calc(100% - 16px); padding: 6px; border-radius: var(--radius); color: #eee;
+  background: rgba(18, 18, 18, 0.74); border: 1px solid rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); cursor: default;
+}
+.cam-ov.folded { padding: 3px; }
+.cam-ov.folded .cam-ov-body { display: none; }
+.cam-ov-toggle { line-height: 0; }
+.cam-ov-body { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cam-ov-side { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 230px; }
+.cam-ov .cam-stick { width: 78px; height: 78px; }
+.cam-ov .cam-stick-arrow { border-width: 4px; }
+.cam-ov .cam-stick-arrow.up, .cam-ov .cam-stick-arrow.down { left: calc(50% - 4px); }
+.cam-ov .cam-stick-arrow.left, .cam-ov .cam-stick-arrow.right { top: calc(50% - 4px); }
+.cam-ov .cam-chips { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cam-ov .cam-chip { padding: 3px 2px; }
+.cam-ov .cam-zoom-end { padding: 3px 6px; font-size: var(--fs-sm); }
+.cam-ov .cam-zoom-track { height: 22px; }
+.cam-ov .cam-zoom-thumb { width: 20px; }
+.cam-ov-name { font-size: var(--fs-sm); color: #ccc; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cam-ov .cam-switch { min-height: 22px; font-size: var(--fs-sm); }
+@container (max-width: 430px) {
+  .cam-ov .cam-stick { width: 60px; height: 60px; }
+  .cam-ov-side { width: 170px; }
+  .cam-ov-name { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cam-knob.spring, .cam-zoom-thumb.spring, .cam-key.ftb.on { transition: none !important; animation: none !important; }
+}

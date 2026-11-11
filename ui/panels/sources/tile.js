@@ -17,10 +17,12 @@ import { buildStrip, syncStrip } from "./tile-strip.js";
 
 /** A pointer, for Interact. */
 const POINTER = "M6 3l12 7-5 1.5 3.5 6-2.5 1.5-3.5-6L7 17z";
+/** A video camera, for the PTZ camera button. */
+const CAMERA = "M3 7.5A1.5 1.5 0 0 1 4.5 6h9A1.5 1.5 0 0 1 15 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 3 16.5zM15 10.5l5-3v9l-5-3";
 
 /**
  * @param {object} source   a SourceStatus
- * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onInteract, onMute, onRepeat, onBackup, meters}
+ * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onCamera, onInteract, onMute, onRepeat, onBackup, meters}
  */
 export function buildTile(source, deps) {
   const kind = kindOfSource(source);
@@ -41,7 +43,12 @@ export function buildTile(source, deps) {
   const interact = source.type === "browser/source"
     ? el("button.gear.interact", { title: "Interact with the page", "aria-label": "Interact", "data-nodrag": "", hidden: !source.page }, [svg(POINTER, 14)])
     : null;
-  const bar = el("div.bar", {}, [dragHandle(), dot, name, interact, gear].filter(Boolean));
+  // A source a PTZ camera points at: camera properties, and a word on the
+  // picture while it follows someone. Both stay hidden until
+  // ../camera/tiles.js knows of a camera, so a tray with none has neither.
+  const camera = el("button.gear.camera", { title: "Camera", "aria-label": "Camera", "data-nodrag": "", hidden: true }, [svg(CAMERA, 14)]);
+  const follow = el("span.tile-follow", { hidden: true }, [el("i"), el("span")]);
+  const bar = el("div.bar", {}, [dragHandle(), dot, name, interact, camera, gear].filter(Boolean));
 
   const playback = el("div.playback", { text: playbackText(source) });
   const level = levelParts(source, kind, deps.meters);
@@ -49,12 +56,16 @@ export function buildTile(source, deps) {
   node.classList.toggle("metered", !!level.meter);
   // What its backup is doing, or the offer of one when it went down with none.
   const backup = lazyLine({ call: deps.onBackup, openBackup: (id) => deps.onGear(id, "backup"), hint: true });
-  node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, strip, bar, playback, backup.node);
+  node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, follow, strip, bar, playback, backup.node);
   const controls = buildStrip(source, node, strip, deps);
 
   gear.onclick = (e) => {
     e.stopPropagation();
     deps.onGear(source.id);
+  };
+  camera.onclick = (e) => {
+    e.stopPropagation();
+    deps.onCamera(source.id);
   };
   if (interact) {
     interact.onclick = (e) => {
@@ -75,6 +86,8 @@ export function buildTile(source, deps) {
     name,
     dot,
     interact,
+    camera,
+    follow,
     meter: level.meter,
     readout: level.readout,
     note: level.note,
