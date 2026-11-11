@@ -86,6 +86,9 @@ impl AxisCtl {
         // are two moves, so the camera does not jerk.
         let next = self.speed + (desired - self.speed).clamp(-step, step);
         self.speed = if next * self.speed < 0.0 { 0.0 } else { next };
+        // The top speed is a ceiling, not a target to ease down to: lowered
+        // while the camera moves, it holds from this frame.
+        self.speed = self.speed.clamp(-cfg.max_speed, cfg.max_speed);
         self.speed
     }
 

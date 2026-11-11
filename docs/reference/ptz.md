@@ -96,6 +96,32 @@ are lower case with underscores.
 | `track_framing` | `camera`, `framing` | `close`, `waist`, `full`, `wide` |
 | `track_state` | `camera` | what the loop is doing; with no camera and several cameras, every camera |
 | `track_observe` | `camera`, `wait_ms` | who is in view, without moving the camera |
+| `track_tune` | `camera` and any of the numbers below | how it follows, read or changed live, and kept for the next start |
+
+### Tuning how a camera follows
+
+`track_tune {camera}` answers with the numbers as they stand. Give any of
+them to change it; a value outside its range changes nothing and the error
+says the range. A running follow takes the change on its next picture, and
+`track_state` carries the tuning too.
+
+| Number | Range | Default | What it does |
+|---|---|---|---|
+| `headroom` | 0 to 0.4 | 0.1 | space above the head, a fraction of the shot height |
+| `lead_room` | 0 to 2 | 0.5 | how far ahead of a walking person to aim, in seconds of their walk |
+| `dead_zone` | 0 to 0.3 | 0.06 | how far off centre the person may drift before the camera moves |
+| `max_speed` | 0.05 to 1 | 0.8 | the fastest it turns or zooms, 1 being the camera's top speed. A ceiling: lowered while it moves, it holds at once |
+| `max_accel` | 0.2 to 10 | 2.5 | how fast the speed may change each second; lower is smoother |
+| `lost_hold_ms` | 0 to 30000 | 2000 | how long to hold the shot when the person vanishes |
+| `switch_margin` | 1 to 5 | 1.5 | how much better someone else must score before it switches to them |
+| `detect_every` | 1 to 10 | 1 | look for people on one picture in this many, tracking in between |
+| `fallback` | `stay`, `wide`, `preset:<n>` | `stay` | what to do once the hold runs out |
+
+A slower, smoother camera for a speaker who paces:
+
+```json
+{"name": "ptz/track_tune", "arguments": {"camera": "cam-pulpit", "max_speed": 0.4, "max_accel": 1.2, "headroom": 0.15}}
+```
 
 ### What the track tools answer
 
@@ -239,4 +265,5 @@ far sees a pan move its picture twice as fast.
 
 `<data_dir>/cameras.json` holds the cameras added with `camera_add`,
 passwords included. `<data_dir>/<camera>/presets.json` holds each preset's
-name and time, and `preset-<n>.jpg` its picture.
+name and time, and `preset-<n>.jpg` its picture. `<data_dir>/<camera>/tuning.json`
+holds what `track_tune` set.

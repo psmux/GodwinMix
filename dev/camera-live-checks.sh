@@ -94,6 +94,19 @@ n="$(grep -c 'took CPgI' "$WORK/atem.log")"
 [[ "$n" -lt 8 ]] && ok "$n programme commands sent to the switcher in all" || bad "$n programme commands: a loop?"
 tool atem/mode '{"switcher":"atem-main","mode":"own"}' >/dev/null
 
+step "ptz: track_tune changes a running follow, and keeps it"
+tool ptz/track_follow '{"camera":"cam-b","target":"largest"}' >/dev/null
+t="$(tool ptz/track_tune '{"camera":"cam-b","max_speed":0.3,"lost_hold_ms":4000}' | jq_ 'd["tuning"]["max_speed"], d["changed"]')"
+s2="$(tool ptz/track_state '{"camera":"cam-b"}' | jq_ 'd["tuning"]["lost_hold_ms"]')"
+bad_range="$(tool ptz/track_tune '{"camera":"cam-b","max_speed":5}' | head -c 300)"
+tool ptz/track_stop '{"camera":"cam-b"}' >/dev/null
+[[ "$t" == "0.3 ['max_speed', 'lost_hold_ms']" && "$s2" == "4000" && "$bad_range" == *"0.05 to 1"* ]] && ok || bad "tune: $t, state: $s2, out of range: $bad_range"
+
+echo "an agent, through godwinmix mcp:"
+python3 "$REPO/dev/camera-live-mcp.py" "$GMX" "$BASE" "$TOKEN" 2>&1 | sed 's/^/    /' | tee "$WORK/mcp.log"
+grep -q "^    FAIL\|closed\|Error" "$WORK/mcp.log" && bad "see above" || true
+[[ "$(grep -c '^    ok' "$WORK/mcp.log")" == 6 ]] || bad "the agent steps did not all pass"
+
 step "the plugins are still healthy, never restarted"
 h="$(api plugins | jq_ '",".join(sorted(i["instance"] + "=" + i["state"] + "/" + str(i["restarts"]) + "/" + str(i["rss_bytes"] // 1048576) + "MB" for p in (d if isinstance(d, list) else d.get("plugins", [])) if p["name"] in ("ptz", "atem") for i in p["instances"]))')"
 [[ "$h" == *"atem-atem=ready/0/"* && "$h" == *"ptz-ptz=ready/0/"* ]] && ok "$h" || bad "$h"

@@ -22,6 +22,8 @@ pub struct Camera {
     pub presets: Store,
     pub caps: Capabilities,
     pub follow: Option<Loop>,
+    /// How it follows; `track_tune` changes it.
+    pub tuning: crate::follow::tune::Tuning,
     /// Added with `camera_add` rather than from the settings.
     pub added: bool,
 }
@@ -49,7 +51,8 @@ impl Camera {
         let caps = driver.capabilities();
         let handle = Handle::spawn(&spec.id, driver, settings.joystick_hold);
         let presets = Store::new(&settings.data_dir, &spec.id);
-        Ok(Camera { spec, handle, presets, caps, follow: None, added })
+        let tuning = crate::follow::tune::Tuning::load(&settings.data_dir, &spec.id);
+        Ok(Camera { spec, handle, presets, caps, follow: None, added, tuning })
     }
 }
 

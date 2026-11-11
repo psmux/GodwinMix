@@ -33,6 +33,7 @@ pub mod headend;
 mod job;
 pub mod machine;
 pub mod mcp;
+mod mcp_plugin_search;
 pub mod nodes;
 pub mod mcp_http;
 pub mod observe;

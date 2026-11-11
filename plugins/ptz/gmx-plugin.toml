@@ -188,6 +188,15 @@ annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = t
 user_invocable = true
 model_invocable = true
 
+[[tools]]
+name = "track_tune"
+description = "Read or change how a camera follows, live: headroom, lead room, dead zone, top speed, smoothness (max_accel), how long it holds a lost person and what it does then. With only a camera it answers with the numbers and their ranges. Example: track_tune {camera: \"cam-pulpit\", max_speed: 0.4, max_accel: 1.2, headroom: 0.15} makes it slower and smoother with more space above the head."
+input = "schemas/tools/track_tune.json"
+output = "schemas/tools/track_tune.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
 # `gmx plugin add ./plugins/ptz` runs this when bin/gmx-ptz is not there.
 # The command runs in the directory you named: this plugin is a workspace
 # member and its dependencies are path dependencies two levels up.
