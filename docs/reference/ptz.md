@@ -2,7 +2,7 @@
 
 Two parts. The crate `godwinmix-ptz` has the drivers: VISCA over IP, raw
 VISCA over TCP, ONVIF PTZ and Canon CR-N, behind one trait. The plugin
-`ptz` is a `service` that drives them for the mixer, the camera window and
+`ptz` is a `service` that drives them for the mixer, the page and
 agents, and runs the follow loop on `godwinmix-track`. How to set one up is
 in [Add a PTZ camera](../how-to/add-a-ptz-camera.md) and
 [Let a camera follow the speaker](../how-to/auto-track-a-speaker.md).

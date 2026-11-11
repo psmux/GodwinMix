@@ -54,7 +54,7 @@ Start here if you have never run it.
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
-* [Run the cameras from one window](how-to/run-cameras-from-one-window.md): PTZ cameras, following a speaker, saved shots and an ATEM, with a demo to practise on
+* [Run PTZ cameras from Sources and Preview](how-to/run-ptz-cameras-from-sources-and-preview.md): camera properties, following a speaker, saved shots, the Preview overlay and an ATEM, with simulated cameras to practise on
 * [Connect an ATEM switcher](how-to/connect-an-atem.md): one or several, driven from the window or an agent, following or leading GodwinMix's programme
 * [Add a PTZ camera](how-to/add-a-ptz-camera.md): VISCA, ONVIF or a Canon CR-N camera, its picture, the joystick and presets
 * [Auto track a speaker](how-to/auto-track-a-speaker.md): have a PTZ camera follow one person and keep them framed
@@ -239,7 +239,7 @@ Start here if you have never run it.
 * [Media library folders and tags](reference/media-library.md)
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
-* [The camera window's calls](reference/camera-window.md): every `ptz`, `track` and `atem` tool and protocol method the Cameras window sends
+* [The camera and switcher controls' calls](reference/camera-controls.md): every `ptz`, `track` and `atem` tool camera properties, the Preview overlay and switcher properties send
 * [The atem plugin](reference/atem.md): its tools, the state it answers, follow and lead, and tally
 * [The ATEM network protocol](reference/atem-protocol.md): packets, the session, and every block and command `godwinmix-atem` reads and sends
 * [The ptz plugin](reference/ptz.md): settings, every tool, the drivers and what each protocol can do

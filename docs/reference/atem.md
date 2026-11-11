@@ -3,7 +3,7 @@
 `plugins/atem` drives Blackmagic ATEM switchers over the network and ties
 them to GodwinMix's programme. The protocol is in `crates/godwinmix-atem`;
 [atem-protocol.md](atem-protocol.md) describes the bytes. Agents and the
-camera window reach every tool through the core's `tool.call` as
+page reach every tool through the core's `tool.call` as
 `atem/<tool>`.
 
 ## Settings (`schemas/atem.json`)
@@ -73,8 +73,8 @@ sentence, as they are not implemented yet. `position` is 0 to 1.
 ```
 
 `status` is `connecting`, `syncing` (the dump is arriving) or `up`. The
-camera window turns this into its own shape in
-`ui/panels/cameras/shapes.js` (`atem()`).
+page turns this into its own shape in
+`ui/panels/camera/shapes.js` (`atem()`).
 
 ## Why a switcher is down
 
@@ -122,10 +122,9 @@ ATEM's tally reaches GodwinMix by two public paths:
   tally (and every TSL lamp `plugins/tally` drives from it) follows the
   switcher with no extra step.
 * `atem/state` carries `tally` per input and by mapped source, and
-  `atem/tally {}` merges every switcher's. The camera window reads it with
-  `atem/state` and lights a camera red or green when either GodwinMix or
-  the switcher has it on air or next (`tallyOf` in
-  `ui/panels/cameras/words.js`).
+  `atem/tally {}` merges every switcher's. The Programme header's chip reads
+  `atem/state` and shows the inputs on programme and preview by their short
+  names.
 
 ## Files
 

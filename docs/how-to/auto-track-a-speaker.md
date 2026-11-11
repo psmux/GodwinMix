@@ -42,7 +42,7 @@ nearest the camera. To choose:
 
 * `"target": "person-3"`, an id from `track_observe`;
 * `"point": {"x": 0.62, "y": 0.4}`, where somebody tapped the picture, 0 to
-  1 from its top left. This is what the camera window sends;
+  1 from its top left. This is what a tap on a person in camera properties or on Preview sends;
 * `"target": "central"`, whoever is nearest the middle.
 
 ## Choose the framing

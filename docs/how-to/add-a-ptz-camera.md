@@ -21,7 +21,7 @@ gmx plugin add ./plugins/ptz
 
 ## Add the camera
 
-From an agent, the camera window, or a shell. Every plugin tool goes through
+From a source tile (its menu, then **Camera**, asks for the address), an agent, or a shell. Every plugin tool goes through
 the mixer's `tool.call`, as `ptz/<tool>`; from a shell that is
 `POST /api/v1/tool/call`:
 
@@ -81,8 +81,8 @@ gives them back as images for a grid, and `ptz/preset_recall` goes there.
 ## Without a camera
 
 `"protocol": "fake"` is a camera that exists only in memory. It moves,
-remembers presets and answers where it points, which is enough to try the
-camera window or an agent's script before the hardware arrives.
+remembers presets and answers where it points, which is enough to try
+camera properties or an agent's script before the hardware arrives.
 
 ## When it does not move
 

@@ -1,6 +1,6 @@
 # Connect an ATEM switcher
 
-Drive a Blackmagic ATEM switcher from GodwinMix's camera window or an agent,
+Drive a Blackmagic ATEM switcher from GodwinMix's Outputs panel or an agent,
 and, if you want, make GodwinMix and the switcher cut together.
 
 You need the switcher's IP address. ATEM Setup shows it, and so does the
@@ -66,10 +66,13 @@ preview. Then:
 {"index": 0}                       macro: run macro 1
 ```
 
-The camera window shows a bar with the switcher's programme and preview
-rows, the downstream keys and fade to black as soon as a switcher is
-connected. Pro view adds the transition, upstream keys, aux outputs, macros
-and the mode.
+As soon as a switcher is connected, a chip in the Programme monitor's
+header shows its link and what it has on programme (red) and preview
+(green). Press the chip, or **Edit** on its row under **ATEM switchers** in
+the Outputs panel, for switcher properties: the mode, both buses, Cut and
+Auto, the source map, the transition, the keyers and fade to black, the aux
+outputs and the macros. **Add switcher** in the same place connects one
+from the page.
 
 ## Make GodwinMix and the switcher cut together
 
@@ -99,4 +102,4 @@ follow and lead for three seconds and says why in the log.
 
 * [Reference: the atem plugin](../reference/atem.md): every tool and answer
 * [The ATEM network protocol](../reference/atem-protocol.md)
-* [The camera window's calls](../reference/camera-window.md)
+* [The camera and switcher controls' calls](../reference/camera-controls.md)
