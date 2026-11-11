@@ -17,7 +17,7 @@ pub use direct::FakePtz;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::types::{Exposure, ExposureMode, Focus, Position, Velocity};
 
@@ -38,6 +38,10 @@ pub struct Head {
     pub exposure: Exposure,
     /// Every movement command this head was given, for a test to count.
     pub moves: u64,
+    /// How long `save_preset` and `position` take, to stand in for a slow
+    /// camera. Only [`FakePtz`] waits them out.
+    pub save_delay: Duration,
+    pub query_delay: Duration,
     at: Instant,
 }
 
@@ -53,6 +57,8 @@ impl Default for Head {
             focus_drive: 0.0,
             exposure: Exposure { mode: Some(ExposureMode::Auto), ..Exposure::default() },
             moves: 0,
+            save_delay: Duration::ZERO,
+            query_delay: Duration::ZERO,
             at: Instant::now(),
         }
     }

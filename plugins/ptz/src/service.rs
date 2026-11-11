@@ -9,16 +9,16 @@ use serde_json::{json, Value};
 use crate::core::Core;
 use crate::rig::Rig;
 use crate::settings::Settings;
-use crate::tools;
+use crate::tools::{self, Shared};
 
 pub struct PtzService {
     pub env: PluginEnv,
-    pub rig: Option<Rig>,
+    pub rig: Option<Shared>,
 }
 
 impl PtzService {
-    fn rig(&mut self) -> &mut Rig {
-        self.rig.get_or_insert_with(|| Rig::new(Settings::default(), None))
+    fn rig(&mut self) -> &Shared {
+        self.rig.get_or_insert_with(|| Shared::new(Rig::new(Settings::default(), None).into()))
     }
 }
 
@@ -33,18 +33,18 @@ impl Service for PtzService {
             reporter.warn(p);
         }
         reporter.info(format!("{} camera(s): {}", rig.cameras.len(), rig.ids().join(", ")));
-        self.rig = Some(rig);
+        self.rig = Some(Shared::new(rig.into()));
         Ok(InitializeResult { latency_ms: Some(0) })
     }
 
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError> {
-        self.rig().configure(Settings::from_value(&params));
+        self.rig().lock().unwrap_or_else(|e| e.into_inner()).configure(Settings::from_value(&params));
         Ok(Configure::applied())
     }
 
     fn health(&mut self) -> Health {
-        let failing: Vec<String> = self
-            .rig()
+        let rig = self.rig().lock().unwrap_or_else(|e| e.into_inner());
+        let failing: Vec<String> = rig
             .cameras
             .values()
             .filter_map(|c| c.handle.status.lock().unwrap().last_error.clone().map(|e| format!("{}: {e}", c.spec.id)))
@@ -59,11 +59,17 @@ impl Service for PtzService {
     fn tool_call(&mut self, name: &str, arguments: Value) -> Result<ToolResult, RpcError> {
         tools::call(self.rig(), name, &arguments)
     }
+
+    /// A tool that waits on a camera answers from a thread of its own, so
+    /// the next call (a joystick move, a stop) is answered meanwhile.
+    fn tool_call_later(&mut self, name: &str, arguments: Value, reply: Reply) {
+        tools::call_later(self.rig(), name, &arguments, move |outcome| reply.tool(outcome));
+    }
 }
 
 /// `tool {json}` per line in, the answer as one JSON line out. Blank lines
 /// and lines starting with `#` are skipped.
-pub fn repl(rig: &mut Rig, input: impl BufRead, mut out: impl std::io::Write) {
+pub fn repl(rig: &Shared, input: impl BufRead, mut out: impl std::io::Write) {
     for line in input.lines().map_while(Result::ok) {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {

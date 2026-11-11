@@ -74,6 +74,10 @@ impl Ptz for Onvif {
     fn protocol(&self) -> &'static str {
         "onvif"
     }
+    fn second(&self) -> Option<Box<dyn Ptz>> {
+        let o = Onvif { login: self.login.clone(), ptz: self.ptz.clone(), imaging: self.imaging.clone(), profile: self.profile.clone(), video: self.video.clone(), last: None, ..*self };
+        Some(Box::new(o))
+    }
 
     fn capabilities(&self) -> Capabilities {
         let imaging = self.imaging.is_some() && self.video.is_some();

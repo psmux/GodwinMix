@@ -36,11 +36,18 @@ impl Ptz for FakePtz {
     }
     fn save_preset(&mut self, n: u16) -> Result<()> {
         check_preset(n, &self.capabilities())?;
+        let wait = self.0.lock().unwrap().save_delay;
+        std::thread::sleep(wait);
         self.0.lock().unwrap().save(n);
         Ok(())
     }
     fn position(&mut self) -> Result<Position> {
+        let wait = self.0.lock().unwrap().query_delay;
+        std::thread::sleep(wait);
         Ok(self.0.lock().unwrap().position())
+    }
+    fn second(&self) -> Option<Box<dyn Ptz>> {
+        Some(Box::new(FakePtz(self.0.clone())))
     }
     fn goto(&mut self, p: Position) -> Result<()> {
         self.0.lock().unwrap().jump(p.pan, p.tilt, p.zoom);

@@ -4,21 +4,34 @@ use godwinmix_sdk::prelude::{codes, RpcError, ToolResult};
 use serde_json::{json, Value};
 
 use super::args::{camera, invalid};
-use super::answer;
+use super::{answer, later, Plan, Shared, Work};
 use crate::rig::{Camera, Rig};
 use crate::settings::CameraSpec;
 
-pub fn add(rig: &mut Rig, a: &Value) -> Result<ToolResult, RpcError> {
-    let spec = CameraSpec::from_value(a).map_err(invalid)?;
-    if rig.cameras.get(&spec.id).is_some_and(|c| !c.added) {
-        return Err(invalid(format!("'{}' comes from the plugin's settings. Change it there, or pick another id.", spec.id)));
-    }
-    let replaced = rig.remove(&spec.id);
-    let id = spec.id.clone();
-    let cam = rig.add(spec, true).map_err(|why| RpcError::new(codes::WRONG_STATE, why).with_data(json!({"camera": id})))?;
+/// Opening an ONVIF camera asks it for its services, so the driver is
+/// opened off the rig's lock and put in under it after.
+pub fn add(rig: &mut Rig, a: &Value) -> Plan {
+    let take = || -> Result<Work, RpcError> {
+        let spec = CameraSpec::from_value(a).map_err(invalid)?;
+        if rig.cameras.get(&spec.id).is_some_and(|c| !c.added) {
+            return Err(invalid(format!("'{}' comes from the plugin's settings. Change it there, or pick another id.", spec.id)));
+        }
+        let settings = rig.settings.clone();
+        Ok(Box::new(move |shared: &Shared| {
+            let id = spec.id.clone();
+            let cam = Camera::open(spec, &settings, true).map_err(|why| RpcError::new(codes::WRONG_STATE, why).with_data(json!({"camera": id})))?;
+            let mut rig = shared.lock().unwrap_or_else(|e| e.into_inner());
+            let replaced = rig.remove(&id);
+            Ok(added(rig.insert(cam), replaced))
+        }))
+    };
+    later(take())
+}
+
+fn added(cam: &Camera, replaced: bool) -> ToolResult {
     let verb = if replaced { "replaced" } else { "added" };
     let picture = if cam.spec.source.is_none() && cam.spec.bus.is_none() { " It has no `source`, so presets have no pictures and tracking is off until one is set." } else { "" };
-    Ok(answer(format!("{verb} camera '{}' ({}, {}).{picture}", cam.spec.id, cam.spec.protocol.slug(), cam.spec.address), record(cam)))
+    answer(format!("{verb} camera '{}' ({}, {}).{picture}", cam.spec.id, cam.spec.protocol.slug(), cam.spec.address), record(cam))
 }
 
 /// One camera as the list shows it.
@@ -30,6 +43,7 @@ pub fn record(c: &Camera) -> Value {
     v["last_error"] = json!(s.last_error);
     v["tracking"] = json!(c.follow.as_ref().is_some_and(|f| f.is_running() && f.is_steering()));
     v["added_by_tool"] = json!(c.added);
+    v["lanes"] = json!(c.handle.lanes);
     v
 }
 

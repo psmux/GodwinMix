@@ -61,6 +61,9 @@ impl Ptz for Canon {
     fn protocol(&self) -> &'static str {
         "canon"
     }
+    fn second(&self) -> Option<Box<dyn Ptz>> {
+        Some(Box::new(Canon { client: self.client.fresh(), ranges: self.ranges, last: None }))
+    }
 
     fn capabilities(&self) -> Capabilities {
         Capabilities { absolute: true, position: true, focus: true, exposure: true, presets: 100 }

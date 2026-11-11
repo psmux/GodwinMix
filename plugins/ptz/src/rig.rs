@@ -26,6 +26,33 @@ pub struct Camera {
     pub added: bool,
 }
 
+/// What a tool that waits on a camera needs from it, taken under the rig's
+/// lock so the waiting happens without it.
+#[derive(Clone)]
+pub struct View {
+    pub spec: CameraSpec,
+    pub handle: Handle,
+    pub presets: Store,
+    pub caps: Capabilities,
+}
+
+impl Camera {
+    pub fn view(&self) -> View {
+        View { spec: self.spec.clone(), handle: self.handle.clone(), presets: self.presets.clone(), caps: self.caps }
+    }
+
+    /// Open a driver for `spec` and start its threads. ONVIF asks the camera
+    /// where its services are, so an ONVIF camera that is not there fails
+    /// here; the others connect on the first command. Takes no lock.
+    pub fn open(spec: CameraSpec, settings: &Settings, added: bool) -> Result<Camera, String> {
+        let driver = open(&spec.target()).map_err(|e| format!("camera '{}': {}", spec.id, e.message))?;
+        let caps = driver.capabilities();
+        let handle = Handle::spawn(&spec.id, driver, settings.joystick_hold);
+        let presets = Store::new(&settings.data_dir, &spec.id);
+        Ok(Camera { spec, handle, presets, caps, follow: None, added })
+    }
+}
+
 pub struct Rig {
     pub cameras: BTreeMap<String, Camera>,
     pub settings: Settings,
@@ -64,20 +91,20 @@ impl Rig {
         self.settings = settings;
     }
 
-    /// Open a driver for `spec` and start its thread. ONVIF asks the camera
-    /// where its services are, so an ONVIF camera that is not there fails
-    /// here; the others connect on the first command.
+    /// Open `spec` (see [`Camera::open`]) and add it.
     pub fn add(&mut self, spec: CameraSpec, added: bool) -> Result<&Camera, String> {
-        let driver = open(&spec.target()).map_err(|e| format!("camera '{}': {}", spec.id, e.message))?;
-        let caps = driver.capabilities();
-        let handle = Handle::spawn(&spec.id, driver, self.settings.joystick_hold);
-        let presets = Store::new(&self.settings.data_dir, &spec.id);
-        let id = spec.id.clone();
-        self.cameras.insert(id.clone(), Camera { spec, handle, presets, caps, follow: None, added });
+        let cam = Camera::open(spec, &self.settings, added)?;
+        Ok(self.insert(cam))
+    }
+
+    /// Add an opened camera, replacing one with its id.
+    pub fn insert(&mut self, cam: Camera) -> &Camera {
+        let (id, added) = (cam.spec.id.clone(), cam.added);
+        self.cameras.insert(id.clone(), cam);
         if added {
             self.save_added();
         }
-        Ok(&self.cameras[&id])
+        &self.cameras[&id]
     }
 
     /// Remove a camera. Its thread stops it on the way out. Answers whether

@@ -9,8 +9,8 @@ use godwinmix_track::{Choose, Framing, Point, TrackId};
 use serde_json::{json, Value};
 
 use super::args::{camera, invalid, num, text};
-use super::answer;
-use crate::follow::{view, Ctl, Loop};
+use super::{answer, later, Plan, Work};
+use crate::follow::{view, wait_seen, Ctl, Loop};
 use crate::rig::{Camera, Rig};
 
 /// An observing loop ends this long after the last call that asked.
@@ -113,16 +113,22 @@ fn summary(id: &str, c: &Camera) -> Value {
 }
 
 /// What the camera sees now. Starts an observing loop if none runs and
-/// waits for a few pictures, so the first answer is not empty.
-pub fn observe(rig: &mut Rig, a: &Value) -> Result<ToolResult, RpcError> {
+/// waits for a few pictures, off the rig's lock, so the first answer is not
+/// empty and no other tool waits for it.
+pub fn observe(rig: &mut Rig, a: &Value) -> Plan {
     let wait = Duration::from_millis(a.get("wait_ms").and_then(Value::as_u64).unwrap_or(1_500).min(5_000));
-    let cam = ensure(rig, a, false)?;
-    let l = cam.follow.as_ref().expect("ensured");
-    // A loop already running answers at once; a new one gets a moment to
-    // see a few pictures, since motion needs more than one.
-    if l.seen.lock().unwrap().frames == 0 {
-        l.wait_for(5, wait);
-    }
-    let s = l.seen.lock().unwrap().clone();
-    Ok(answer(view::sentence(&cam.spec.id, &s), view::seen(&cam.spec.id, &s)))
+    let take = |rig: &mut Rig| -> Result<Work, RpcError> {
+        let cam = ensure(rig, a, false)?;
+        let (id, seen) = (cam.spec.id.clone(), cam.follow.as_ref().expect("ensured").seen.clone());
+        Ok(Box::new(move |_: &_| {
+            // A loop already running answers at once; a new one gets a
+            // moment to see a few pictures, since motion needs more than one.
+            if seen.lock().unwrap().frames == 0 {
+                wait_seen(&seen, 5, wait);
+            }
+            let s = seen.lock().unwrap().clone();
+            Ok(answer(view::sentence(&id, &s), view::seen(&id, &s)))
+        }))
+    };
+    later(take(rig))
 }

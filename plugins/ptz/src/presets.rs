@@ -34,6 +34,7 @@ impl Preset {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Store {
     dir: PathBuf,
 }

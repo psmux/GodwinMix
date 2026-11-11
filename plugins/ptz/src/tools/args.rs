@@ -5,7 +5,7 @@ use std::time::Duration;
 use godwinmix_sdk::prelude::{codes, RpcError};
 use serde_json::{json, Value};
 
-use crate::rig::{Camera, Rig};
+use crate::rig::{Camera, Rig, View};
 
 /// How long a tool waits for a camera to answer one command.
 pub const WAIT: Duration = Duration::from_secs(5);
@@ -26,6 +26,11 @@ pub fn camera<'a>(rig: &'a mut Rig, a: &Value) -> Result<&'a mut Camera, RpcErro
     rig.cameras.get_mut(&id).ok_or_else(|| {
         RpcError::new(codes::NOT_FOUND, format!("there is no camera '{id}'. The cameras are: {}. Add one with camera_add.", list(&known))).with_data(json!({"cameras": known}))
     })
+}
+
+/// The camera named by `camera`, to wait on without the rig's lock.
+pub fn view(rig: &mut Rig, a: &Value) -> Result<View, RpcError> {
+    camera(rig, a).map(|c| c.view())
 }
 
 fn list(ids: &[String]) -> String {
@@ -55,7 +60,7 @@ pub fn ranged(a: &Value, key: &str, lo: f32, hi: f32) -> Result<Option<f32>, Rpc
 }
 
 /// A preset number, 1 and up.
-pub fn preset(a: &Value, cam: &Camera) -> Result<u16, RpcError> {
+pub fn preset(a: &Value, cam: &View) -> Result<u16, RpcError> {
     let n = a.get("preset").and_then(Value::as_u64).ok_or_else(|| invalid(format!("say which preset with `preset`, a number from 1 to {}.", cam.caps.presets)))?;
     if n == 0 || n > u64::from(cam.caps.presets) {
         return Err(invalid(format!("preset {n} is out of range for '{}'. Its presets are 1 to {}.", cam.spec.id, cam.caps.presets)));

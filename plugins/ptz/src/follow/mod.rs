@@ -95,15 +95,21 @@ impl Loop {
 
     /// Wait until the loop has seen `frames` pictures, or `wait` is up.
     pub fn wait_for(&self, frames: u64, wait: Duration) {
-        let until = Instant::now() + wait;
-        while Instant::now() < until {
-            let s = self.seen.lock().unwrap();
-            if s.frames >= frames || s.ended {
-                return;
-            }
-            drop(s);
-            std::thread::sleep(Duration::from_millis(20));
+        wait_seen(&self.seen, frames, wait)
+    }
+}
+
+/// Wait until `seen` counts `frames` pictures, or `wait` is up, without
+/// holding anything but `seen` now and then.
+pub fn wait_seen(seen: &Mutex<Seen>, frames: u64, wait: Duration) {
+    let until = Instant::now() + wait;
+    while Instant::now() < until {
+        let s = seen.lock().unwrap();
+        if s.frames >= frames || s.ended {
+            return;
         }
+        drop(s);
+        std::thread::sleep(Duration::from_millis(20));
     }
 }
 

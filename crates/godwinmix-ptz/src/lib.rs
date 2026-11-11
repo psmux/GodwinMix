@@ -49,6 +49,15 @@ pub trait Ptz: Send {
     fn exposure(&mut self, _e: Exposure) -> Result<()> {
         Err(Error::unsupported(self.protocol(), "exposure"))
     }
+    /// A second driver on the same camera, safe to use from another thread
+    /// while this one is busy, or `None` when the protocol cannot take two
+    /// at once. The plugin moves the camera through one and sends the slow
+    /// commands (presets, position, focus) through the other, so a move
+    /// never waits behind them. HTTP protocols can; VISCA cannot, since the
+    /// camera keeps one sequence count and many take one TCP link only.
+    fn second(&self) -> Option<Box<dyn Ptz>> {
+        None
+    }
 }
 
 /// Preset numbers are 1 based everywhere in GodwinMix. A 0 or one past what

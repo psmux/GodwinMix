@@ -31,6 +31,11 @@ impl Client {
         Client { base: format!("http://{host}/-wvhttp-01-/"), user: user.into(), password: password.into(), timeout, challenge: None, nc: 0, last: None }
     }
 
+    /// A client of its own on the same camera and login, for a second thread.
+    pub fn fresh(&self) -> Client {
+        Client { base: self.base.clone(), user: self.user.clone(), password: self.password.clone(), timeout: self.timeout, challenge: None, nc: 0, last: None }
+    }
+
     /// GET `path` (`control.cgi?pan=stop`) and answer its `name`, `value` pairs.
     pub fn get(&mut self, path: &str) -> Result<Vec<(String, String)>> {
         if let Some(wait) = self.last.map(|t| GAP.saturating_sub(t.elapsed())) {

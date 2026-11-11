@@ -86,12 +86,12 @@ fn run_standalone(argv: Vec<String>) {
         settings["cameras"] = Value::Array(cameras);
     }
     let core = url.as_deref().and_then(|u| Core::from_url(u, token));
-    let mut rig = Rig::new(Settings::from_value(&settings), core);
+    let rig = Rig::new(Settings::from_value(&settings), core);
     for p in &rig.problems {
         eprintln!("gmx-ptz: {p}");
     }
     eprintln!("gmx-ptz: {} camera(s): {}. One tool call per line, such as: camera_list {{}}", rig.cameras.len(), rig.ids().join(", "));
-    repl(&mut rig, std::io::stdin().lock(), std::io::stdout());
+    repl(&std::sync::Arc::new(rig.into()), std::io::stdin().lock(), std::io::stdout());
 }
 
 /// `id:protocol:address[:source]`. An address with a port keeps it:
