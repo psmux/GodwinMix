@@ -58,7 +58,8 @@ impl fmt::Display for ModelError {
             }
             ModelError::Load { path, reason } => write!(
                 f,
-                "tract could not load {} ({reason}); use an input size that is a multiple of 32,                  and if that is not it, delete the file so a fresh copy is fetched",
+                "tract could not load {} ({reason}); use an input size that is a multiple of 32, \
+                 and if that is not it, delete the file so a fresh copy is fetched",
                 path.display()
             ),
         }

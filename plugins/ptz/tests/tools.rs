@@ -26,7 +26,7 @@ fn temp_dir(name: &str) -> String {
 fn rig(name: &str) -> (Shared, fake::Shared) {
     let head = fake::shared();
     let at = fake::visca::serve_tcp(head.clone());
-    let settings = Settings::from_value(&json!({"data_dir": temp_dir(name)}));
+    let settings = Settings::from_value(&json!({"data_dir": temp_dir(name), "detector": "motion"}));
     let rig: Shared = Arc::new(Rig::new(settings, Core::from_url(&common::serve(), None)).into());
     let added = call(&rig, "camera_add", &json!({"id": "cam-pulpit", "protocol": "visca-tcp", "address": at.to_string(), "source": "pulpit"}));
     assert!(added.is_ok(), "{added:?}");
@@ -90,6 +90,7 @@ fn the_follow_loop_pans_towards_the_person_and_says_who_it_follows() {
     assert_eq!(state["mode"], "following");
     assert_eq!(state["framing"], "full");
     assert!(state["target"].as_str().is_some_and(|t| t.starts_with("person-")), "{state}");
+    assert_eq!((state["detector"]["running"].as_str(), state["detector"]["wanted"].as_str()), (Some("motion"), Some("motion")), "{state}");
 
     facts(&rig, "track_stop", json!({"camera": "cam-pulpit"}));
     sleep(Duration::from_millis(300));

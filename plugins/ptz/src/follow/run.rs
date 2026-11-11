@@ -6,8 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use godwinmix_ptz::Velocity;
-use godwinmix_track::{Detector, Fallback, FollowConfig, FollowOutput, FollowState, Follower, FrameStyle, Framing, MotionConfig, MotionDetector};
+use godwinmix_track::{Fallback, FollowConfig, FollowOutput, FollowState, Follower, FrameStyle, Framing};
 
+use super::detector::{motion, Kind, Switching};
 use super::{Ctl, Seen};
 use crate::frames::Frames;
 use crate::worker::Handle;
@@ -22,21 +23,16 @@ pub struct Job {
     pub linger: Duration,
     pub framing: Framing,
     pub steering: bool,
+    /// Taken by the thread when it starts.
+    pub detector: Option<Switching>,
 }
 
-/// The detector the loop runs. Motion for now: no model to fetch, and it
-/// runs on a Raspberry Pi. The tracking engine's ONNX detector replaces it
-/// when its `tract` feature lands in this plugin.
-pub fn detector() -> Box<dyn Detector + Send> {
-    Box::new(MotionDetector::new(MotionConfig::default()))
-}
-
-pub fn follower(framing: Framing) -> Follower {
+pub fn follower(framing: Framing, detector: Switching) -> Follower<Switching> {
     let style = FrameStyle { framing, ..FrameStyle::default() };
-    Follower::new(detector(), FollowConfig { style, ..FollowConfig::default() })
+    Follower::new(detector, FollowConfig { style, ..FollowConfig::default() })
 }
 
-fn apply(f: &mut Follower, c: Ctl, steering: &mut bool) {
+fn apply(f: &mut Follower<Switching>, c: Ctl, steering: &mut bool) {
     match c {
         Ctl::Steer(on) => {
             *steering = on;
@@ -55,7 +51,8 @@ fn apply(f: &mut Follower, c: Ctl, steering: &mut bool) {
 }
 
 pub fn run(mut job: Job) {
-    let mut f = follower(job.framing);
+    let detector = job.detector.take().unwrap_or_else(|| Switching::ready(Kind::Motion, motion()));
+    let mut f = follower(job.framing, detector);
     let mut out = FollowOutput::default();
     let mut steering = job.steering;
     let mut in_fallback = false;
@@ -97,6 +94,7 @@ pub fn run(mut job: Job) {
         }
         (s.last_frame, s.size, s.error, s.step_ms) = (Some(Instant::now()), (picture.width, picture.height), None, step_ms);
         s.framing = Some(f.config().style.framing);
+        s.detector.clone_from(&f.detector_mut().status);
         s.out.clone_from(&out);
     }
     if steering {
@@ -108,7 +106,7 @@ pub fn run(mut job: Job) {
 
 /// On the way into a preset fallback, go to that preset once and start the
 /// tracker afresh on the new picture.
-fn fallback(camera: &Handle, state: &FollowState, was: bool, f: &mut Follower) -> bool {
+fn fallback(camera: &Handle, state: &FollowState, was: bool, f: &mut Follower<Switching>) -> bool {
     let FollowState::Fallback(Fallback::Preset(name)) = state else { return false };
     if !was {
         if let Ok(n) = name.trim_start_matches("preset-").parse::<u16>() {

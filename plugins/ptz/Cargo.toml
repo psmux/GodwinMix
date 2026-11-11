@@ -36,6 +36,13 @@ base64 = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 godwinmix-framebus = { path = "../../crates/godwinmix-framebus", default-features = false }
 
+# The follow loop's YOLOX person detector (and MoveNet keypoints), run by
+# tract in pure Rust. On by default; without it the loop uses the motion
+# detector only. See docs/reference/ptz.md, "detector".
+[features]
+default = ["yolox"]
+yolox = ["godwinmix-track/tract"]
+
 [[bench]]
 name = "follow"
 harness = false

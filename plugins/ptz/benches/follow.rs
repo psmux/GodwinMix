@@ -16,6 +16,7 @@ mod common;
 use std::time::{Duration, Instant};
 
 use godwinmix_ptz::{fake, visca, Ptz, Velocity};
+use gmx_ptz::follow::detector::{motion, Kind, Switching};
 use gmx_ptz::follow::run_follower;
 use gmx_ptz::frames::mjpeg::decode;
 
@@ -35,7 +36,7 @@ fn main() {
         })
         .collect();
     let pictures: Vec<_> = jpegs.iter().map(|j| decode(j).unwrap()).collect();
-    let mut f = run_follower(godwinmix_track::Framing::Waist);
+    let mut f = run_follower(godwinmix_track::Framing::Waist, Switching::ready(Kind::Motion, motion()));
     let mut out = godwinmix_track::FollowOutput::default();
     let start = Instant::now();
     let mut step_times = Vec::new();

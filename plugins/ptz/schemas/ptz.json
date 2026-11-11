@@ -50,6 +50,21 @@
       "examples": [320, 240],
       "x-gmx-group": "Advanced"
     },
+    "detector": {
+      "type": "string",
+      "title": "Person detector",
+      "description": "What the follow loop finds people with. yolox is a small neural network (YOLOX nano, about 7 ms a picture on a laptop core), downloaded once into the models directory; the motion detector stands in while it loads and if it cannot be had. yolox+pose adds MoveNet keypoints, for framing by the shoulders and hips, at about twice the cost. motion needs no model and suits a Raspberry Pi, but loses a person who stands still.",
+      "enum": ["yolox", "yolox+pose", "motion"],
+      "default": "yolox",
+      "examples": ["yolox", "motion"]
+    },
+    "models_dir": {
+      "type": "string",
+      "title": "Models directory",
+      "description": "Where the detector's model files are kept. Empty means GODWINMIX_MODELS, else models under GODWINMIX_HOME, else .godwinmix/models in the home directory.",
+      "default": "",
+      "x-gmx-group": "Advanced"
+    },
     "joystick_hold_ms": {
       "type": "integer",
       "title": "Joystick hold",

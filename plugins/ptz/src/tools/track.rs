@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 
 use super::args::{camera, invalid, num, text};
 use super::{answer, later, Plan, Work};
+use crate::follow::detector::Switching;
 use crate::follow::{view, wait_seen, Ctl, Loop};
 use crate::rig::{Camera, Rig};
 
@@ -19,10 +20,12 @@ pub const LINGER: Duration = Duration::from_secs(15);
 /// The camera's loop, started when there is none (or the last one ended).
 fn ensure<'a>(rig: &'a mut Rig, a: &Value, steering: bool) -> Result<&'a Camera, RpcError> {
     let (core, width, framing) = (rig.core.clone(), rig.settings.track_width, rig.settings.framing);
+    let (kind, models) = (rig.settings.detector, rig.settings.models_dir.clone());
     let cam = camera(rig, a)?;
     if !cam.follow.as_ref().is_some_and(Loop::is_running) {
         let frames = crate::frames::open(core.as_ref(), &cam.spec, width).map_err(|why| RpcError::new(codes::WRONG_STATE, why).with_data(json!({"camera": cam.spec.id})))?;
-        cam.follow = Some(Loop::start(cam.handle.clone(), frames, framing, steering, LINGER));
+        let detector = Switching::new(kind, models);
+        cam.follow = Some(Loop::start(cam.handle.clone(), frames, detector, framing, steering, LINGER));
     } else if steering {
         cam.follow.as_ref().expect("checked").send(Ctl::Steer(true));
     }

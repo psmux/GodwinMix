@@ -6,6 +6,8 @@
 //! and observing, which only reports what it sees and ends by itself
 //! `linger` after the last `track_observe` or `track_state` that asked.
 
+pub mod detector;
+mod model;
 mod run;
 
 pub use run::follower as run_follower;
@@ -19,6 +21,7 @@ use std::time::{Duration, Instant};
 use godwinmix_track::{Choose, FollowOutput, Framing, Point, TrackId};
 
 use crate::frames::Frames;
+use detector::Switching;
 use crate::worker::Handle;
 
 /// A change to a running loop.
@@ -48,6 +51,8 @@ pub struct Seen {
     pub fps: f32,
     /// Milliseconds the Follower took on the last frame.
     pub step_ms: f32,
+    /// Which detector runs, and why.
+    pub detector: detector::Status,
 }
 
 pub struct Loop {
@@ -58,12 +63,12 @@ pub struct Loop {
 }
 
 impl Loop {
-    pub fn start(camera: Handle, frames: Box<dyn Frames>, framing: Framing, steering: bool, linger: Duration) -> Loop {
+    pub fn start(camera: Handle, frames: Box<dyn Frames>, detector: Switching, framing: Framing, steering: bool, linger: Duration) -> Loop {
         let (ctl, rx) = channel();
-        let seen = Arc::new(Mutex::new(Seen { from: frames.describe(), framing: Some(framing), steering, ..Seen::default() }));
+        let seen = Arc::new(Mutex::new(Seen { from: frames.describe(), framing: Some(framing), steering, detector: detector.status.clone(), ..Seen::default() }));
         let stop = Arc::new(AtomicBool::new(false));
         let asked = Arc::new(Mutex::new(Instant::now()));
-        let job = run::Job { camera, frames, rx, seen: seen.clone(), stop: stop.clone(), asked: asked.clone(), linger, framing, steering };
+        let job = run::Job { camera, frames, rx, seen: seen.clone(), stop: stop.clone(), asked: asked.clone(), linger, framing, steering, detector: Some(detector) };
         std::thread::Builder::new().name("ptz-follow".into()).spawn(move || run::run(job)).expect("a follow thread");
         Loop { ctl, seen, stop, asked }
     }
