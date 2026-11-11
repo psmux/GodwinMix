@@ -13,7 +13,7 @@ close it or switch to another workspace.
 ![The Cameras window in the dark theme: the switcher bar at the top, three cameras with the one on air in red and the next one in green, and the Frame it and Take it live steps below](../media/cameras/window-dark.png)
 
 The cameras come from the `ptz` plugin and the switcher from the `atem`
-plugin, which is still being built as this is written. On a mixer without
+plugin ([connect an ATEM](connect-an-atem.md)). On a mixer without
 the `ptz` plugin the window says so and offers the demo. A camera needs its
 `source`, the GodwinMix source that shows its picture, for the picture on
 its card, for saved shots with pictures and for tracking.

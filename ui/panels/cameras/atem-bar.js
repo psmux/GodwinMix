@@ -50,7 +50,8 @@ export function atemBar(model, act) {
       picker.hidden = model.atems.length < 2;
       if (picker.options.length !== model.atems.length) picker.replaceChildren(...model.atems.map((a) => el("option", { value: a.id, text: a.name || a.id })));
       picker.value = model.atemId;
-      mode.textContent = up ? MODE_WORDS[(atem || listed).mode] || "" : "Not connected. Check the switcher's network cable and address.";
+      const why = (atem && atem.why) || listed.why;
+      mode.textContent = up ? MODE_WORDS[(atem || listed).mode] || "" : why ? `Not connected: ${why}.` : "Not connected. Check the switcher's network cable and address.";
       root.classList.toggle("down", !up);
       if (!atem || !atem.mes) return;
       const me = atem.mes[0];

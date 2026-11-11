@@ -12,6 +12,8 @@ reachable by yours.
 | `osc/` | `service` | OSC in on UDP, and tally and programme back out |
 | `tally/` | `service` | TSL UMD v5 to hardware tally lamps, over UDP or TCP |
 | `director/` | `service` | cuts the programme by itself, on rules or with a model |
+| `ptz/` | `service` | PTZ cameras: VISCA, ONVIF and Canon control, presets and tracking |
+| `atem/` | `service` | ATEM switchers: every bus and keyer as a tool, and follow or lead GodwinMix's programme |
 
 ## Building them
 
@@ -41,6 +43,7 @@ the core. Each of these three also runs by hand against a live core:
 gmx-osc      --url http://127.0.0.1:8080 --token TOKEN --listen 0.0.0.0:9000
 gmx-tally    --url http://127.0.0.1:8080 --token TOKEN --to 10.0.0.30:8900 --lamp cam1:0
 gmx-director --url http://127.0.0.1:8080 --token TOKEN --min-hold 6
+gmx-atem     --url http://127.0.0.1:8080 --token TOKEN --switcher atem-main=192.0.2.10
 ```
 
 Each chooses its mode on `PluginEnv::started_by_core()`, so when the core does

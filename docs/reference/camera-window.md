@@ -57,8 +57,8 @@ fractions of the picture from the top left. The window says them this way:
 
 ## Switchers, through the `atem` plugin
 
-The `atem` plugin is still being built. These are the names the window
-sends for now, and the table in `api.js` will follow the plugin.
+The tools are `plugins/atem`'s; [atem.md](atem.md) has every argument and
+answer. The window sends:
 
 | Tool | Arguments |
 |---|---|
@@ -66,7 +66,7 @@ sends for now, and the table in `api.js` will follow the plugin.
 | `atem/state` | `switcher` |
 | `atem/cut`, `atem/auto` | `switcher`, `me` |
 | `atem/preview`, `atem/program` | `switcher`, `me`, `input` |
-| `atem/dsk` | `switcher`, `keyer`, `action` (`on`, `off`, `auto`) |
+| `atem/dsk` | `switcher`, `keyer`, `action` (`on`, `off`, `auto`, `tie`) |
 | `atem/usk` | `switcher`, `me`, `keyer`, `on` |
 | `atem/ftb` | `switcher` |
 | `atem/aux` | `switcher`, `aux`, `input` |
@@ -74,9 +74,13 @@ sends for now, and the table in `api.js` will follow the plugin.
 | `atem/transition` | `switcher`, `me`, `style`, `rate` (frames) |
 | `atem/mode` | `switcher`, `mode` (`own`, `follow`, `lead`) |
 
-The window reads from `atem/state`: `name`, `connected`, `mode`, `inputs`
-(`id`, `name`, `short`), `map` (GodwinMix source id to ATEM input), and
-`mes`, `dsks`, `usks`, `ftb`, `auxes` and `macros`.
+`atem/list` answers `{switchers: [{id, name, connected, mode, why}]}`, and
+the bar shows `why` while a switcher is down. `atem/state` answers the
+plugin's own shape (`inputs` with `long` and `short`, `mes` with a
+`transition` each, `dsk`, `aux`, `macro`, `tally`, `map`); `atem()` in
+`shapes.js` turns it into what the window draws: `inputs` (`id`, `name`,
+`short`), `mes` (`program`, `preview`, `style`, `rate`, `position`),
+`dsks`, `usks`, `ftb`, `auxes`, `macros` and `lastMacro`.
 
 ## GodwinMix's own programme
 

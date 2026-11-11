@@ -55,6 +55,7 @@ Start here if you have never run it.
 * [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
 * [Run the cameras from one window](how-to/run-cameras-from-one-window.md): PTZ cameras, following a speaker, saved shots and an ATEM, with a demo to practise on
+* [Connect an ATEM switcher](how-to/connect-an-atem.md): one or several, driven from the window or an agent, following or leading GodwinMix's programme
 * [Use the teleprompter](how-to/use-the-teleprompter.md): scripts on the desk, any number of screens in step, a mirror for the glass, keys and pedals
 * [Invite a guest](how-to/invite-a-guest.md): a link with a key of its own, a return without their own voice, and talkback
 * [Instant replay and the replay buffer](how-to/instant-replay.md): mark in and out, play back slow on any angle, save the last minutes to a file
@@ -236,6 +237,8 @@ Start here if you have never run it.
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
 * [The camera window's calls](reference/camera-window.md): every `ptz`, `track` and `atem` tool and protocol method the Cameras window sends
+* [The atem plugin](reference/atem.md): its tools, the state it answers, follow and lead, and tally
+* [The ATEM network protocol](reference/atem-protocol.md): packets, the session, and every block and command `godwinmix-atem` reads and sends
 * [The prompter](reference/prompter.md): `prompter.*`, rows, the shared position, its events and `/prompter/`
 * [Guest invites](reference/guest-invites.md): `guest.*`, `/guest/<id>/whip` and `/whep`, what is made for a guest, and what one costs
 * [Replay](reference/replay.md): `[replay]`, the rings, `replay.*`, the replay source, the keys and what an angle costs
