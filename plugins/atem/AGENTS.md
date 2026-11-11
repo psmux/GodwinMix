@@ -8,7 +8,7 @@ A GodwinMix `service` plugin in Rust: no media of its own. It drives
 Blackmagic ATEM switchers with the client in `crates/godwinmix-atem` and,
 in `follow` and `lead` modes, ties them to GodwinMix's programme over the
 public protocol (`event/program.took` in, `program.take` out). Agents and
-the camera window reach every tool through the core's `tool.call` as
+the page reach every tool through the core's `tool.call` as
 `atem/<tool>`.
 
 ## Build and test
@@ -36,11 +36,11 @@ switcher in `crates/godwinmix-atem/tests/fake/`, included by path.
 
 ## Rules that are easy to break
 
-* **Tool names and arguments are a contract.** The camera window calls
-  them (`ui/panels/cameras/api.js`). Add tools and arguments; do not rename
+* **Tool names and arguments are a contract.** The page calls
+  them (`ui/panels/camera/api.js`). Add tools and arguments; do not rename
   them. A change to an answer's shape goes with a change to `atem()` in
-  `ui/panels/cameras/shapes.js` and to `toPlugin` in
-  `ui/panels/cameras/demo/atem.js`.
+  `ui/panels/camera/shapes.js` and to `toPlugin` in
+  `ui/panels/camera/demo/atem.js`.
 * **`tools::NAMES` and the manifest list the same tools in the same order.**
   `tests/offline.rs` checks it.
 * **The `aux` tool's schemas are `aux_source.json`.** AUX is a reserved file
