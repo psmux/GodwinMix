@@ -53,7 +53,11 @@ export function joystick(drive) {
   root.addEventListener("pointerdown", (e) => {
     if (id !== null) return;
     id = e.pointerId;
-    root.setPointerCapture?.(id);
+    try {
+      root.setPointerCapture(id);
+    } catch {
+      /* a pointer the browser no longer has: the drag works without capture */
+    }
     root.classList.add("held");
     e.preventDefault();
     at(e);

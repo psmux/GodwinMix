@@ -30,7 +30,11 @@ export function zoomRocker(drive) {
   };
   track.addEventListener("pointerdown", (e) => {
     id = e.pointerId;
-    track.setPointerCapture?.(id);
+    try {
+      track.setPointerCapture(id);
+    } catch {
+      /* fine without capture */
+    }
     e.preventDefault();
     at(e);
   });
@@ -39,7 +43,11 @@ export function zoomRocker(drive) {
 
   const hold = (btn, v) => {
     btn.addEventListener("pointerdown", (e) => {
-      btn.setPointerCapture?.(e.pointerId);
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch {
+        /* fine without capture */
+      }
       show(v * 0.7);
       drive.zoom(v * 0.7);
     });

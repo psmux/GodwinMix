@@ -35,8 +35,18 @@ export function strip(model, on) {
     empty.hidden = model.cams.length > 0 || !model.loaded;
   }
 
+  let shown = null;
+  /** On a phone the strip scrolls sideways; keep the next camera in view. */
+  function reveal() {
+    const c = cards.get(model.next);
+    if (!c || shown === model.next || list.scrollWidth <= list.clientWidth) return;
+    shown = model.next;
+    list.scrollTo({ left: c.root.offsetLeft - (list.clientWidth - c.root.clientWidth) / 2, behavior: "smooth" });
+  }
+
   function sync() {
     build();
+    reveal();
     for (const [id, c] of cards) {
       c.sync({
         tally: tallyOf(c.cam, model.mix, model.atem, model.next),
