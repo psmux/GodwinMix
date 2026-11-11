@@ -25,6 +25,14 @@ export async function cameraTests(test, eq, ok) {
     eq(said, "cam-x has no source.", "a refusal flagged is_error throws its sentence");
   });
 
+  const { tagSpot } = await import("../panels/cameras/picture.js");
+  test("two people standing close keep name tags that do not cover each other", () => {
+    const placed = [];
+    eq(tagSpot(placed, 100, 10, 80, 24, 360), [100, 10]);
+    eq(tagSpot(placed, 130, 10, 80, 24, 360), [130, 36], "the second tag moves down below the first");
+    eq(tagSpot(placed, 300, 10, 80, 24, 360), [300, 10], "a tag clear of the others stays where it is");
+  });
+
   const { camera, people, tracking, atem: atemShape } = await import("../panels/cameras/shapes.js");
   test("the atem plugin's state becomes the window's", () => {
     const w = atemShape({

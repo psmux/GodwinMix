@@ -156,6 +156,14 @@ got="$(until_is 200 live 2)" && ok || bad "live sources: $got"
 
 source "$REPO/dev/camera-live-checks.sh"
 
+# HOLD=<file>: leave everything running while that file exists, so a browser
+# can drive the camera window against it.
+if [[ -n "${HOLD:-}" ]]; then
+    printf '%s %s\n' "$BASE" "$TOKEN" >"$HOLD"
+    echo "holding on $BASE until $HOLD is removed"
+    while [[ -e "$HOLD" ]]; do sleep 1; done
+fi
+
 echo
 if [[ $FAILED -eq 0 ]]; then echo "all camera checks passed"; else echo "$FAILED check(s) failed"; fi
 exit $FAILED

@@ -55,6 +55,7 @@ function corners(ctx, x, y, w, h, len) {
 export function drawPeople(ctx, W, H, seen, colours) {
   if (!seen || !seen.people) return;
   const k = W / 640;
+  const placed = [];
   for (const p of seen.people) {
     const [x, y, w, h] = [p.box[0] * W, p.box[1] * H, p.box[2] * W, p.box[3] * H];
     const followed = p.id === seen.following;
@@ -72,12 +73,22 @@ export function drawPeople(ctx, W, H, seen, colours) {
     const label = followed ? "Following" : "Follow";
     ctx.font = `700 ${Math.round(17 * k)}px ui-sans-serif, system-ui, sans-serif`;
     const tw = ctx.measureText(label).width + 12 * k;
-    const ty = Math.max(0, y - 26 * k);
+    const [tx, ty] = tagSpot(placed, Math.min(Math.max(0, x), W - tw), Math.max(0, y - 26 * k), tw, 24 * k, H);
     ctx.fillStyle = followed ? colours.follow : "rgba(0,0,0,0.55)";
-    ctx.fillRect(x, ty, tw, 24 * k);
+    ctx.fillRect(tx, ty, tw, 24 * k);
     ctx.fillStyle = followed ? colours.onFollow : "#fff";
-    ctx.fillText(label, x + 6 * k, ty + 18 * k);
+    ctx.fillText(label, tx + 6 * k, ty + 18 * k);
   }
+}
+
+/** Where a name tag goes: its wanted spot, or lower until it covers no tag
+ *  already drawn, so two people standing close keep readable tags. */
+export function tagSpot(placed, x, y, w, h, H) {
+  const hits = (ty) => placed.some((r) => x < r[0] + r[2] && x + w > r[0] && ty < r[1] + r[3] && ty + h > r[1]);
+  let ty = y;
+  while (hits(ty) && ty + h < H) ty += h + 2;
+  placed.push([x, ty, w, h]);
+  return [x, ty];
 }
 
 /** The person under a point of the picture, given as fractions of it. */

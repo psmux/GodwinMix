@@ -106,6 +106,40 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
     ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
     ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
+    ("panels/cameras/api.js", include_str!("../../../ui/panels/cameras/api.js")),
+    ("panels/cameras/atem-bar.js", include_str!("../../../ui/panels/cameras/atem-bar.js")),
+    ("panels/cameras/bus.js", include_str!("../../../ui/panels/cameras/bus.js")),
+    ("panels/cameras/cameras.css", include_str!("../../../ui/panels/cameras/cameras.css")),
+    ("panels/cameras/card.js", include_str!("../../../ui/panels/cameras/card.js")),
+    ("panels/cameras/demo/atem.js", include_str!("../../../ui/panels/cameras/demo/atem.js")),
+    ("panels/cameras/demo/client.js", include_str!("../../../ui/panels/cameras/demo/client.js")),
+    ("panels/cameras/demo/paint.js", include_str!("../../../ui/panels/cameras/demo/paint.js")),
+    ("panels/cameras/demo/ptz.js", include_str!("../../../ui/panels/cameras/demo/ptz.js")),
+    ("panels/cameras/demo/rig.js", include_str!("../../../ui/panels/cameras/demo/rig.js")),
+    ("panels/cameras/demo/tools.js", include_str!("../../../ui/panels/cameras/demo/tools.js")),
+    ("panels/cameras/demo/view.js", include_str!("../../../ui/panels/cameras/demo/view.js")),
+    ("panels/cameras/demo/world.js", include_str!("../../../ui/panels/cameras/demo/world.js")),
+    ("panels/cameras/drawer.js", include_str!("../../../ui/panels/cameras/drawer.js")),
+    ("panels/cameras/drive.js", include_str!("../../../ui/panels/cameras/drive.js")),
+    ("panels/cameras/entry.js", include_str!("../../../ui/panels/cameras/entry.js")),
+    ("panels/cameras/frame.js", include_str!("../../../ui/panels/cameras/frame.js")),
+    ("panels/cameras/gamepad.js", include_str!("../../../ui/panels/cameras/gamepad.js")),
+    ("panels/cameras/head.js", include_str!("../../../ui/panels/cameras/head.js")),
+    ("panels/cameras/joystick.js", include_str!("../../../ui/panels/cameras/joystick.js")),
+    ("panels/cameras/model.js", include_str!("../../../ui/panels/cameras/model.js")),
+    ("panels/cameras/mount.js", include_str!("../../../ui/panels/cameras/mount.js")),
+    ("panels/cameras/panel.js", include_str!("../../../ui/panels/cameras/panel.js")),
+    ("panels/cameras/parts.css", include_str!("../../../ui/panels/cameras/parts.css")),
+    ("panels/cameras/picture.js", include_str!("../../../ui/panels/cameras/picture.js")),
+    ("panels/cameras/presets.js", include_str!("../../../ui/panels/cameras/presets.js")),
+    ("panels/cameras/pro.js", include_str!("../../../ui/panels/cameras/pro.js")),
+    ("panels/cameras/shapes.js", include_str!("../../../ui/panels/cameras/shapes.js")),
+    ("panels/cameras/strip.js", include_str!("../../../ui/panels/cameras/strip.js")),
+    ("panels/cameras/switch.js", include_str!("../../../ui/panels/cameras/switch.js")),
+    ("panels/cameras/switcher.css", include_str!("../../../ui/panels/cameras/switcher.css")),
+    ("panels/cameras/take.js", include_str!("../../../ui/panels/cameras/take.js")),
+    ("panels/cameras/words.js", include_str!("../../../ui/panels/cameras/words.js")),
+    ("panels/cameras/zoom.js", include_str!("../../../ui/panels/cameras/zoom.js")),
     // Guests: the entry loads with the page, the rest when the panel is first shown.
     ("panels/guests/entry.js", include_str!("../../../ui/panels/guests/entry.js")),
     ("panels/guests/panel.js", include_str!("../../../ui/panels/guests/panel.js")),
@@ -578,6 +612,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
     ("test/headend-setup.js", include_str!("../../../ui/test/headend-setup.js")),
     ("test/headend-picture.js", include_str!("../../../ui/test/headend-picture.js")),
+    ("test/cameras.js", include_str!("../../../ui/test/cameras.js")),
     ("test/headend-stub.js", include_str!("../../../ui/test/headend-stub.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
@@ -1112,6 +1147,32 @@ mod tests {
     }
 
     #[test]
+    fn every_file_of_a_panel_the_shell_registers_is_in_the_table() {
+        // boot.js names each panel's entry by path. A panel whose files were
+        // never added here opens to nothing in a release, which the UI's own
+        // tests cannot see because they serve ui/ straight from the disk.
+        let names: std::collections::HashSet<&str> = ASSETS.iter().map(|(p, _)| *p).collect();
+        let ui = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui");
+        let boot = std::fs::read_to_string(ui.join("boot.js")).expect("ui/boot.js");
+        for entry in boot.split('"').filter(|s| s.starts_with("./panels/") && s.ends_with("/entry.js")) {
+            let dir = ui.join(entry.trim_start_matches("./")).parent().expect("a folder").to_path_buf();
+            let mut stack = vec![dir];
+            while let Some(d) = stack.pop() {
+                for f in std::fs::read_dir(&d).expect("a panel folder").flatten() {
+                    let path = f.path();
+                    if path.is_dir() {
+                        stack.push(path);
+                        continue;
+                    }
+                    let rel = path.strip_prefix(&ui).expect("under ui").to_string_lossy().replace('\\', "/");
+                    let shipped = rel.ends_with(".js") || rel.ends_with(".css");
+                    assert!(!shipped || names.contains(rel.as_str()), "{rel} belongs to a panel boot.js registers and is not in ASSETS, so a release serves 404 for it");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn nothing_in_the_table_is_empty_or_listed_twice() {
         let mut seen = std::collections::HashSet::new();
         for (path, body) in ASSETS {
@@ -1514,6 +1575,10 @@ mod tests {
         // panel's entry fetches the panel the first time it is shown.
         reachable.extend(closure_of("prompter/page.js"));
         reachable.extend(closure_of("panels/prompter/panel.js"));
+        // Cameras: the entry imports mount.js when the window is first shown,
+        // and the Demo switch fetches the simulated rig.
+        reachable.extend(closure_of("panels/cameras/mount.js"));
+        reachable.extend(closure_of("panels/cameras/demo/client.js"));
         // Guests: the entry imports the panel when it is first shown.
         reachable.extend(closure_of("panels/guests/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
