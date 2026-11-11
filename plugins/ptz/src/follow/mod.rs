@@ -9,6 +9,7 @@
 pub mod detector;
 mod model;
 mod run;
+pub mod tune;
 
 pub use run::follower as run_follower;
 pub mod view;
@@ -33,15 +34,18 @@ pub enum Ctl {
     Lock(TrackId),
     Point(Point),
     Policy(Choose),
+    /// New numbers for how it follows: `track_tune`.
+    Tune(tune::Tuning),
 }
 
 /// How a loop starts: the framing, whether it steers, and the camera's
 /// optics for telling its own motion from people's.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Look {
     pub framing: Framing,
     pub steering: bool,
     pub optics: Option<godwinmix_track::CameraOptics>,
+    pub tuning: tune::Tuning,
 }
 
 /// What the loop last saw, shared with the tools.
@@ -73,12 +77,12 @@ pub struct Loop {
 
 impl Loop {
     pub fn start(camera: Handle, frames: Box<dyn Frames>, detector: Switching, look: Look, linger: Duration) -> Loop {
-        let Look { framing, steering, optics } = look;
+        let Look { framing, steering, optics, tuning } = look;
         let (ctl, rx) = channel();
         let seen = Arc::new(Mutex::new(Seen { from: frames.describe(), framing: Some(framing), steering, detector: detector.status.clone(), ..Seen::default() }));
         let stop = Arc::new(AtomicBool::new(false));
         let asked = Arc::new(Mutex::new(Instant::now()));
-        let job = run::Job { camera, frames, rx, seen: seen.clone(), stop: stop.clone(), asked: asked.clone(), linger, framing, steering, detector: Some(detector), optics };
+        let job = run::Job { camera, frames, rx, seen: seen.clone(), stop: stop.clone(), asked: asked.clone(), linger, framing, steering, detector: Some(detector), optics, tuning };
         std::thread::Builder::new().name("ptz-follow".into()).spawn(move || run::run(job)).expect("a follow thread");
         Loop { ctl, seen, stop, asked }
     }

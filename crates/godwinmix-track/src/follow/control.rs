@@ -41,6 +41,15 @@ impl<D: Detector> Follower<D> {
         self.chooser.set_policy(policy);
     }
 
+    /// Changes the follower's settings while it runs: the framing style,
+    /// the steering and the choosing all take the new values on the next
+    /// frame, and nothing it is tracking is lost.
+    pub fn retune(&mut self, edit: impl FnOnce(&mut FollowConfig)) {
+        edit(&mut self.config);
+        self.ptz.config = self.config.ptz;
+        self.chooser.config = self.config.choose.clone();
+    }
+
     pub fn set_framing(&mut self, framing: Framing) {
         self.config.style.framing = framing;
     }

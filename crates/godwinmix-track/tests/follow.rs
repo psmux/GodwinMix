@@ -89,3 +89,29 @@ fn a_boxed_detector_works_as_the_default_follower() {
     let frame = FrameRef::packed(W, H, PixelFormat::Bgra8, &px).unwrap();
     assert_eq!(f.step(&frame, Instant::now()).state, FollowState::Idle);
 }
+
+#[test]
+fn retuning_a_running_follower_takes_hold_on_the_next_frame() {
+    let mut f = Follower::new(MotionDetector::new(MotionConfig::default()), FollowConfig::default());
+    let w = [walker()];
+    let (mut px, mut out, t0) = (Vec::new(), FollowOutput::default(), Instant::now());
+    for n in 0..40 {
+        paint(&w, n, FPS, W, H, &mut px);
+        let frame = FrameRef::packed(W, H, PixelFormat::Rgb8, &px).unwrap();
+        f.step_into(&frame, time(t0, n, FPS), &mut out);
+    }
+    f.retune(|c| {
+        c.ptz.max_speed = 0.1;
+        c.style.headroom = 0.2;
+    });
+    assert_eq!(f.config().ptz.max_speed, 0.1);
+    assert_eq!(f.config().style.headroom, 0.2);
+    for n in 40..120 {
+        paint(&w, n, FPS, W, H, &mut px);
+        let frame = FrameRef::packed(W, H, PixelFormat::Rgb8, &px).unwrap();
+        f.step_into(&frame, time(t0, n, FPS), &mut out);
+        for v in [out.ptz.pan, out.ptz.tilt, out.ptz.zoom] {
+            assert!(v.abs() <= 0.1 + 1e-4, "frame {n}: {:?} is over the new top speed", out.ptz);
+        }
+    }
+}

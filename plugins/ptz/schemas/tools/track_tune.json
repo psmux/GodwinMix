@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "track_tune",
+  "description": "Read or change how a camera follows, live: headroom, lead room, how far the person may drift before it moves, top speed, smoothness, how long it holds a lost person and what it does then. With only a camera it answers with the numbers as they stand. Changes apply on the next picture and are kept for the next start.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "headroom": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 0.4,
+      "title": "Headroom",
+      "description": "Space above the head, a fraction of the shot height."
+    },
+    "lead_room": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 2.0,
+      "title": "Lead room",
+      "description": "How far ahead of a walking person to aim, in seconds of their walk."
+    },
+    "dead_zone": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 0.3,
+      "title": "Dead zone",
+      "description": "How far off centre the person may drift before the camera moves."
+    },
+    "max_speed": {
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 1.0,
+      "title": "Max speed",
+      "description": "The fastest the camera turns or zooms, 1 being its top speed."
+    },
+    "max_accel": {
+      "type": "number",
+      "minimum": 0.2,
+      "maximum": 10.0,
+      "title": "Max accel",
+      "description": "How fast the speed may change each second; lower is smoother."
+    },
+    "lost_hold_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30000,
+      "title": "Lost hold ms",
+      "description": "How long to hold the shot when the person vanishes."
+    },
+    "switch_margin": {
+      "type": "number",
+      "minimum": 1.0,
+      "maximum": 5.0,
+      "title": "Switch margin",
+      "description": "How much better someone else must score before the camera switches to them."
+    },
+    "detect_every": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "title": "Detect every",
+      "description": "Look for people on one picture in this many, tracking in between."
+    },
+    "fallback": {
+      "type": "string",
+      "pattern": "^(stay|wide|preset:[0-9]+)$",
+      "title": "Fallback",
+      "description": "What the camera does once the hold runs out: stay where it is, go wide, or go to a saved preset, written preset:1.",
+      "examples": [
+        "stay",
+        "wide",
+        "preset:1"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

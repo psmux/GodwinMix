@@ -20,6 +20,7 @@ pub mod camera;
 pub mod motion;
 pub mod preset;
 pub mod track;
+pub mod tune;
 
 use std::sync::{Arc, Mutex};
 
@@ -28,9 +29,9 @@ use serde_json::{json, Value};
 
 use crate::rig::Rig;
 
-pub const NAMES: [&str; 18] = [
+pub const NAMES: [&str; 19] = [
     "camera_add", "camera_list", "camera_remove", "move", "stop", "zoom", "focus", "exposure", "position", "goto", "preset_save", "preset_recall", "preset_list",
-    "track_follow", "track_stop", "track_framing", "track_state", "track_observe",
+    "track_follow", "track_stop", "track_framing", "track_state", "track_observe", "track_tune",
 ];
 
 /// The rig, shared by the tool calls in flight.
@@ -79,6 +80,7 @@ pub fn plan(rig: &mut Rig, name: &str, a: &Value) -> Plan {
         "track_framing" => track::framing(rig, a).into(),
         "track_state" => track::state(rig, a).into(),
         "track_observe" => track::observe(rig, a),
+        "track_tune" => tune::tune(rig, a).into(),
         other => Plan::Now(Err(RpcError::new(codes::METHOD_NOT_FOUND, format!("gmx-ptz has no tool '{other}'. It has: {}.", NAMES.join(", "))))),
     }
 }

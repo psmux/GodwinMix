@@ -62,6 +62,20 @@ The shot leaves a little room above the head and a little ahead of where the
 person is walking, and the camera eases in and out of every move rather than
 jumping.
 
+## Make it calmer, quicker or roomier
+
+`ptz/track_tune` changes how the camera follows while it runs. For a speaker
+who paces, a slower and smoother camera with more space above the head:
+
+```json
+{"name": "ptz/track_tune", "arguments": {"camera": "cam-pulpit", "max_speed": 0.4, "max_accel": 1.2, "headroom": 0.15}}
+```
+
+A camera that keeps nudging wants a larger `dead_zone`; one that is late to
+follow wants a higher `max_speed`. With only `camera` it answers with every
+number and its range. An agent can do the same; the numbers are in
+[the ptz reference](../reference/ptz.md#tuning-how-a-camera-follows).
+
 ## Check on it, take over, turn it off
 
 `ptz/track_state` says who is followed and how it is going. When the person

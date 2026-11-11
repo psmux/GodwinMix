@@ -26,6 +26,7 @@ pub struct Job {
     /// Taken by the thread when it starts.
     pub detector: Option<Switching>,
     pub optics: Option<CameraOptics>,
+    pub tuning: super::tune::Tuning,
 }
 
 /// The Follower the loop runs. With `optics`, it takes the camera's own
@@ -50,12 +51,14 @@ fn apply(f: &mut Follower<Switching>, c: Ctl, steering: &mut bool) {
         Ctl::Lock(id) => f.follow(id),
         Ctl::Point(p) => f.follow_point(p),
         Ctl::Policy(p) => f.set_policy(p),
+        Ctl::Tune(t) => f.retune(|c| t.apply(c)),
     }
 }
 
 pub fn run(mut job: Job) {
     let detector = job.detector.take().unwrap_or_else(|| Switching::ready(Kind::Motion, motion()));
     let mut f = follower(job.framing, detector, job.optics);
+    f.retune(|c| job.tuning.apply(c));
     let mut out = FollowOutput::default();
     let mut steering = job.steering;
     let mut in_fallback = false;

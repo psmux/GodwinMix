@@ -21,7 +21,7 @@ fn rig(name: &str, driver: Box<dyn Ptz>) -> Shared {
     let settings = Settings::from_value(&json!({"data_dir": dir}));
     let spec = CameraSpec::from_value(&json!({"id": "cam-pulpit", "protocol": "fake", "address": "fake"})).unwrap();
     let handle = Handle::spawn("cam-pulpit", driver, settings.joystick_hold);
-    let cam = Camera { spec, handle, presets: gmx_ptz::presets::Store::new(&dir, "cam-pulpit"), caps: Capabilities { absolute: true, position: true, focus: true, exposure: true, presets: 100 }, follow: None, added: false };
+    let cam = Camera { spec, handle, presets: gmx_ptz::presets::Store::new(&dir, "cam-pulpit"), caps: Capabilities { absolute: true, position: true, focus: true, exposure: true, presets: 100 }, follow: None, added: false, tuning: Default::default() };
     let mut rig = Rig::new(settings, None);
     rig.insert(cam);
     Arc::new(rig.into())

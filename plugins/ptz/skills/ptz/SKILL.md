@@ -56,6 +56,12 @@ there is only one camera, `camera` can be left out of every call.
   `target: "person-3"`, `"largest"` or `"central"`, or `point: {x, y}` where
   somebody tapped the picture. Framing is `close`, `waist`, `full` or `wide`.
 * `track_framing {framing}` changes the framing while it runs.
+* `track_tune {camera}` reads how it follows; give `max_speed`, `max_accel`
+  (lower is smoother), `headroom`, `lead_room`, `dead_zone`, `lost_hold_ms`,
+  `switch_margin`, `detect_every` or `fallback` (`stay`, `wide`,
+  `preset:<n>`) to change it live. Ask first, change one or two numbers,
+  then watch `track_state`: a camera that hunts wants a larger `dead_zone`,
+  one that jerks a lower `max_accel`.
 * `track_state` says who is followed and whether the person was lost
   (`holding`, then a `fallback`).
 * `track_stop` turns it off; the camera stays where it is.

@@ -25,7 +25,7 @@ fn ensure<'a>(rig: &'a mut Rig, a: &Value, steering: bool) -> Result<&'a Camera,
     if !cam.follow.as_ref().is_some_and(Loop::is_running) {
         let frames = crate::frames::open(core.as_ref(), &cam.spec, width).map_err(|why| RpcError::new(codes::WRONG_STATE, why).with_data(json!({"camera": cam.spec.id})))?;
         let detector = Switching::new(kind, models);
-        let look = Look { framing, steering, optics: Some(cam.spec.optics) };
+        let look = Look { framing, steering, optics: Some(cam.spec.optics), tuning: cam.tuning.clone() };
         cam.follow = Some(Loop::start(cam.handle.clone(), frames, detector, look, LINGER));
     } else if steering {
         cam.follow.as_ref().expect("checked").send(Ctl::Steer(true));
@@ -107,13 +107,15 @@ pub fn state(rig: &mut Rig, a: &Value) -> Result<ToolResult, RpcError> {
 }
 
 fn summary(id: &str, c: &Camera) -> Value {
-    match &c.follow {
+    let mut v = match &c.follow {
         Some(l) if l.is_running() => {
             l.touch();
             view::seen(id, &l.seen.lock().unwrap())
         }
         _ => json!({"camera": id, "mode": "stopped", "tracks": []}),
-    }
+    };
+    v["tuning"] = c.tuning.to_json();
+    v
 }
 
 /// What the camera sees now. Starts an observing loop if none runs and
