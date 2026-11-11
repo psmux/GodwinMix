@@ -35,3 +35,7 @@ base64 = { workspace = true }
 # the socket, nothing native.
 [target.'cfg(unix)'.dependencies]
 godwinmix-framebus = { path = "../../crates/godwinmix-framebus", default-features = false }
+
+[[bench]]
+name = "follow"
+harness = false

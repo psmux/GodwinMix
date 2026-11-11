@@ -7,6 +7,8 @@
 //! `linger` after the last `track_observe` or `track_state` that asked.
 
 mod run;
+
+pub use run::follower as run_follower;
 pub mod view;
 
 use std::sync::atomic::{AtomicBool, Ordering};
