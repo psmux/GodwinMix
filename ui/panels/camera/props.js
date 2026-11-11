@@ -17,6 +17,7 @@ import { controls } from "./controls.js";
 import { livePicture } from "./live.js";
 import { presetGrid } from "./presets.js";
 import { exposureFocus } from "./exposure.js";
+import { followTuning } from "./follow.js";
 import { gamepads } from "./gamepad.js";
 import { trackWords } from "./words.js";
 import { styled, actor, drawerHead, demoFoot } from "./look.js";
@@ -66,6 +67,7 @@ function cameraProps(hub, source, cam, offCams) {
       if (!["near", "far", "stop"].includes(mode)) remember({ focus: { mode: mode === "auto" ? "auto" : "manual" } });
     }),
   });
+  const tuning = followTuning((changes) => hub.api.tune(id, changes), () => hub.presets.get(id));
   const pad = gamepads({
     move: (p, t) => drive.move(p, t),
     zoom: (v) => drive.zoom(v),
@@ -83,6 +85,7 @@ function cameraProps(hub, source, cam, offCams) {
     el("div.row.cam-state", {}, [dot, words, el("span.grow"), el("span.sm.faint", { text: "Tap a person to follow them" })]),
     el("div.cam-hand", {}, [hand.stick.root, el("div.col.cam-auto", {}, [hand.track.root, hand.chips])]),
     hand.zoom.root,
+    tuning.root,
     presets.root,
     more.root,
     demoFoot(hub),
@@ -97,6 +100,7 @@ function cameraProps(hub, source, cam, offCams) {
     head.tally(hub.real.store ? hub.real.store.tallyOf(source.id) : "off");
     presets.show(hub.cam(id) || cam, hub.presets.get(id));
     more.show(said.get(id));
+    if (tuning.root.open && t && t.tuning) tuning.show(t.tuning);
   }
 
   function gone() {

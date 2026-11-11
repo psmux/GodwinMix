@@ -46,10 +46,8 @@ class ProgramPanel extends HTMLElement {
     ])]);
 
     this.programName = el("span.ellipsis", { text: "Black" });
-    // An ATEM switcher's chip, filled by ../camera/atem-chip.js when one is connected.
-    this.atemHost = el("span.atem-chips", { hidden: true });
     const monitor = el("div.program.monitor-pane", {}, [el("div.monitor-label", {}, [
-      el("strong", { text: "PROGRAMME" }), this.programName, this.atemHost, rateMenu("programme", "Programme"),
+      el("strong", { text: "PROGRAMME" }), this.programName, rateMenu("programme", "Programme"),
       el("button.btn.icon.sm", {
         type: "button", text: "⛶", "aria-label": "Full screen programme",
         title: "Full screen programme (F). Esc or a double click leaves.",
@@ -126,13 +124,12 @@ class ProgramPanel extends HTMLElement {
 
     this.applyMode();
     this.render(this.client.state);
-    import("../camera/atem-chip.js").then((m) => {
-      if (this.isConnected) this.atem = m.atemChips(this.client, this.atemHost);
-    }).catch(() => {});
+    // ATEM switchers' chips, after the name.
+    import("../camera/atem-chip.js").then((m) => (this.atem = m.atemChips(this)));
   }
 
   disconnectedCallback() {
-    if (this.atem) this.atem.active(false);
+    this.atem?.active(false);
     clearInterval(this.frameTimer);
     clearTimeout(this.resizeTimer);
     for (const off of this.offs || []) off();
@@ -151,7 +148,7 @@ class ProgramPanel extends HTMLElement {
 
   setWorkspaceActive(active) {
     this.workspaceActive = active;
-    if (this.atem) this.atem.active(active);
+    this.atem?.active(active);
     if (active) this.render(this.client.state);
     else this.release();
   }

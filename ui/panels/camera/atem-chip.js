@@ -35,9 +35,12 @@ function chip(client, id) {
   };
 }
 
-/** Fill `host`, a span in the header, while the monitor is on the page. */
-export function atemChips(client, host) {
+/** Chips after the programme's name in `panel`'s header, while it is on the page. */
+export function atemChips(panel) {
   styled();
+  const client = panel.client;
+  const host = el("span.atem-chips", { hidden: true });
+  panel.programName.after(host);
   const hub = hubFor(client);
   const chips = new Map();
   let off = null;
@@ -51,19 +54,13 @@ export function atemChips(client, host) {
       c.show(a, hub.atemState.get(a.id));
     }
   };
-  const offHub = hub.on((what) => what !== "people" && paint());
-  const ask = () => {
-    if (!off) off = hub.want("atem");
-  };
-  hub.plugins().then(ask);
-  return {
+  const parts = {
     active(on) {
-      if (on) ask();
-      else if (off) (off(), (off = null));
-    },
-    destroy() {
-      offHub();
-      off?.();
+      if (on && !off) off = hub.want("atem");
+      if (!on && off) (off(), (off = null));
     },
   };
+  parts.active(panel.isConnected && panel.workspaceActive !== false);
+  hub.on((what) => what !== "people" && paint());
+  return parts;
 }

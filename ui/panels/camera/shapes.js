@@ -69,7 +69,7 @@ export function tracking(s) {
   else if (on && s.state === "following") state = "following";
   else if (on && (s.state === "holding" || String(s.state).startsWith("fallback"))) state = "lost";
   else if (on) state = "searching";
-  return { camera: s.camera, on, state, person: s.target || null, style: s.framing || null, error: s.error || null, fps: s.fps };
+  return { camera: s.camera, on, state, person: s.target || null, style: s.framing || null, error: s.error || null, fps: s.fps, tuning: s.tuning || null };
 }
 
 /**

@@ -614,6 +614,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/headend-setup.js", include_str!("../../../ui/test/headend-setup.js")),
     ("test/headend-picture.js", include_str!("../../../ui/test/headend-picture.js")),
     ("test/cameras.js", include_str!("../../../ui/test/cameras.js")),
+    ("test/cameras-parts.js", include_str!("../../../ui/test/cameras-parts.js")),
     ("test/headend-stub.js", include_str!("../../../ui/test/headend-stub.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),

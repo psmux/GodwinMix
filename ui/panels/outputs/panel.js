@@ -126,15 +126,10 @@ class OutputsPanel extends HTMLElement {
         el("button.btn", { text: "Add destination", onclick: () => this.add() }),
         el("button.btn.out-add-channel", { text: "Add Channel", onclick: () => addChannel(this.client) }),
       ]),
-      this.list,
-      // ATEM switchers, filled by ../camera/atem-card.js when the atem plugin answers.
-      (this.switchers = el("div.col.pad.out-switchers", { hidden: true }))
+      this.list
     );
-    import("../camera/atem-card.js").then((m) => {
-      if (!this.isConnected) return;
-      this.atem = m.switcherCards(this.client, this.switchers);
-      this.atem.active(this.workspaceActive !== false);
-    }).catch(() => {});
+    // ATEM switchers, under the destinations.
+    import("../camera/atem-card.js").then((m) => (this.atem = m.switcherCards(this)));
     this.offs = [
       this.client.onRender((s) => this.render(s)),
       registerAll([
@@ -145,7 +140,7 @@ class OutputsPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
-    if (this.atem) this.atem.active(false);
+    this.atem?.active(false);
     for (const off of this.offs || []) off();
     this.offs = [];
     this.follow(false);
@@ -154,7 +149,7 @@ class OutputsPanel extends HTMLElement {
 
   setWorkspaceActive(active) {
     this.workspaceActive = active;
-    if (this.atem) this.atem.active(active);
+    this.atem?.active(active);
     if (active) this.show(this.view || "outputs");
     else {
       this.follow(false);

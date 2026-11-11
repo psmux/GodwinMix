@@ -1,16 +1,19 @@
-// The camera window against its demo backend (panels/cameras/demo/): the
-// adapter's tool names, the joystick's rate and its stops, where a take goes
-// for each switcher mode, the tally, the pretend follow loop, and the panel
-// itself driven by clicks and pointer events. No core and no hardware.
+// PTZ cameras and ATEM switchers where they sit in GodwinMix, against the
+// demo backend (panels/camera/demo/): the adapter's tool names and shapes,
+// the joystick's rate and its stops, the pretend follow loop, and then the
+// real parts driven by clicks and pointer events: the camera button on a
+// source tile, camera properties in the side drawer, the overlay on Preview,
+// the switcher chips, switcher properties, the Outputs rows and the
+// Volunteer layout. No core and no hardware.
 
 import { wait, until } from "./wall-help.js";
+import { cameraPartsTests } from "./cameras-parts.js";
 
 export async function cameraTests(test, eq, ok) {
-  const { TOOLS, unwrap, cameraApi } = await import("../panels/cameras/api.js");
-  const { demoClient } = await import("../panels/cameras/demo/client.js");
-  const { Drive, RATE } = await import("../panels/cameras/drive.js");
-  const { route, tallyOf, trackWords } = await import("../panels/cameras/words.js");
-  const { plan, LOWER_THIRD } = await import("../panels/cameras/take.js");
+  const { TOOLS, unwrap, cameraApi } = await import("../panels/camera/api.js");
+  const { demoClient } = await import("../panels/camera/demo/client.js");
+  const { Drive, RATE } = await import("../panels/camera/drive.js");
+  const { trackWords, badgeWords } = await import("../panels/camera/words.js");
 
   test("a tool's answer is read from structured_content, as the core passes the plugin's on", () => {
     eq(unwrap({ content: [{ type: "text", text: "two cameras." }], structured_content: { cameras: [] } }), { cameras: [] });
@@ -25,7 +28,7 @@ export async function cameraTests(test, eq, ok) {
     eq(said, "cam-x has no source.", "a refusal flagged is_error throws its sentence");
   });
 
-  const { tagSpot } = await import("../panels/cameras/picture.js");
+  const { tagSpot } = await import("../panels/camera/picture.js");
   test("two people standing close keep name tags that do not cover each other", () => {
     const placed = [];
     eq(tagSpot(placed, 100, 10, 80, 24, 360), [100, 10]);
@@ -33,7 +36,7 @@ export async function cameraTests(test, eq, ok) {
     eq(tagSpot(placed, 300, 10, 80, 24, 360), [300, 10], "a tag clear of the others stays where it is");
   });
 
-  const { camera, people, tracking, atem: atemShape } = await import("../panels/cameras/shapes.js");
+  const { camera, people, tracking, atem: atemShape } = await import("../panels/camera/shapes.js");
   test("people the tracker has lost, or who left the picture, are not drawn", () => {
     const seen = people({ camera: "cam-b", tracks: [
       { id: "person-1", box: { x: 0.2, y: 0.1, w: 0.2, h: 0.8 }, state: "confirmed" },
@@ -46,7 +49,7 @@ export async function cameraTests(test, eq, ok) {
     eq([watching.following, watching.people[0].followed], [null, false], "only a steering camera follows anyone");
     ok(Math.abs(seen.people[1].box[2] - 0.1) < 1e-9, "a box half out of the picture is cut at its edge");
   });
-  test("the atem plugin's state becomes the window's", () => {
+  test("the atem plugin's state becomes the drawer's", () => {
     const w = atemShape({
       id: "atem-main", name: "Main switcher", connected: true, why: null, mode: "follow", product: "ATEM Mini Pro", firmware: "8.1.1",
       inputs: [{ id: 1, long: "Camera 1", short: "CAM1" }, { id: 2, long: "", short: "CAM2" }],
@@ -60,7 +63,7 @@ export async function cameraTests(test, eq, ok) {
     eq([w.dsks[0].on, w.dsks[0].tie, w.usks[0].on, w.ftb.on, w.auxes[0].source], [true, true, true, false, 10010]);
     eq([w.lastMacro, w.model, w.map["cam-a"], w.name], [3, "ATEM Mini Pro", 1, "Main switcher"]);
   });
-  test("the ptz plugin's shapes become the window's", () => {
+  test("the ptz plugin's shapes become the drawer's, and the tile's badge speaks only while it steers", () => {
     eq(camera({ id: "cam-pulpit", protocol: "visca-ip", source: "pulpit", last_error: null, tracking: true }).name, "Pulpit");
     const s = { camera: "cam-a", mode: "following", state: "holding", framing: "full", target: "person-3",
       tracks: [{ id: "person-3", box: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, confidence: 0.9, state: "confirmed", followed: true }], error: null };
@@ -69,6 +72,7 @@ export async function cameraTests(test, eq, ok) {
     eq(trackWords(tracking(s)), "Lost them, holding the shot");
     eq(trackWords(tracking({ camera: "cam-a", mode: "stopped", tracks: [] })), "Tracking off");
     eq(trackWords(tracking({ ...s, state: "following" })), "Following: full length");
+    eq([badgeWords(tracking({ ...s, state: "following" })), badgeWords(tracking({ ...s, mode: "observing" }))], ["Following", ""]);
   });
 
   const demo = demoClient({ clock: false });
@@ -78,6 +82,11 @@ export async function cameraTests(test, eq, ok) {
     eq(cams.map((c) => c.id), ["cam-wide", "cam-centre", "cam-side"]);
     ok(demo.calls.every((c) => c.method === "tool.call" && Object.values(TOOLS).includes(c.params.name)), "only names from the table");
     ok(Object.values(TOOLS).filter((n) => !n.startsWith("atem/")).every((n) => n.startsWith("ptz/")), "every camera tool is the ptz plugin's");
+  });
+  const standIn = demoClient({ clock: false, sources: [{ id: "pulpit", name: "Pulpit" }, { id: "wide", name: "Wide" }] });
+  const stood = await cameraApi(standIn).cameras();
+  test("the demo stands in for the sources it is given, the first as the centre camera", () => {
+    eq(stood.map((c) => [c.id, c.source, c.name]), [["cam-centre", "pulpit", "Pulpit"], ["cam-wide", "wide", "Wide"]]);
   });
 
   await api.followPerson("cam-centre", "person-1");
@@ -137,114 +146,11 @@ export async function cameraTests(test, eq, ok) {
   });
   drive.destroy();
 
-  const atem = await api.atemState("atem-main");
-  test("a take goes where the switcher's mode says", () => {
-    eq(route(null).words, "GodwinMix");
-    eq([route(atem).mix, route(atem).atem], [true, false], "follow: GodwinMix takes and the ATEM follows");
-    eq([route({ ...atem, mode: "lead" }).mix, route({ ...atem, mode: "lead" }).atem], [false, true]);
-    eq([route({ ...atem, mode: "own" }, "both").mix, route({ ...atem, mode: "own" }, "both").atem], [true, true]);
-  });
-
-  test("on air and next come from GodwinMix's tally or the ATEM's buses", () => {
-    const cam = { id: "cam-side", source: "cam-side" };
-    eq(tallyOf(cam, { tally: { "cam-side": "program" } }, null, null), "program");
-    eq(tallyOf(cam, {}, { ...atem, mes: [{ program: 3, preview: 1 }] }, null), "program");
-    eq(tallyOf(cam, {}, { ...atem, mes: [{ program: 1, preview: 3 }] }, null), "preview");
-    eq(tallyOf(cam, {}, null, "cam-side"), "preview");
-  });
-
-  const log = [];
-  const fake = new Proxy({}, { get: (_, k) => (...a) => log.push([k, ...a]) });
-  const centre = { id: "cam-centre", source: "cam-centre" };
-  const own = { ...atem, mode: "own" };
-  for (const s of plan("fade", { api: fake, cam: centre, atem: own, pick: "both" })) s();
-  for (const s of plan("lower", { api: fake, cam: centre, atem: null, lower: false })) s();
-  test("Fade to both cuts GodwinMix with a fade and runs the ATEM's auto on the mapped input", () => {
-    eq(log, [["take", "cam-centre", "fade"], ["atemPreview", "atem-main", 2], ["atemAuto", "atem-main"], ["key", LOWER_THIRD, true]]);
-  });
-
   await demo.call("program.take", { source: "cam-side" });
   const after = await api.atemState("atem-main");
-  test("in follow mode a GodwinMix take moves the ATEM's programme too", () => {
+  test("in follow mode a GodwinMix take moves the switcher's programme too", () => {
     eq(after.mes[0].program, 3);
   });
 
-  await panelTests(test, eq, ok);
-}
-
-async function panelTests(test, eq, ok) {
-  try {
-    localStorage.setItem("gmx.cameras", JSON.stringify({ demo: true }));
-  } catch { /* fine */ }
-  const { mount } = await import("../panels/cameras/mount.js");
-  const host = document.createElement("div");
-  host.style.cssText = "position:fixed;left:-3000px;top:0;width:1200px";
-  document.body.append(host);
-  host.client = { call: async () => { throw new Error("offline"); }, on: () => () => {}, onRender: () => () => {}, listen: () => () => {} };
-  const view = mount(host);
-  await until(() => view.client && view.client.demo && host.querySelectorAll(".cam-card").length === 3, 4000);
-  const client = view.client;
-  test("the window shows the demo's three cameras and its switcher bar", () => {
-    eq(host.querySelectorAll(".cam-card").length, 3);
-    ok(!host.querySelector(".cam-atem").hidden, "the ATEM bar is up");
-  });
-
-  host.querySelector('.cam-card[data-cam="cam-side"]').click();
-  await wait(60);
-  test("tapping a card makes it next, with a green frame", () => {
-    eq(view.model.next, "cam-side");
-    ok(host.querySelector('.cam-card[data-cam="cam-side"]').classList.contains("preview"));
-  });
-
-  client.calls.length = 0;
-  host.querySelector(".cam-take.cut").click();
-  await until(() => client.calls.some((c) => c.method === "program.take"));
-  await wait(200);
-  test("Cut puts the next camera on air and its frame turns red", () => {
-    eq(client.calls.find((c) => c.method === "program.take").params, { source: "cam-side" });
-    ok(host.querySelector('.cam-card[data-cam="cam-side"]').classList.contains("program"));
-  });
-
-  const stick = host.querySelector(".cam-stick");
-  const r = stick.getBoundingClientRect();
-  client.calls.length = 0;
-  stick.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 7, clientX: r.right - 10, clientY: r.top + r.height / 2, bubbles: true }));
-  await wait(200);
-  stick.dispatchEvent(new PointerEvent("pointerup", { pointerId: 7, bubbles: true }));
-  await wait(50);
-  const names = client.calls.filter((c) => c.method === "tool.call").map((c) => c.params.name);
-  test("dragging the joystick sends moves to the chosen camera, and letting go sends zero speeds", () => {
-    ok(names.includes("ptz/move"), names.join());
-    const moves = client.calls.filter((c) => c.params.name === "ptz/move").map((c) => c.params.arguments);
-    eq(moves[0].camera, "cam-side");
-    eq(moves[moves.length - 1], { camera: "cam-side", pan: 0, tilt: 0, zoom: 0 }, "let go is zero speeds");
-    ok(!names.includes("ptz/stop"), "never the stop tool, which would turn tracking off");
-  });
-
-  await until(() => (view.model.seen.get("cam-wide") || {}).people?.length);
-  const who = view.model.seen.get("cam-wide").people[0];
-  const pic = host.querySelector('.cam-card[data-cam="cam-wide"] canvas').getBoundingClientRect();
-  client.calls.length = 0;
-  host.querySelector('.cam-card[data-cam="cam-wide"] canvas').dispatchEvent(new MouseEvent("click", {
-    bubbles: true, clientX: pic.left + (who.box[0] + who.box[2] / 2) * pic.width, clientY: pic.top + (who.box[1] + who.box[3] / 2) * pic.height,
-  }));
-  await until(() => client.calls.some((c) => c.params.name === "ptz/track_follow"));
-  test("tapping a person in the picture follows them", () => {
-    eq(client.calls.find((c) => c.params.name === "ptz/track_follow").params.arguments, { camera: "cam-wide", target: who.id });
-    eq(view.model.next, "cam-wide");
-  });
-
-  view.model.lowerThird = "Name strap";
-  client.calls.length = 0;
-  host.querySelector(".cam-take.lower").click();
-  await until(() => client.calls.some((c) => c.method === "program.key.set"));
-  test("Lower third keys the scene the window is set to", () => {
-    eq(client.calls.find((c) => c.method === "program.key.set").params, { scene: "Name strap", on: true });
-  });
-
-  view.destroy();
-  host.remove();
-  try {
-    localStorage.removeItem("gmx.cameras");
-  } catch { /* fine */ }
+  await cameraPartsTests(test, eq, ok);
 }

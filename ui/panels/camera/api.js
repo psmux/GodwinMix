@@ -24,6 +24,7 @@ export const TOOLS = {
   framing: "ptz/track_framing", // {camera, framing}
   trackState: "ptz/track_state",
   observe: "ptz/track_observe", // {camera, wait_ms}
+  tune: "ptz/track_tune", // {camera, headroom, lead_room, dead_zone, max_speed, max_accel, lost_hold_ms, fallback}
   atemList: "atem/list",
   atemState: "atem/state",
   cut: "atem/cut",
@@ -90,6 +91,8 @@ export function cameraApi(client) {
     followPerson: (camera, target) => tool("follow", { camera, target }),
     followPoint: (camera, x, y) => tool("follow", { camera, point: { x, y } }),
     trackStop: (camera) => tool("trackStop", { camera }),
+    /** How it follows: the numbers as they stand, or changed by `changes`. */
+    tune: (camera, changes) => tool("tune", { camera, ...changes }),
     trackState: async (camera) => shape.tracking(await tool("trackState", { camera })),
     atems: async () => list(await tool("atemList").catch(() => []), "switchers"),
     atemState: async (switcher) => shape.atem(await tool("atemState", { switcher })),

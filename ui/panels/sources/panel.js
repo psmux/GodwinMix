@@ -124,22 +124,18 @@ class SourcesPanel extends HTMLElement {
     this.ro.observe(this.grid);
 
     this.render(this.client.state);
-    // PTZ cameras on their sources' tiles, after the tray has drawn.
-    import("../camera/tiles.js").then((m) => {
-      if (!this.isConnected) return;
-      this.cameras = m.cameraTiles(this);
-      this.cameras.active(this.workspaceActive !== false);
-    }).catch(() => {});
+    // PTZ camera buttons on the tiles.
+    import("../camera/tiles.js").then((m) => (this.cameras = m.cameraTiles(this)));
   }
 
   setWorkspaceActive(active) {
     setWorkspaceActive(this, active);
-    if (this.cameras) this.cameras.active(active);
+    this.cameras?.active(active);
   }
 
   disconnectedCallback() {
     clearInterval(this.stillTimer);
-    if (this.cameras) this.cameras.active(false);
+    this.cameras?.active(false);
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.drag) this.drag.destroy();
@@ -259,7 +255,7 @@ class SourcesPanel extends HTMLElement {
 
     this.paintEmpty(s, list);
     this.retune();
-    if (this.cameras) this.cameras.paint();
+    this.cameras?.paint();
   }
 
   paintScope() {
@@ -289,7 +285,6 @@ class SourcesPanel extends HTMLElement {
         audio: this.audio,
         scrub: this.scrub,
         onGear: (id, section) => this.openDrawer(id, section),
-        onCamera: (id) => this.openCamera(id),
         onInteract: (id) => this.interact(id),
         onBackup: (method, id) => this.client.call(method, { id }).catch((e) => errorToast(e, "Backup")),
         onMute: (id, muted) => this.audio.setMuted(id, muted).catch((e) => errorToast(e, "Mute")),
@@ -572,12 +567,10 @@ class SourcesPanel extends HTMLElement {
     return openInteract(this.client, source);
   }
 
-  /** Camera properties, fetched on the first press of a camera button or Camera. */
-  async openCamera(id) {
+  /** Camera properties: a tile's camera button or Camera on its menu. */
+  openCamera(id) {
     const source = this.client.store.source(id);
-    if (!source) return;
-    const { openCamera } = await import("../camera/props.js");
-    return openCamera(this.client, source);
+    if (source) import("../camera/props.js").then((m) => m.openCamera(this.client, source));
   }
 
   /** The settings drawer, fetched on the first gear click and not before. */
@@ -619,7 +612,7 @@ class SourcesPanel extends HTMLElement {
       id && { label: "Rename", key: key("tray.rename") || "F2", disabled: many, run: () => this.beginRename(id) },
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
-      id && !many && this.client.store.source(id)?.has_video !== false && { label: "Camera", run: () => this.openCamera(id) },
+      id && !many && { label: "Camera", run: () => this.openCamera(id) },
       id && !many && this.client.store.source(id)?.page && { label: "Interact with the page", run: () => this.interact(id) },
       ...look,
       id && { kind: "separator" },

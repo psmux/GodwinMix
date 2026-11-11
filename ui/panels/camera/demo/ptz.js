@@ -3,12 +3,13 @@
 // renamed tool still reaches its handler here.
 
 import * as view from "./view.js";
+import { tune } from "./tune.js";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function listed(c, now) {
   return {
-    id: c.id, protocol: "fake", address: "", user: null, profile: null, source: c.source, bus: null,
+    id: c.id, name: c.name, protocol: "fake", address: "", user: null, profile: null, source: c.source, bus: null,
     capabilities: { absolute: true, position: true, focus: true, exposure: true, presets: true },
     moving: { pan: c.vel.pan, tilt: c.vel.tilt, zoom: c.vel.zoom, by_joystick: now - c.vel.at < 300 },
     last_error: null, tracking: c.tracking.on, added_by_tool: false,
@@ -81,7 +82,8 @@ export function ptzTools(d) {
       return { camera: cam(a).id, tracking: false };
     },
     framing: (a) => ((cam(a).tracking.style = a.framing), { camera: cam(a).id, framing: a.framing }),
-    trackState: (a) => view.state(d.world, cam(a), d.now()),
+    trackState: (a) => ({ ...view.state(d.world, cam(a), d.now()), tuning: tune(cam(a), {}).tuning }),
+    tune: (a) => tune(cam(a), a),
     observe: (a) => ((cam(a).observedAt = d.now()), view.seen(d.world, cam(a), d.now())),
   };
 }

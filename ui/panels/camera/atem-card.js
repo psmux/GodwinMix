@@ -43,9 +43,14 @@ function row(hub, id, act) {
   };
 }
 
-/** Fill `host`, a section under the destinations, while Outputs is on the page. */
-export function switcherCards(client, host) {
+/** A section under `panel`'s destinations, while Outputs is on the page. */
+export function switcherCards(panel) {
   styled();
+  const client = panel.client;
+  const host = el("div.col.pad.out-switchers", { hidden: true });
+  panel.list.after(host);
+  panel.switchers = host;
+  host.classList.toggle("away", panel.view === "resources");
   const hub = hubFor(client);
   const act = actor(hub);
   const list = el("div.col");
@@ -67,16 +72,14 @@ export function switcherCards(client, host) {
       r.show(a, hub.atemState.get(a.id));
     }
   };
-  const offHub = hub.on((what) => what !== "people" && paint());
+  hub.on((what) => what !== "people" && paint());
   paint();
-  return {
+  const parts = {
     active(on) {
       if (on && !off) off = hub.want("atem");
       if (!on && off) (off(), (off = null));
     },
-    destroy() {
-      offHub();
-      off?.();
-    },
   };
+  parts.active(panel.isConnected && panel.workspaceActive !== false);
+  return parts;
 }

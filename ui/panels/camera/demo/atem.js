@@ -6,8 +6,8 @@ const input = (id, name, short) => ({ id, name, short });
 
 function inputs(n, cams) {
   const out = cams.map((c, i) => input(i + 1, c.name, c.name.slice(0, 4).toUpperCase()));
-  const extra = [["Slides", "SLDS"], ["Words", "WRDS"], ["Laptop", "LPTP"], ["Input 7", "IN 7"], ["Input 8", "IN 8"]];
-  for (let i = out.length; i < n; i++) out.push(input(i + 1, ...extra[i - cams.length]));
+  const extra = [["Slides", "SLDS"], ["Words", "WRDS"], ["Laptop", "LPTP"]];
+  for (let i = out.length; i < n; i++) out.push(input(i + 1, ...(extra[i - cams.length] || [`Input ${i + 1}`, `IN ${i + 1}`])));
   return [input(0, "Black", "BLK"), ...out, input(1000, "Colour bars", "BARS"), input(3010, "Media player 1", "MP1")];
 }
 
