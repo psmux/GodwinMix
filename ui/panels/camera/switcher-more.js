@@ -30,7 +30,7 @@ export function switcherMore(hub, id, act) {
   const macros = el("div.cam-row-wrap");
   const sections = [
     section("Sources and inputs", el("p.sm.dim", { text: "Which switcher input shows each GodwinMix source. Following, leading and tally go by this." }), map),
-    section("Transition", el("div.row", {}, [style, el("label.row.sm.dim", { text: "Rate" }, [rate])]), bar),
+    section("Transition", el("div.row", {}, [style, el("label.cam-field", {}, [el("span", { text: "Rate, frames" }), rate])]), bar),
     section("Keys and fade to black", keys),
     section("Aux outputs", auxes),
     section("Macros", macros),

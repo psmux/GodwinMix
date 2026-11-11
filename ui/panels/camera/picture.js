@@ -1,10 +1,13 @@
 // A camera's picture in camera properties, and the people the tracker sees
 // drawn over it there and over the Preview monitor. The demo paints its
 // pictures straight into the canvas. A real camera is a GodwinMix source, so
-// its picture is the core's snapshot of that source, asked for about three
-// times a second and only while camera properties is open.
+// its picture is that source's cell of the multiview the monitors already
+// receive, which costs the mixer nothing more. With no monitor on the page
+// it is the core's snapshot of the source instead, asked for no more often
+// than the core serves one ([snapshot] min_interval_secs, a second by
+// default), and only while camera properties is open.
 
-const EVERY_MS = 330;
+const EVERY_MS = 1100;
 
 export function pictures(client) {
   const shots = new Map();
@@ -19,7 +22,8 @@ export function pictures(client) {
     const img = new Image();
     s.loading = true;
     img.onload = () => Object.assign(s, { img, at: performance.now(), loading: false });
-    img.onerror = () => Object.assign(s, { at: performance.now(), loading: false });
+    // Refused (too soon, or no picture yet): wait longer before the next ask.
+    img.onerror = () => Object.assign(s, { at: performance.now() + 2000, loading: false });
     img.src = url + (url.includes("?") ? "&" : "?") + "t=" + Math.round(now);
     return s;
   }
@@ -28,6 +32,15 @@ export function pictures(client) {
     draw(cam, canvas) {
       const ctx = canvas.getContext("2d");
       if (client.paint) return client.paint(cam.id, canvas);
+      const sheet = client.sheet;
+      const cell = sheet && sheet.bitmap && sheet.layout && (sheet.layout.cells || []).find((c) => c.source === (cam.source || cam.id));
+      if (cell) {
+        try {
+          return ctx.drawImage(sheet.bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, canvas.width, canvas.height);
+        } catch {
+          /* a picture closed as the next arrived: the snapshot below, or the next frame */
+        }
+      }
       const s = fetchShot(cam, canvas.width);
       if (s.img) return ctx.drawImage(s.img, 0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#111";

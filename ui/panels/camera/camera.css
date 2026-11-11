@@ -131,7 +131,7 @@
 .atem-bus:empty { display: none; }
 .out-switchers { border-top: var(--border) solid var(--line); }
 .out-switchers.away { display: none; }
-.atem-row .row { flex-wrap: wrap; }
+.atem-row .output-detail { gap: 6px; }
 
 /* The camera over Preview. Dark glass over the picture in every theme. */
 .cam-boxes { position: absolute; left: 0; top: 0; z-index: 1; }
