@@ -1,7 +1,8 @@
-// The ptz plugin's answers, turned into what the camera window draws. The
-// plugin's shapes are in plugins/ptz/src/tools/ and plugins/ptz/src/follow/
-// view.rs; the window's are small on purpose, so a second camera plugin
-// only needs a second set of these.
+// The ptz and atem plugins' answers, turned into what the camera window
+// draws. The plugins' shapes are in plugins/ptz/src/tools/,
+// plugins/ptz/src/follow/view.rs and plugins/atem/src/view.rs; the window's
+// are small on purpose, so a second camera plugin only needs a second set of
+// these.
 
 /** "cam-pulpit" reads "Pulpit"; a name the plugin gives wins. */
 export function nameOf(id) {
@@ -56,4 +57,39 @@ export function tracking(s) {
   else if (on && (s.state === "holding" || String(s.state).startsWith("fallback"))) state = "lost";
   else if (on) state = "searching";
   return { camera: s.camera, on, state, person: s.target || null, style: s.framing || null, error: s.error || null, fps: s.fps };
+}
+
+/**
+ * atem/state, as plugins/atem/src/view.rs answers it, in the window's terms:
+ * one row per input with its long name, the M/E buses flat, the first M/E's
+ * upstream keys and fade to black, and the macro to light.
+ */
+export function atem(s) {
+  if (!s || !s.id) return s;
+  const mes = s.mes || [];
+  const first = mes[0] || {};
+  const ftb = first.ftb || {};
+  const run = s.macro || {};
+  return {
+    id: s.id,
+    name: s.name || s.id,
+    model: s.product || null,
+    firmware: s.firmware || null,
+    connected: !!s.connected,
+    why: s.why || null,
+    mode: s.mode || "own",
+    inputs: (s.inputs || []).map((i) => ({ id: i.id, name: i.long || i.short || `Input ${i.id}`, short: i.short || "" })),
+    map: s.map || {},
+    mes: mes.map((m) => {
+      const t = m.transition || {};
+      return { program: m.program, preview: m.preview, style: t.style || "mix", rate: t.rate ?? null, position: t.position || 0, running: t.in_transition ? 1 : 0 };
+    }),
+    dsks: (s.dsk || []).map((d) => ({ on: !!d.on_air, tie: !!d.tie, rate: d.rate })),
+    usks: (first.usk || []).map((k) => ({ on: !!k.on_air })),
+    ftb: { on: !!ftb.on, rate: ftb.rate },
+    auxes: (s.aux || []).map((a) => ({ source: a.input })),
+    macros: (s.macros || []).map((m) => ({ index: m.index, name: m.name || `Macro ${m.index + 1}` })),
+    lastMacro: run.running ? run.index : run.last_run ?? null,
+    tally: s.tally || null,
+  };
 }

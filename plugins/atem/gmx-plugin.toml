@@ -159,6 +159,8 @@ annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = 
 user_invocable = true
 model_invocable = true
 
+# AUX is a reserved file name on Windows, with any extension, so this tool's
+# schemas are named aux_source.
 [[tools]]
 name = "aux"
 description = "Route an input to an aux output, counted from 0. Example: aux {switcher: \"atem-main\", aux: 0, input: 10010} sends the programme to aux 1."

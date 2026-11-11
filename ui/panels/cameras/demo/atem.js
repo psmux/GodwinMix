@@ -26,8 +26,32 @@ export function switcher(id, name, model, n, cams, mode) {
   };
 }
 
-/** The state an `atem/state` call answers with: a copy, so a caller can keep it. */
+/** A copy of a switcher, so a caller can keep it. */
 export const snapshot = (s) => JSON.parse(JSON.stringify(s));
+
+/** What `atem/state` answers, in the plugin's shape (plugins/atem/src/view.rs), so the window's adapter in shapes.js is what reads it. */
+export function toPlugin(s) {
+  const c = snapshot(s);
+  const on = (bus) => c.mes[0][bus];
+  const sources = Object.fromEntries(Object.entries(c.map).map(([src, i]) => [src, i === on("program") ? "program" : i === on("preview") ? "preview" : "off"]));
+  return {
+    id: c.id, name: c.name, connected: c.connected, why: c.connected ? null : "the demo switcher is off", mode: c.mode,
+    product: c.model, protocol: "2.30", firmware: "8.1.1",
+    inputs: c.inputs.map((i) => ({ id: i.id, long: i.name, short: i.short })),
+    mes: c.mes.map((m, i) => ({
+      me: i, program: m.program, preview: m.preview,
+      transition: { style: m.style, rate: m.rate, position: m.position, in_transition: !!m.running },
+      usk: i ? [] : c.usks.map((u, k) => ({ keyer: k, on_air: u.on })),
+      ftb: i ? { on: false } : { on: c.ftb.on, rate: c.ftb.rate },
+    })),
+    dsk: c.dsks.map((d, k) => ({ keyer: k, on_air: d.on, tie: !!d.tie, rate: d.rate })),
+    aux: c.auxes.map((a, k) => ({ aux: k, input: a.source })),
+    macros: c.macros.map((m) => ({ index: m.index, name: m.name, description: "" })),
+    macro: { running: false, index: null, last_run: c.lastMacro },
+    tally: { program: [on("program")], preview: [on("preview")], sources },
+    map: c.map,
+  };
+}
 
 export function cut(s, me = 0) {
   const m = s.mes[me];
@@ -54,7 +78,8 @@ export function stepSwitcher(s, dt) {
 export function dsk(s, keyer, action) {
   const k = s.dsks[keyer];
   if (!k) throw new Error(`this switcher has ${s.dsks.length} downstream keyers, numbered from 0`);
-  k.on = action === "on" ? true : action === "off" ? false : !k.on;
+  if (action === "tie") k.tie = !k.tie;
+  else k.on = action === "on" ? true : action === "off" ? false : !k.on;
 }
 
 export function setBus(s, bus, inputId, me = 0) {

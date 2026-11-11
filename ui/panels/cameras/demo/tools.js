@@ -13,8 +13,8 @@ export function handlers(d) {
   const ok = () => ({ ok: true });
   return {
     ...ptzTools(d),
-    atemList: () => ({ switchers: d.atems.map((s) => ({ id: s.id, name: s.name, model: s.model, connected: s.connected, mode: s.mode })) }),
-    atemState: (a) => atem.snapshot(sw(a)),
+    atemList: () => ({ switchers: d.atems.map((s) => ({ id: s.id, name: s.name, product: s.model, connected: s.connected, mode: s.mode, why: s.connected ? null : "the demo switcher is off" })) }),
+    atemState: (a) => atem.toPlugin(sw(a)),
     cut: (a) => (atem.cut(sw(a), a.me || 0), ok()),
     auto: (a) => (atem.auto(sw(a), a.me || 0), ok()),
     preview: (a) => (atem.setBus(sw(a), "preview", a.input, a.me || 0), ok()),

@@ -25,7 +25,21 @@ export async function cameraTests(test, eq, ok) {
     eq(said, "cam-x has no source.", "a refusal flagged is_error throws its sentence");
   });
 
-  const { camera, people, tracking } = await import("../panels/cameras/shapes.js");
+  const { camera, people, tracking, atem: atemShape } = await import("../panels/cameras/shapes.js");
+  test("the atem plugin's state becomes the window's", () => {
+    const w = atemShape({
+      id: "atem-main", name: "Main switcher", connected: true, why: null, mode: "follow", product: "ATEM Mini Pro", firmware: "8.1.1",
+      inputs: [{ id: 1, long: "Camera 1", short: "CAM1" }, { id: 2, long: "", short: "CAM2" }],
+      mes: [{ me: 0, program: 1, preview: 2, transition: { style: "dip", rate: 30, position: 0.5, in_transition: true }, usk: [{ keyer: 0, on_air: true }], ftb: { on: false, rate: 25 } }],
+      dsk: [{ keyer: 0, on_air: true, tie: true, rate: 25 }], aux: [{ aux: 0, input: 10010 }],
+      macros: [{ index: 3, name: "Closing", description: "" }], macro: { running: false, index: null, last_run: 3 },
+      tally: { program: [1], preview: [2], sources: { "cam-a": "program" } }, map: { "cam-a": 1 },
+    });
+    eq(w.inputs, [{ id: 1, name: "Camera 1", short: "CAM1" }, { id: 2, name: "CAM2", short: "CAM2" }]);
+    eq(w.mes[0], { program: 1, preview: 2, style: "dip", rate: 30, position: 0.5, running: 1 });
+    eq([w.dsks[0].on, w.dsks[0].tie, w.usks[0].on, w.ftb.on, w.auxes[0].source], [true, true, true, false, 10010]);
+    eq([w.lastMacro, w.model, w.map["cam-a"], w.name], [3, "ATEM Mini Pro", 1, "Main switcher"]);
+  });
   test("the ptz plugin's shapes become the window's", () => {
     eq(camera({ id: "cam-pulpit", protocol: "visca-ip", source: "pulpit", last_error: null, tracking: true }).name, "Pulpit");
     const s = { camera: "cam-a", mode: "following", state: "holding", framing: "full", target: "person-3",

@@ -1,8 +1,9 @@
 // Every call the camera window makes, in one place. The camera tools are the
 // ptz plugin's (plugins/ptz/gmx-plugin.toml), reached as `ptz/<tool>` through
 // the core's public `tool.call`, the way an agent or `gmx ctl` reaches them.
-// The atem names are still a guess while that plugin is being built; when a
-// name moves, the TOOLS table below is the only thing to change.
+// The switcher tools are the atem plugin's (plugins/atem/gmx-plugin.toml),
+// reached as `atem/<tool>`. When a name moves, the TOOLS table below is the
+// only thing to change; when an answer's shape moves, shapes.js is.
 
 import * as shape from "./shapes.js";
 
@@ -85,7 +86,7 @@ export function cameraApi(client) {
     trackStop: (camera) => tool("trackStop", { camera }),
     trackState: async (camera) => shape.tracking(await tool("trackState", { camera })),
     atems: async () => list(await tool("atemList").catch(() => []), "switchers"),
-    atemState: sw("atemState"),
+    atemState: async (switcher) => shape.atem(await tool("atemState", { switcher })),
     atemCut: sw("cut"),
     atemAuto: sw("auto"),
     atemPreview: (switcher, input, me = 0) => tool("preview", { switcher, me, input }),
