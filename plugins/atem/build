@@ -1,0 +1,19 @@
+#!/bin/sh
+# Stage the binary where the manifest says it is. See plugins/tally/build for
+# why a workspace member needs this.
+#
+#   ./build        build and stage bin/gmx-atem
+
+set -eu
+cd "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+: "${CARGO_TARGET_DIR:=$(cd ../.. && pwd)/target}"
+export CARGO_TARGET_DIR
+
+cargo build --release -p gmx-atem
+mkdir -p bin
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-atem.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-atem$exe" "bin/gmx-atem$exe"
+chmod +x "bin/gmx-atem$exe"
+echo "staged bin/gmx-atem from $CARGO_TARGET_DIR/release"

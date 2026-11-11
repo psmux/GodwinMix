@@ -1427,6 +1427,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-atem"
+version = "0.1.0"
+dependencies = [
+ "godwinmix-atem",
+ "godwinmix-client",
+ "godwinmix-sdk",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "gmx-audio-device"
 version = "0.1.0"
 dependencies = [
@@ -1706,6 +1717,15 @@ dependencies = [
  "toml_edit",
  "tower-http",
  "tracing",
+]
+
+[[package]]
+name = "godwinmix-atem"
+version = "0.3.32"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

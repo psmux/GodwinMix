@@ -1,0 +1,30 @@
+# A first party service plugin, and a member of the repository's workspace
+# through the `plugins/*` glob in the root manifest.
+[package]
+name = "gmx-atem"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Blackmagic ATEM switchers for GodwinMix: several at once, every bus and keyer as a tool, and a mode that makes GodwinMix and the switcher cut together"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[[bin]]
+name = "gmx-atem"
+path = "src/main.rs"
+
+[lib]
+name = "gmx_atem"
+path = "src/lib.rs"
+
+# No GStreamer and no media: UDP to the switchers and the public protocol to
+# the core, so this builds and tests on a machine with neither.
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+godwinmix-atem = { path = "../../crates/godwinmix-atem" }
+godwinmix-client = { path = "../../crates/godwinmix-client" }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
