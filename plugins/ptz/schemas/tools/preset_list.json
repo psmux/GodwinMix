@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "preset_list",
+  "description": "The presets saved through this plugin, with their names and thumbnails' paths; pictures: true adds each thumbnail as a data URL.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "pictures": {
+      "type": "boolean",
+      "default": false,
+      "description": "Put each thumbnail in the answer as a data URL.",
+      "examples": [
+        true
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

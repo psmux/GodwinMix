@@ -1,0 +1,41 @@
+# A first party service plugin, and a member of the repository's workspace
+# through the `plugins/*` glob in the root manifest.
+[package]
+name = "gmx-ptz"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "PTZ cameras for GodwinMix: VISCA, ONVIF and Canon control, a joystick that stops by itself, presets with pictures, and a follow loop that keeps a person in shot"
+license = "Apache-2.0"
+repository = "https://github.com/psmux/godwinmix"
+
+[[bin]]
+name = "gmx-ptz"
+path = "src/main.rs"
+
+[lib]
+name = "gmx_ptz"
+path = "src/lib.rs"
+
+# Threads and blocking sockets throughout, like the drivers and the tracking
+# engine under it: no async runtime and no GStreamer, so this builds and
+# tests on a machine with neither.
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+godwinmix-ptz = { path = "../../crates/godwinmix-ptz" }
+godwinmix-track = { path = "../../crates/godwinmix-track" }
+serde_json = { workspace = true }
+# Decoding the core's preview JPEGs to pixels for the tracker. The JPEG codec
+# only, which the workspace already compiles.
+image = { workspace = true }
+# A preset's thumbnail goes back to a caller inline, as a data URL.
+base64 = { workspace = true }
+
+# The frame bus is Linux and macOS only. Without GStreamer it is the ring and
+# the socket, nothing native.
+[target.'cfg(unix)'.dependencies]
+godwinmix-framebus = { path = "../../crates/godwinmix-framebus", default-features = false }
+
+[[bench]]
+name = "follow"
+harness = false

@@ -29,21 +29,8 @@ xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" xmlns:dn=\"http://ww
 }
 
 /// The text inside the first element whose local name is `name`, whatever
-/// namespace prefix the device chose.
-pub fn element<'a>(xml: &'a str, name: &str) -> Option<&'a str> {
-    let mut rest = xml;
-    loop {
-        let at = rest.find('<')?;
-        rest = &rest[at + 1..];
-        let tag_end = rest.find('>')?;
-        let tag = &rest[..tag_end];
-        let local = tag.split_whitespace().next().unwrap_or("").rsplit(':').next().unwrap_or("");
-        if local == name && !tag.starts_with('/') && !tag.ends_with('/') {
-            let body = &rest[tag_end + 1..];
-            return Some(&body[..body.find("</")?]);
-        }
-    }
-}
+/// namespace prefix the device chose. Shared with `godwinmix-ptz`.
+pub use godwinmix_ptz::onvif::xml::element;
 
 /// Every ProbeMatch in one answer.
 pub fn matches(xml: &str) -> Option<Found> {
