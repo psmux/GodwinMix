@@ -7,7 +7,9 @@
 use std::time::Duration;
 
 use godwinmix_ptz::onvif::soap::call;
-pub use godwinmix_ptz::onvif::soap::{digest, utc, Login};
+#[cfg(test)]
+pub use godwinmix_ptz::onvif::soap::digest;
+pub use godwinmix_ptz::onvif::soap::Login;
 use godwinmix_ptz::onvif::xml::escape;
 
 use super::http::Failure;
