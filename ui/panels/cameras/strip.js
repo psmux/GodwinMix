@@ -18,7 +18,8 @@ export function strip(model, on) {
   const list = el("div.cam-strip", { role: "group", "aria-label": "Cameras" });
   const empty = el("div.cam-empty", {}, [
     el("p", { text: "No cameras yet." }),
-    el("p.dim", { text: "Add a PTZ camera with the ptz plugin, or turn on Demo to try this window with three pretend cameras." }),
+    el("p.dim", { text: "Add a PTZ camera with the ptz plugin, or try this window with three pretend cameras." }),
+    el("button.cam-try", { type: "button", text: "Try the demo", onclick: () => on.demo() }),
   ]);
   const root = el("section.cam-step.cam-step-pick", {}, [el("h3.cam-steptitle", {}, [el("span.cam-stepno", { text: "1" }), "Pick what's next"]), list, empty]);
   let cards = new Map();
@@ -26,13 +27,15 @@ export function strip(model, on) {
   let raf = 0;
   let last = 0;
   let tint = null;
+  let built = null;
 
   function build() {
-    const ids = model.cams.map((c) => c.id).join();
-    if (ids === [...cards.keys()].join() && [...cards.values()].every((c) => model.cam(c.cam.id) === c.cam)) return;
+    empty.hidden = model.cams.length > 0 || !(model.loaded || model.error);
+    const ids = model.cams.map((c) => c.id + "=" + c.name).join();
+    if (ids === built) return;
+    built = ids;
     cards = new Map(model.cams.map((c) => [c.id, card(c, on)]));
     list.replaceChildren(...[...cards.values()].map((c) => c.root));
-    empty.hidden = model.cams.length > 0 || !model.loaded;
   }
 
   let shown = null;
@@ -83,6 +86,7 @@ export function strip(model, on) {
     reset() {
       pics = pictures(model.api.client);
       cards = new Map();
+      built = null;
       tint = null;
       sync();
     },

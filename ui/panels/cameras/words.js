@@ -44,7 +44,7 @@ export function tallyOf(cam, mix, atem, next) {
 
 /** Where a take goes for a switcher's mode, and the line that says so. */
 export function route(atem, pick) {
-  if (!atem || !atem.connected) return { mix: true, atem: false, words: "Goes to GodwinMix" };
+  if (!atem || !atem.connected) return { mix: true, atem: false, words: "GodwinMix" };
   if (atem.mode === "follow") return { mix: true, atem: false, words: `GodwinMix, and ${atem.name} follows` };
   if (atem.mode === "lead") return { mix: false, atem: true, words: `${atem.name}, and GodwinMix follows` };
   const to = pick || "atem";

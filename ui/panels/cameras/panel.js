@@ -32,6 +32,7 @@ export class CameraView {
     const act = (fn) => this.act(fn);
     const on = {
       pick: (id) => m.pick(id),
+      demo: () => (this.head.set({ demo: true, pro: m.pro }), this.setDemo(true)),
       follow: (id, person) => (m.pick(id), act(() => m.api.followPerson(id, person))),
     };
     this.head = header({ demo: (v) => this.setDemo(v), pro: (v) => this.setPro(v) });

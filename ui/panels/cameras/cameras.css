@@ -48,6 +48,7 @@
 .cam-panel.narrow .cam-card { flex: 0 0 84%; scroll-snap-align: center; }
 .cam-empty { padding: 28px; border: 2px dashed var(--line); border-radius: var(--cam-r); text-align: center; }
 .cam-empty p { margin: 4px 0; }
+.cam-try { margin-top: 10px; padding: 0 22px; border-radius: 999px; border: 0; font-weight: 700; background: var(--accent); color: var(--on-accent); }
 
 .cam-card {
   position: relative; display: flex; flex-direction: column; cursor: pointer; overflow: hidden;

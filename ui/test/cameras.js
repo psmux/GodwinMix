@@ -86,7 +86,7 @@ export async function cameraTests(test, eq, ok) {
 
   const atem = await api.atemState("atem-main");
   test("a take goes where the switcher's mode says", () => {
-    eq(route(null).words, "Goes to GodwinMix");
+    eq(route(null).words, "GodwinMix");
     eq([route(atem).mix, route(atem).atem], [true, false], "follow: GodwinMix takes and the ATEM follows");
     eq([route({ ...atem, mode: "lead" }).mix, route({ ...atem, mode: "lead" }).atem], [false, true]);
     eq([route({ ...atem, mode: "own" }, "both").mix, route({ ...atem, mode: "own" }, "both").atem], [true, true]);
