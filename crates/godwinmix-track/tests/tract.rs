@@ -62,3 +62,26 @@ fn the_follower_frames_the_biggest_person() {
     assert!(target.rect.cx() > 0.6, "the nearer, bigger person is on the right: {target:?}");
     assert!(out.ptz.pan >= 0.0, "{:?}", out.ptz);
 }
+
+#[test]
+fn movenet_puts_the_shoulders_above_the_hips() {
+    use godwinmix_track::detect::tract::PoseDetector;
+    use godwinmix_track::Joint;
+    let Some(boxes) = detector((416, 416)) else { return };
+    let mut det = match PoseDetector::new(boxes, 2, None) {
+        Ok(d) => d,
+        Err(e) => return eprintln!("skipping: no pose model on this machine: {e}"),
+    };
+    let (px, w, h) = grey("two-people.jpg");
+    let frame = FrameRef::packed(w, h, PixelFormat::Gray8, &px).unwrap();
+    let start = Instant::now();
+    let found = det.detect(&frame);
+    eprintln!("boxes and two poses in {:?}", start.elapsed());
+    for d in found.iter().take(2) {
+        let k = d.keypoints.expect("the best two people have keypoints");
+        let shoulders = k.mid(Joint::LeftShoulder, Joint::RightShoulder, 0.3).expect("shoulders seen");
+        let hips = k.mid(Joint::LeftHip, Joint::RightHip, 0.3).expect("hips seen");
+        assert!(shoulders.y < hips.y, "{shoulders:?} {hips:?}");
+        assert!(d.rect.contains(shoulders), "{shoulders:?} outside {:?}", d.rect);
+    }
+}

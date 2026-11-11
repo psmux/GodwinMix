@@ -2,7 +2,7 @@
 //! `cargo bench -p godwinmix-track`, and with `--features tract` for the
 //! model. The numbers in the README come from this file.
 
-#[path = "../tests/common/mod.rs"]
+#[path = "../../tests/common/mod.rs"]
 mod common;
 
 use std::hint::black_box;
@@ -90,39 +90,11 @@ fn stages(c: &mut Criterion) {
         })
     });
     #[cfg(feature = "tract")]
-    tract_stages(c, &frames);
+    tract::stages(c);
 }
 
 #[cfg(feature = "tract")]
-fn tract_stages(c: &mut Criterion, frames: &[Vec<u8>]) {
-    use godwinmix_track::detect::tract::{TractConfig, TractDetector};
-    for input in [(320, 192), (320, 320), (416, 416)] {
-        let Ok(mut det) = TractDetector::new(TractConfig { input, ..TractConfig::default() }) else {
-            eprintln!("no person model on this machine; skipping the tract benches");
-            return;
-        };
-        let mut out = Vec::new();
-        let name = format!("detect/tract yolox-nano {}x{}", input.0, input.1);
-        let mut n = 0;
-        c.bench_function(&name, |b| {
-            b.iter(|| {
-                n += 1;
-                det.detect_into(&frame(&frames[n % FRAMES]), &mut out)
-            })
-        });
-    }
-    for every in [1, 3] {
-        let det = TractDetector::new(TractConfig { input: (320, 192), ..TractConfig::default() }).unwrap();
-        let mut f = Follower::new(det, FollowConfig { detect_every: every, ..FollowConfig::default() });
-        let (t0, mut fo, mut k) = (Instant::now(), FollowOutput::default(), 0);
-        c.bench_function(&format!("chain/tract 320x192 detect every {every}"), |b| {
-            b.iter(|| {
-                k += 1;
-                f.step_into(&frame(&frames[k % FRAMES]), time(t0, k, FPS), &mut fo)
-            })
-        });
-    }
-}
+mod tract;
 
 criterion_group!(benches, stages);
 criterion_main!(benches);

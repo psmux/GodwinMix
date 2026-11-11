@@ -5,6 +5,7 @@
 //! anything that moves, so its detections are `Class::Motion`.
 
 mod blobs;
+mod merge;
 
 use blobs::Blobs;
 

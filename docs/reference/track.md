@@ -115,6 +115,22 @@ It is checked on every load. `models_dir()` is `GODWINMIX_MODELS` when set,
 else `models` under `GODWINMIX_HOME`, else `~/.godwinmix/models`. To run
 offline, copy the file there by hand.
 
+### `PoseDetector` (feature `tract`)
+
+```rust
+PoseDetector::new(inner: D, max_people: usize, dir: Option<PathBuf>) -> Result<PoseDetector<D>, ModelError>
+pub every: u32    // run MoveNet on one call in this many, 1 by default
+```
+
+Wraps any box detector and adds `keypoints` to its best `max_people`
+detections with MoveNet single pose Lightning (Apache 2.0, the Xenova ONNX
+conversion pinned to revision `ed0f314b`, 9.4 MB, SHA256
+`1ad4f8d6c2f776a9967db3993c9ca740bc350104f9d37c151dc183fc29a464ad`, file
+`movenet_lightning.onnx`). It costs about 12.5 ms a person on one core, so
+set `every` to 3 to stay inside 15 ms a frame. On the calls in between, and
+for detections without keypoints, the tracker keeps each track's last
+keypoints and moves them with its box.
+
 `ModelError` is one of `Fetch` (offline or moved; copy the file by hand or use
 the motion backend), `Hash` (the file is not the one expected; delete it),
 `Io` and `Load`. tract allocates inside each run, so this backend is the one
@@ -143,7 +159,9 @@ pub struct Track {
 }
 ```
 
-The tracks returned are confirmed and lost ones, never tentative. A lost
+The tracks returned are confirmed and lost ones, never tentative. A matched
+detection without keypoints keeps the track's last keypoints, moved with the
+box. A lost
 track's box is where its filter thinks it went. Pass the frame to
 `update_with_frame` for the colour histograms that bring a hidden person back;
 without it they come back only when they reappear close by.

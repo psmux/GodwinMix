@@ -101,17 +101,26 @@ person walking, and costs a third.
 
 Measured with the criterion bench in the crate, on one core of an AMD Ryzen 9
 9950X3D. The crate README has the table. The whole chain with YOLOX nano on a
-320 by 180 frame is about 5 ms, and under 2 ms detecting every third frame.
+320 pixel wide frame is about 7 ms, and about 2.3 ms detecting every third
+frame.
 The motion chain is about 50 microseconds. The tracker, chooser, framing and
 steering together are under a microsecond for five people. A Raspberry Pi 4
 core is roughly ten times slower, which puts the model chain near 50 ms, so a
 Pi runs the model every third frame or the motion backend.
 
+## Keypoints
+
+Boxes say where a person is, not how they stand. MoveNet Lightning, a pose
+model from Google under Apache 2.0, gives 17 body points from a square crop
+around a box, and the framing uses them to put the cut at the real waist or
+shoulders rather than at a fraction of the box. It costs about 12.5 ms a
+person on one core, more than the box detector, so it runs on one detection
+in three and the tracker moves each person's last keypoints with their box
+in between. That keeps the chain near 12 ms a frame.
+
 ## What it does not do yet
 
-Keypoints are read when a detector gives them, but no backend gives them yet:
-MoveNet Lightning is the planned one. The tracker does not know the camera is
-moving, so a PTZ move shows up as everybody's velocity; the motion backend
-resets on large moves, and the model backend does not mind. There is no
-platform backend (Apple Vision, Windows ML) yet; one would sit behind a
-feature, never the default.
+The tracker does not know the camera is moving, so a PTZ move shows up as
+everybody's velocity; the motion backend resets on large moves, and the
+model backend does not mind. There is no platform backend (Apple Vision,
+Windows ML) yet; one would sit behind a feature, never the default.

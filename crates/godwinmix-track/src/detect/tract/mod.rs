@@ -1,11 +1,14 @@
 //! The ONNX person detector, run by tract, which is pure Rust: no native
 //! runtime to ship and nothing to link. The model is YOLOX nano (Apache 2.0),
-//! fetched on first use and checked by SHA256. Behind the `tract` feature.
+//! fetched on first use and checked by SHA256, and MoveNet Lightning adds
+//! keypoints when wanted. Behind the `tract` feature.
 
 mod fetch;
+mod pose;
 mod yolox;
 
 pub use fetch::{ensure_model, models_dir, ModelError, ModelSpec, YOLOX_NANO};
+pub use pose::{PoseDetector, MOVENET_LIGHTNING};
 
 use std::path::PathBuf;
 
@@ -38,6 +41,19 @@ impl Default for TractConfig {
 /// One spawned state, kept so its buffers are reused from frame to frame.
 type Plan = tract_onnx::tract_core::plan::SimpleState<TypedFact, Box<dyn TypedOp>>;
 
+/// Loads, sizes, optimises and spawns a model.
+fn load_plan(bytes: &[u8], input: InferenceFact, path: PathBuf) -> Result<Plan, ModelError> {
+    let fail = |e: TractError| ModelError::Load { path: path.clone(), reason: format!("{e:#}") };
+    tract_onnx::onnx()
+        .model_for_read(&mut std::io::Cursor::new(bytes))
+        .map(forget_shapes)
+        .and_then(|m| m.with_input_fact(0, input))
+        .and_then(|m| m.into_optimized())
+        .and_then(|m| m.into_runnable())
+        .and_then(|p| p.spawn())
+        .map_err(fail)
+}
+
 /// A person detector backed by an ONNX model.
 pub struct TractDetector {
     pub config: TractConfig,
@@ -63,15 +79,7 @@ impl TractDetector {
 
     fn from_bytes(bytes: &[u8], config: TractConfig, path: PathBuf) -> Result<Self, ModelError> {
         let (iw, ih) = config.input;
-        let fail = |e: TractError| ModelError::Load { path: path.clone(), reason: format!("{e:#}") };
-        let plan = tract_onnx::onnx()
-            .model_for_read(&mut std::io::Cursor::new(bytes))
-            .map(forget_shapes)
-            .and_then(|m| m.with_input_fact(0, f32::fact([1, 3, ih, iw]).into()))
-            .and_then(|m| m.into_optimized())
-            .and_then(|m| m.into_runnable())
-            .and_then(|p| p.spawn())
-            .map_err(fail)?;
+        let plan = load_plan(bytes, f32::fact([1, 3, ih, iw]).into(), path)?;
         Ok(Self { config, plan, input: vec![0.0; 3 * iw * ih] })
     }
 

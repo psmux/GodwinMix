@@ -32,6 +32,7 @@ tract = ["dep:tract-onnx", "dep:ureq", "dep:ring"]
 
 [[bench]]
 name = "chain"
+path = "benches/chain/main.rs"
 harness = false
 
 [[example]]

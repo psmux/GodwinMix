@@ -12,6 +12,7 @@ impl Tracker {
         self.det_used[di] = true;
         let s = &mut self.slots[slot];
         s.matched = true;
+        let before = s.kf.rect().center();
         s.kf.update(det.rect);
         if let Some(h) = self.det_hist.get(di) {
             s.hist.blend(h, 0.1);
@@ -20,7 +21,13 @@ impl Tracker {
         tr.hits += 1;
         tr.score = det.score;
         tr.class = det.class;
-        tr.keypoints = det.keypoints;
+        // A detector that adds keypoints only now and then: carry the last
+        // ones along with the box until fresh ones come.
+        let (dx, dy) = (det.rect.cx() - before.x, det.rect.cy() - before.y);
+        tr.keypoints = det.keypoints.or(tr.keypoints.map(|mut k| {
+            k.0.iter_mut().for_each(|p| (p.at.x, p.at.y) = (p.at.x + dx, p.at.y + dy));
+            k
+        }));
         tr.last_seen = t;
         if tr.state == TrackState::Lost || tr.hits >= self.cfg.confirm_hits {
             tr.state = TrackState::Confirmed;

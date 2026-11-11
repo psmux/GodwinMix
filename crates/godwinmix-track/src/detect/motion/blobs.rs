@@ -133,34 +133,7 @@ impl Blobs {
         }
         self.out.clear();
         self.out.extend(self.stats.iter().filter(|s| s.blocks > 0));
-        while self.merge_once() {}
-    }
-
-    /// Joins two boxes side by side at about the same height with a gap
-    /// under a quarter of their height: the leading and trailing edges of
-    /// one person whose plain clothes show no change in the middle.
-    fn merge_once(&mut self) -> bool {
-        for i in 0..self.out.len() {
-            for j in i + 1..self.out.len() {
-                let (a, b) = (self.out[i], self.out[j]);
-                let overlap = a.y1.min(b.y1) as isize - a.y0.max(b.y0) as isize + 1;
-                let shorter = (a.y1 - a.y0).min(b.y1 - b.y0) as isize + 1;
-                let gap = a.x0.max(b.x0) as isize - a.x1.min(b.x1) as isize - 1;
-                let taller = (a.y1 - a.y0).max(b.y1 - b.y0) as isize + 1;
-                if overlap * 2 >= shorter && gap * 4 <= taller {
-                    self.out[i] = Blob {
-                        x0: a.x0.min(b.x0),
-                        y0: a.y0.min(b.y0),
-                        x1: a.x1.max(b.x1),
-                        y1: a.y1.max(b.y1),
-                        blocks: a.blocks + b.blocks,
-                    };
-                    self.out.swap_remove(j);
-                    return true;
-                }
-            }
-        }
-        false
+        while super::merge::merge_once(&mut self.out) {}
     }
 
     pub fn boxes(&self) -> &[Blob] {

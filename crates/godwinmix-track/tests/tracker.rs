@@ -109,3 +109,17 @@ fn coasting_moves_tracks_without_losing_them() {
     assert_eq!(after.state, TrackState::Confirmed);
     assert!((after.rect.cx() - before - 0.3 * 6.0 / FPS).abs() < 0.01, "{before} then {}", after.rect.cx());
 }
+
+#[test]
+fn keypoints_ride_along_with_the_box_until_fresh_ones_come() {
+    use godwinmix_track::{Keypoint, Keypoints, Point};
+    let (mut tr, t0) = (Tracker::default(), Instant::now());
+    let r = Rect::new(0.4, 0.3, 0.1, 0.4);
+    let mut k = Keypoints::default();
+    k.0[0] = Keypoint { at: Point::new(0.45, 0.35), score: 0.9 };
+    tr.update(&[Detection { keypoints: Some(k), ..Detection::new(r, 0.9) }], t0);
+    let moved = Rect::new(0.42, 0.3, 0.1, 0.4);
+    let t = tr.update(&[Detection::new(moved, 0.9)], time(t0, 1, FPS))[0];
+    let nose = t.keypoints.expect("kept").0[0].at;
+    assert!((nose.x - 0.47).abs() < 1e-4 && (nose.y - 0.35).abs() < 1e-4, "{nose:?}");
+}

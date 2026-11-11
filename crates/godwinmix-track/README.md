@@ -31,20 +31,32 @@ cargo run --release -p godwinmix-track --example follow
 
 `cargo bench -p godwinmix-track --features tract` on 2026-11-11, one core of
 an AMD Ryzen 9 9950X3D, Windows 11, Rust 1.99.1, with the workspace's bench
-profile (opt-level `s`, fat LTO). Frames are 320 by 180 RGB with five people.
+profile (opt-level `s`, fat LTO; opt-level 3 for every crate was measured too
+and is about 4% faster, not worth a profile of its own). The motion rows use
+a made up 320 by 180 RGB scene with five people walking; the model rows use
+the committed photograph `tests/images/two-people.jpg` scaled to 320 by 240.
 
 | Stage | Time a frame |
 |---|---|
-| detect: motion | 48.7 µs |
-| detect: YOLOX nano at 320x192 | 5.50 ms |
-| detect: YOLOX nano at 320x320 | 9.85 ms |
-| detect: YOLOX nano at 416x416 | 18.1 ms |
-| track: 5 people | 0.55 µs |
+| detect: motion, 320x180 | 48.7 µs |
+| detect: YOLOX nano at 320x256 | 7.41 ms |
+| detect: YOLOX nano at 320x320 | 9.49 ms |
+| detect: YOLOX nano at 416x416 | 17.8 ms |
+| detect: YOLOX nano 320x256 and MoveNet Lightning on one person | 19.9 ms |
+| track: 5 people | 0.59 µs |
 | choose, frame and steer | 0.09 µs |
-| whole chain, motion | 52.7 µs |
-| whole chain, YOLOX nano 320x192, detect every frame | 5.30 ms |
-| whole chain, YOLOX nano 320x192, detect every third frame | 1.92 ms |
+| whole chain, motion | 53.4 µs |
+| whole chain, YOLOX nano 320x256, detect every frame | 6.91 ms |
+| whole chain, YOLOX nano 320x256, detect every third frame | 2.31 ms |
+| whole chain, YOLOX nano every frame, MoveNet every third | 11.7 ms |
 
-The budget is 15 ms a frame at 320 wide. `tests/budget.rs` fails when the
-motion chain allocates after warm up or, in a release build, goes over it.
-The tract backend allocates inside tract on each run; nothing else does.
+The budget is 15 ms a frame at 320 wide, and every whole chain row is under
+it. MoveNet costs about 12.5 ms a person, so keypoints on every frame are
+not: run it on one detection in three (`PoseDetector::every`), and the
+tracker carries each person's keypoints along with their box in between.
+The quantised MoveNet build was tried and is slower in tract (120 ms) and
+less accurate, so the fp32 one is used.
+
+`tests/budget.rs` fails when the motion chain allocates after warm up or, in
+a release build, goes over the budget. The tract backends allocate inside
+tract on each run; nothing else does.
