@@ -44,8 +44,14 @@ and joins the pixels that differ from it into boxes. It cannot tell a person
 from a door, and a person who stands still fades into the background after
 some seconds, but it costs 50 microseconds, needs nothing downloaded, and is
 right for a fixed wide camera and while the model loads. When most of the
-frame changes at once, because the lights changed or the camera moved, it
-starts its background again rather than reporting the whole frame.
+frame changes at once, because the lights changed, it starts its background
+again rather than reporting the whole frame. When it is told the camera is
+moving it rests instead; see "A camera that moves" below.
+
+The PTZ plugin runs YOLOX by default and the motion backend in its place
+while the model downloads or loads, and for good if it cannot be had, so a
+follow starts on the first picture rather than after the download. Which one
+runs, and why, is in `track_state`.
 
 **Track.** Detections are per frame and have no names. The tracker follows
 the ByteTrack method. Each track has a Kalman filter that knows its position
@@ -89,6 +95,48 @@ keeps a camera from hunting after somebody shifting on their feet. For a
 digital crop, the centre and the size follow the target on a critically
 damped spring, which arrives without overshoot.
 
+## A camera that moves
+
+The picture a PTZ camera sends is taken from a camera that the follower
+itself is turning. Left alone, that is three problems. The tracker's filters
+read a pan right as every person walking left, and learn that velocity; a
+person who leaves the frame on the pan is predicted to keep walking, so when
+the camera turns back they are somewhere else and come back as a new id. The
+lead room, which leans the shot towards where a person is walking, leans it
+by the camera's own speed. And the motion backend sees the whole background
+slide: one box the size of the picture, which the tracker takes for a very
+large person.
+
+The follower knows what speed it last sent the camera, and the plugin knows
+what the camera is really doing (the joystick wins over the follower). With
+the camera's optics, its field of view and its top pan, tilt and zoom
+speeds, that speed becomes the motion of the picture itself: panning right
+at 30 degrees a second with a 60 degree view moves everything in the picture
+left by half its width a second. That is the `EgoMotion`. The tracker
+carries every box with it in each prediction, before matching, so the
+filters only ever see what people do themselves; a lost person is carried
+too, and is waited for where they really are. The motion backend is told the
+same thing and rests while the picture moves faster than a fiftieth of a
+frame a second, then learns the new view on the first still frame and finds
+what moves again from the next one. The model backend looks at each frame
+alone and needs nothing.
+
+The optics need not be exact. A field of view a quarter off still takes
+three quarters of the motion out, which is the difference between a track
+that holds and one that does not. The field of view changes with the zoom,
+so the follower keeps its own count of how far it has zoomed since the
+follow started and scales the pan by it; the configured field of view is
+the one at the start. What the follower cannot know about is a move it did
+not ask for at a speed: a `goto` or a preset recall. A recall turns tracking
+off, and a preset fallback starts the tracker afresh on the new picture.
+
+The closed loop test in `tests/ego.rs` shows it: three people, one walking
+past another and back, a simulated camera that pans and zooms as told. With
+the optics, one target id throughout, three ids for three people including
+the one the pan takes out of view and back, people standing still read as
+still, and the camera starts twice for two walks. Without them, the same
+people standing still read as walking at the camera's speed.
+
 ## Detection does not have to run on every frame
 
 The tracker can move every track along its velocity on frames the detector
@@ -99,7 +147,7 @@ person walking, and costs a third.
 
 ## What it costs
 
-Measured with the criterion bench in the crate, on one core of an AMD Ryzen 9
+Measured with the bench in the crate, on one core of an AMD Ryzen 9
 9950X3D. The crate README has the table. The whole chain with YOLOX nano on a
 320 pixel wide frame is about 7 ms, and about 2.3 ms detecting every third
 frame.
@@ -120,7 +168,9 @@ in between. That keeps the chain near 12 ms a frame.
 
 ## What it does not do yet
 
-The tracker does not know the camera is moving, so a PTZ move shows up as
-everybody's velocity; the motion backend resets on large moves, and the
-model backend does not mind. There is no platform backend (Apple Vision,
-Windows ML) yet; one would sit behind a feature, never the default.
+The camera's motion comes from the speed it was told and fixed optics, not
+from the picture itself; a camera whose top speeds or field of view are far
+from what it was given is only partly corrected, and a move made without a
+speed (a `goto`) is not corrected at all. There is no platform backend
+(Apple Vision, Windows ML) yet; one would sit behind a feature, never the
+default.

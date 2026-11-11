@@ -65,6 +65,7 @@ pub trait Detector {
     fn detect(&mut self, frame: &FrameRef) -> Vec<Detection>;
     fn detect_into(&mut self, frame: &FrameRef, out: &mut Vec<Detection>);  // reuses `out`
     fn reset(&mut self) {}                                                   // after a cut or a move
+    fn camera_motion(&mut self, ego: EgoMotion) {}                           // how the camera moves now
 }
 
 pub struct Detection { pub rect: Rect, pub score: f32, pub class: Class, pub keypoints: Option<Keypoints> }
@@ -90,6 +91,14 @@ MotionDetector::new(MotionConfig) / MotionDetector::default()
 | `block_fill` | 0.25 | fraction of a block that must change |
 | `min_area` | 0.003 | smaller boxes are dropped |
 | `max_coverage` | 0.5 | above this the background starts again |
+| `max_camera_speed` | 0.02 | frames a second (`EgoMotion::speed`); faster, it rests |
+
+Told by `camera_motion` that the camera moves faster than
+`max_camera_speed`, it returns no detections and leaves its background
+alone; on the first frame after the camera is still it learns the new view,
+and finds what moves again from the frame after. Without it, a pan reads as
+one box the size of the picture, or, past `max_coverage`, as a fresh
+background every frame.
 
 Detections are `Class::Motion`, scored 0.55 to 0.95 by how full the box is.
 The first frame, and the first after a reset, gives none.
@@ -145,6 +154,8 @@ impl Tracker {
     pub fn update(&mut self, dets: &[Detection], t: Instant) -> &[Track];
     pub fn update_with_frame(&mut self, dets: &[Detection], frame: Option<&FrameRef>, t: Instant) -> &[Track];
     pub fn coast(&mut self, t: Instant) -> &[Track];   // a frame with no detector run
+    pub fn update_with_camera(&mut self, dets: &[Detection], frame: Option<&FrameRef>, t: Instant, ego: EgoMotion) -> &[Track];
+    pub fn coast_with_camera(&mut self, t: Instant, ego: EgoMotion) -> &[Track];
     pub fn tracks(&self) -> &[Track];
     pub fn get(&self, id: TrackId) -> Option<&Track>;
     pub fn reset(&mut self);
@@ -165,6 +176,35 @@ box. A lost
 track's box is where its filter thinks it went. Pass the frame to
 `update_with_frame` for the colour histograms that bring a hidden person back;
 without it they come back only when they reappear close by.
+
+On a moving camera, `update_with_camera` and `coast_with_camera` carry every
+box, lost ones too, with the picture by `ego` over the step before matching.
+A pan then does not show as velocity on everyone, a track's `velocity` stays
+the person's own, and a person the pan takes out of view is waited for where
+they really are.
+
+## Camera motion
+
+```rust
+pub struct EgoMotion { pub dx: f32, pub dy: f32, pub zoom: f32 }   // frames a second; log scale a second
+impl EgoMotion {
+    pub const STILL: EgoMotion;
+    pub fn speed(&self) -> f32;                  // the larger shift, plus half the zoom
+    pub fn over(&self, dt: f32) -> (f32, f32, f32);   // shift and scale over dt
+}
+
+pub struct CameraOptics { pub hfov_deg: f32, pub vfov_deg: f32, pub pan_deg_s: f32, pub tilt_deg_s: f32, pub zoom_rate: f32 }
+impl CameraOptics {
+    pub fn ego(&self, v: PtzVelocity) -> EgoMotion;   // pan right moves the picture left
+}
+```
+
+`EgoMotion` is how the picture moves because the camera moves: everything in
+it shifts by `dx`, `dy` a second and grows by `e^zoom` a second about the
+centre. `CameraOptics` turns a PTZ speed into one: `dx = -pan * pan_deg_s /
+hfov_deg`, `dy = tilt * tilt_deg_s / vfov_deg`, `zoom = zoom * zoom_rate`.
+The default (30 by 17 degrees, 60 and 30 degrees a second, 0.7) suits a 20x
+camera at a mid zoom.
 
 | `TrackerConfig` field | Default | Meaning |
 |---|---|---|
@@ -247,13 +287,15 @@ impl<D: Detector> Follower<D> {        // D defaults to Box<dyn Detector + Send>
     pub fn set_framing(&mut self, framing: Framing);
     pub fn stop(&mut self);                      // keeps tracking, stops steering
     pub fn reset(&mut self);
+    pub fn set_camera_velocity(&mut self, v: PtzVelocity);   // what the camera really does, for the next step
     pub fn tracker(&self) -> &Tracker;
     pub fn detector_mut(&mut self) -> &mut D;
     pub fn config(&self) -> &FollowConfig;
 }
 
 pub struct FollowConfig { pub detect_every: u32 /* 1 */, pub policy: Choose /* Largest */, pub tracker: TrackerConfig,
-                          pub choose: ChooseConfig, pub style: FrameStyle, pub ptz: PtzConfig, pub crop: CropConfig }
+                          pub choose: ChooseConfig, pub style: FrameStyle, pub ptz: PtzConfig, pub crop: CropConfig,
+                          pub camera: Option<CameraOptics> /* None */ }
 
 pub struct FollowOutput {
     pub target: Option<TrackId>,
@@ -263,8 +305,20 @@ pub struct FollowOutput {
     pub shot: Option<Rect>,     // the aim before smoothing
     pub state: FollowState,
     pub detected: bool,         // the detector ran on this frame
+    pub ego: EgoMotion,         // how the camera moved the picture over this step
 }
 ```
+
+With `camera: Some(optics)` the follower knows its camera moves. Each step
+it takes the speed the camera was told last (its own last `ptz`, or what
+`set_camera_velocity` gave when something else, an operator's joystick,
+moves the camera), turns it into an `EgoMotion` with the optics, hands that
+to the detector's `camera_motion` and the tracker's `update_with_camera`,
+and reports it as `ego`. The optics' field of view is the one when the
+follow starts; the follower integrates its own zoom from there (`reset`
+starts again at 1), so a pan zoomed in twice as far moves the picture twice
+as fast. `None`, the default, is for a fixed camera or a digital crop, where
+the picture never moves.
 
 While `Holding` the PTZ speeds ease to a stop and the crop holds. On
 `Fallback(Wide)` and `Fallback(Preset)` the crop eases to the whole frame.
@@ -276,6 +330,38 @@ cargo run --release -p godwinmix-track --example follow                       # 
 cargo run --release -p godwinmix-track --example follow -- clip.y4m --framing full
 cargo run --release -p godwinmix-track --features tract --example follow -- frames/ --tract --every 3
 ```
+
+### For a Raspberry Pi
+
+The example and the bench build for `aarch64-unknown-linux-musl` as they
+are. Without `tract` nothing in them is C, so Rust's own linker does it,
+from any machine:
+
+```sh
+rustup target add aarch64-unknown-linux-musl
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld cargo build --release -p godwinmix-track --target aarch64-unknown-linux-musl --example follow --bench chain
+```
+
+This was checked from Windows 11. On the Pi itself the system `cc` usually
+links it; where it does not, set the same variable. The bench is timed by a
+small harness of its own rather than criterion, whose `alloca` dependency
+compiles C.
+
+With `--features tract`, `tract-linalg` assembles its aarch64 kernels with
+the `cc` crate, so a C compiler and assembler for the target are needed. It
+reads `CC_aarch64_unknown_linux_musl`, then `TARGET_CC`, then `CC`:
+
+* On the Pi (64 bit Raspberry Pi OS): `sudo apt install musl-tools`, then
+  `CC_aarch64_unknown_linux_musl=musl-gcc cargo build --release -p godwinmix-track --features tract --target aarch64-unknown-linux-musl --example follow --bench chain`.
+  Without the variable, `cc` looks for `aarch64-linux-musl-gcc`, which
+  Debian does not ship. If linking fails, add
+  `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc`.
+* From Windows, macOS or another Linux: `cargo zigbuild` with zig installed
+  (`cargo install cargo-zigbuild`; zig from ziglang.org or `pip install
+  ziglang`, in which case point `CARGO_ZIGBUILD_ZIG_PATH` at its `zig`), then
+  `cargo zigbuild --release -p godwinmix-track --features tract --target aarch64-unknown-linux-musl --example follow --bench chain`.
+  This was checked from Windows 11 and gives static aarch64 binaries; it was
+  not run on a Pi from here.
 
 It prints one line a frame: whether the detector ran, the track count, who is
 followed and in what state, the PTZ speeds, the crop and the time taken. A

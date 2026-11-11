@@ -22,6 +22,7 @@ pub trait Ptz: Send {
     fn position(&mut self) -> Result<Position>;
     fn goto(&mut self, p: Position) -> Result<()>;
     fn exposure(&mut self, e: Exposure) -> Result<()>;
+    fn second(&self) -> Option<Box<dyn Ptz>>;
 }
 
 pub fn open(target: &Target) -> Result<Box<dyn Ptz>>;
@@ -36,6 +37,12 @@ pub fn open(target: &Target) -> Result<Box<dyn Ptz>>;
 | `Capabilities` | `absolute`, `position`, `focus`, `exposure`, and `presets`, the highest preset number |
 | `Target` | `protocol`, `address`, `user`, `password`, `profile` (ONVIF), `timeout` (800 ms) |
 | `Protocol` | `visca-ip`, `visca-tcp`, `onvif`, `canon`, `fake` |
+
+`second` gives another driver on the same camera that may be used from
+another thread while this one is busy. ONVIF, Canon and the fake give one;
+VISCA gives `None`, because the camera keeps one sequence count for VISCA
+over IP and many cameras take one TCP connection only. The fake has
+`Head::save_delay` and `Head::query_delay` to stand in for a slow camera.
 
 Presets are numbered from 1 everywhere: VISCA takes 1 to 256, ONVIF and
 Canon 1 to 100. Every driver sends a speed it already sent only once, so a
@@ -71,8 +78,8 @@ are lower case with underscores.
 
 | Tool | Arguments | Does |
 |---|---|---|
-| `camera_add` | `id`, `protocol`, `address`, `user`, `password`, `profile`, `source`, `bus` | adds a camera, or replaces one added before |
-| `camera_list` | | every camera with its capabilities, speed, last error and tracking |
+| `camera_add` | `id`, `protocol`, `address`, `user`, `password`, `profile`, `source`, `bus`, `optics` | adds a camera, or replaces one added before |
+| `camera_list` | | every camera with its capabilities, speed, last error, tracking, optics and `lanes` |
 | `camera_remove` | `camera` | removes a camera added by tool; it is stopped first |
 | `move` | `camera`, `pan`, `tilt`, `zoom` | the joystick: these speeds for 300 ms, renewed by each call |
 | `stop` | `camera` | stops now and turns tracking off |
@@ -105,9 +112,19 @@ are lower case with underscores.
   "frames": 412, "fps": 14.8, "step_ms": 0.9,
   "picture": {"width": 320, "height": 180, "from": "the mixer's MJPEG stream of 'pulpit'"},
   "age_ms": 40,
-  "error": null
+  "error": null,
+  "camera_motion": {"dx": -0.18, "dy": 0.0, "zoom": 0.0},
+  "detector": {"running": "yolox", "wanted": "yolox", "stage": "ready", "why": "yolox as asked for"}
 }
 ```
+
+`camera_motion` is how the camera's own movement moved the picture on the
+last frame, in frames a second (see "Camera motion" below). `detector` says
+which detector runs: `running` is `motion`, `yolox` or `yolox+pose`,
+`wanted` is the setting, `stage` is `loading`, `ready` or `failed`, and
+`why` says why they differ, for example "motion stands in while yolox
+downloads into ... (first use only) and loads", or "motion stands in because
+yolox could not be loaded: ...".
 
 `mode` is `following`, `observing` or `stopped`. `state` is the engine's:
 `idle`, `following`, `holding` (the person vanished, the shot holds), or
@@ -120,8 +137,28 @@ camera there once and starts the tracker afresh.
 `move` sets a speed that lasts `joystick_hold_ms` (300). Each call renews it;
 when calls stop, the camera's own thread stops the camera. A panel sends it
 every 100 ms while the stick is held. While it is held, the follow loop's
-speeds are ignored: the operator always wins. `camera_list` counts the stops
-the watchdog made as `watchdog_stops` in the worker status.
+speeds are ignored: the operator always wins. `stop` ends the hold too.
+`camera_list` counts the stops the watchdog made as `watchdog_stops` in the
+worker status.
+
+### Calls at the same time
+
+Tool calls are answered concurrently. `move`, `camera_list`, `track_state`
+and the other tools that only read the plugin's own state answer at once;
+the tools that wait on a camera or the network (`stop`, `zoom`, `focus`,
+`exposure`, `position`, `goto`, `preset_save`, `preset_recall`,
+`track_observe`, `camera_add`) wait on a thread of their own, so one never
+holds up another.
+
+Each camera has two lanes when its protocol gives a second driver
+(`lanes: 2` in `camera_list`: ONVIF, Canon, fake). The motion lane carries
+`move`, the follow loop's speeds, `stop` and `zoom`; the command lane
+carries the rest. A `preset_save` the camera takes two seconds over never
+holds a move back, and the joystick keeps the camera moving through it.
+VISCA cameras have one lane (`lanes: 1`): there a speed goes before any
+queued command, but waits for the one command already on the wire, at most
+the driver's timeout. If the joystick's hold runs out during that command,
+the camera is stopped the moment it ends.
 
 ### Pictures for tracking
 
@@ -138,14 +175,64 @@ An observing loop ends 15 seconds after the last `track_observe` or
 `track_state` that asked. A following loop runs until `track_stop`, `stop`
 or `preset_recall`.
 
+### The detector
+
+`detector` picks how the follow loop finds people:
+
+| Value | What runs | Cost a picture, one laptop core |
+|---|---|---|
+| `yolox` (default) | YOLOX nano at 320 by 256 | about 7 ms |
+| `yolox+pose` | YOLOX nano, and MoveNet Lightning keypoints on the best person every third picture | about 12 ms on average |
+| `motion` | the motion detector: no model, finds what moves | about 0.05 ms |
+
+A loop starts on the motion detector and loads the model on a thread of its
+own, fetching it into `models_dir` on first use (checked by SHA256), and
+moves over to it once it is loaded. When the model cannot be had (offline on
+first use, a damaged file, a build without the `yolox` feature), motion
+stays and `track_state`'s `detector.why` says why. The motion detector loses
+a person who stands still and sees anything that moves; it suits a
+Raspberry Pi and a fixed wide shot.
+
+The plugin's `yolox` cargo feature (on by default) brings in the model
+detector; `cargo build -p gmx-ptz --no-default-features` builds a plugin
+with the motion detector only.
+
+### Camera motion
+
+A camera that pans moves everything in its picture the other way. The
+follow loop tells the tracking engine what speed the camera is moving at,
+from the motion lane (the follow loop's own speed, or the joystick's while
+it is held), and the camera's `optics` turn that into how fast the picture
+moves. The tracker carries every box with the picture, so a pan is not read
+as everyone walking and ids hold, and the motion detector rests while the
+picture moves faster than 0.02 frames a second, learning the new view once
+the camera is still. A `goto` or a preset recall moves the camera without a
+speed the loop knows; a recall turns tracking off, and a preset fallback
+starts the tracker afresh.
+
+`optics` per camera, every field optional:
+
+| Field | Default | What it is |
+|---|---|---|
+| `hfov_deg`, `vfov_deg` | 30, 17 | the field of view, degrees, at the zoom the camera mostly tracks at |
+| `pan_deg_s`, `tilt_deg_s` | 60, 30 | degrees a second at full pan and tilt speed |
+| `zoom_rate` | 0.7 | the natural log of how much the picture grows in a second at full zoom speed |
+
+The defaults suit a 20x camera at a mid zoom. Optics a quarter off still
+take three quarters of the camera's motion out. The engine follows its own
+zoom commands from where the follow started, so a camera zoomed in twice as
+far sees a pan move its picture twice as fast.
+
 ### Settings
 
 | Key | Default | What it is |
 |---|---|---|
-| `cameras` | `[]` | `{id, protocol, address, user, password, profile, source, bus}` per camera |
+| `cameras` | `[]` | `{id, protocol, address, user, password, profile, source, bus, optics}` per camera |
 | `framing` | `waist` | the framing a follow starts with |
 | `track_width` | 320 | the picture width the follow loop reads, 160 to 640 |
 | `joystick_hold_ms` | 300 | how long one `move` lasts, 100 to 2000 |
+| `detector` | `yolox` | `yolox`, `yolox+pose` or `motion` |
+| `models_dir` | `GODWINMIX_MODELS`, else `models` under `GODWINMIX_HOME`, else `~/.godwinmix/models` | where the detector's models are kept |
 | `data_dir` | `ptz` under `GODWINMIX_HOME`, or `~/.godwinmix/ptz` | presets' names and pictures, and the cameras added by tool |
 
 ### On disk

@@ -15,6 +15,11 @@ cam.save_preset(1)?;
 let p = cam.position()?;                      // pan, tilt -1..1, zoom 0..1
 ```
 
+`second()` gives another driver on the same camera for use from another
+thread while the first is busy: ONVIF, Canon and the fake have one, VISCA
+does not (one sequence count, and often one TCP link). The plugin moves the
+camera through one and sends slow commands through the other.
+
 The surface is in [docs/reference/ptz.md](../../docs/reference/ptz.md). The
 plugin that uses it is [plugins/ptz](../../plugins/ptz/README.md).
 
@@ -114,6 +119,9 @@ are interchangeable on every firmware, and the exposure value units
 ```sh
 cargo test -p godwinmix-ptz
 ```
+
+`tests/second.rs` checks that a second ONVIF and Canon driver work beside
+the first on the same fake camera, and that VISCA gives none.
 
 Every driver runs the same checks through the trait against its fake on
 loopback (`tests/drivers.rs`): move, stop and stay stopped, absolute moves,

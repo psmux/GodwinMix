@@ -49,6 +49,24 @@ first few frames have gone by. Pass the time the frame was captured rather
 than the time it arrived if you have it: the filters use the gaps between
 frames.
 
+## On a camera that moves
+
+A PTZ camera the follower turns moves its own picture. Give the follower the
+camera's optics, and it takes that motion out before tracking:
+
+```rust
+use godwinmix_track::{CameraOptics, PtzVelocity};
+
+let optics = CameraOptics { hfov_deg: 30.0, vfov_deg: 17.0, pan_deg_s: 60.0, tilt_deg_s: 30.0, zoom_rate: 0.7 };
+let mut follower = Follower::new(MotionDetector::default(), FollowConfig { camera: Some(optics), ..FollowConfig::default() });
+
+// When something else moves the camera too, say what it really does:
+follower.set_camera_velocity(PtzVelocity { pan: joystick.pan, tilt: joystick.tilt, zoom: 0.0 });
+```
+
+Without `set_camera_velocity` it takes the camera to do what the follower
+last told it. Leave `camera` at `None` for a fixed camera or a digital crop.
+
 ## Use the person detector
 
 ```rust
