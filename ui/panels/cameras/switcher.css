@@ -1,0 +1,46 @@
+/* The ATEM bar and the Pro view: rows of input keys the way a switcher's
+   own panel has them, red for programme and green for preview. */
+
+.cam-atem {
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: var(--cam-r);
+  background: var(--panel); border: 1px solid var(--line-soft);
+}
+.cam-atem.down { border-color: var(--bad); }
+.cam-atem-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cam-atem-head .dot { width: 12px; height: 12px; }
+.cam-atem-head .dot.live { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 25%, transparent); }
+.cam-atem-name { font-weight: 800; font-size: 15px; }
+.cam-atem-pick { width: auto; flex: none; min-height: 40px; border-radius: 10px; padding: 0 10px; font-weight: 700; background: var(--panel2); border: 1px solid var(--line); }
+.cam-atem-mode { font-size: 13px; }
+.cam-atem-buses { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 8px 14px; align-items: center; }
+.cam-atem-buses .cam-bus.pgm { grid-column: 1; grid-row: 1; }
+.cam-atem-buses .cam-bus.pvw { grid-column: 1; grid-row: 2; }
+.cam-atem-side { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; align-items: center; }
+.cam-atem-keys { display: flex; gap: 8px; }
+.cam-bus { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cam-bus-label { width: 84px; flex: none; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+.cam-bus-keys { display: flex; gap: 6px; overflow-x: auto; min-width: 0; padding: 2px; }
+.cam-key { min-width: 58px; padding: 0 10px; font-size: 13px; flex: none; }
+.cam-bus.pgm .cam-key.on { background: var(--live); border-color: var(--live); color: #fff; box-shadow: 0 0 12px color-mix(in srgb, var(--live) 55%, transparent); }
+.cam-bus.pvw .cam-key.on { background: var(--ok); border-color: var(--ok); color: #04140b; }
+.cam-key.dsk.on { background: var(--warn); border-color: var(--warn); color: #1a1200; }
+.cam-key.ftb.on { background: var(--live); border-color: var(--live); color: #fff; animation: cam-blink 1s steps(2, start) infinite; }
+.cam-key.macro.on { border-color: var(--accent); color: var(--accent); }
+@keyframes cam-blink { to { opacity: 0.45; } }
+
+.cam-panel.narrow .cam-atem-buses { grid-template-columns: 1fr; grid-template-rows: none; }
+.cam-panel.narrow .cam-atem-buses > * { grid-column: auto !important; grid-row: auto !important; }
+.cam-panel.narrow .cam-bus { flex-direction: column; align-items: stretch; gap: 4px; }
+
+.cam-pro {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; padding: 14px;
+  border-radius: var(--cam-r); background: var(--panel); border: 1px solid var(--accent);
+}
+.cam-pro-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cam-row-wrap { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cam-rate { width: 5em; min-height: 40px; border-radius: 10px; padding: 0 8px; background: var(--bg); border: 1px solid var(--line); }
+.cam-tbar { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.cam-tbar-fill { height: 100%; width: 0; background: var(--accent); }
+.cam-pro-aux { display: flex; flex-direction: column; gap: 6px; }
+.cam-pro-aux select { flex: 1; min-height: 40px; border-radius: 10px; padding: 0 8px; background: var(--panel2); border: 1px solid var(--line); }
+.cam-pro-aux .cam-field span { width: 52px; }

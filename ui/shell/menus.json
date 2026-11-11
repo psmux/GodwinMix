@@ -149,6 +149,12 @@
         },
         {
           "command": "view.panel",
+          "arg": "core/cameras",
+          "title": "Cameras",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
           "arg": "core/guests",
           "title": "Guests",
           "check": "panel"
