@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "track_follow",
+  "description": "Turn tracking on: the camera follows a person by itself. Who: target person-3 (an id from track_observe), largest or central, or point {x, y} where somebody tapped the picture, 0 to 1 from the top left.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "framing": {
+      "type": "string",
+      "enum": [
+        "close",
+        "waist",
+        "full",
+        "wide"
+      ],
+      "title": "Framing",
+      "description": "close is head and shoulders, waist is from the waist up, full is the whole person, wide is the person and the space around them.",
+      "examples": [
+        "waist"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "description": "person-<n>, largest or central.",
+      "examples": [
+        "person-3",
+        "largest"
+      ]
+    },
+    "point": {
+      "type": "object",
+      "description": "Follow whoever is nearest this point of the picture.",
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "examples": [
+        {
+          "x": 0.6,
+          "y": 0.4
+        }
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "goto",
+  "description": "Go to a position, in the same numbers position answers with. What is left out stays as it is.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "pan": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "-1 to 1.",
+      "examples": [
+        0
+      ]
+    },
+    "tilt": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "-1 to 1.",
+      "examples": [
+        0
+      ]
+    },
+    "zoom": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "0 widest to 1 tightest.",
+      "examples": [
+        0.3
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
