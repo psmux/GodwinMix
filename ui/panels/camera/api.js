@@ -1,4 +1,5 @@
-// Every call the camera window makes, in one place. The camera tools are the
+// Every call camera properties, the Preview overlay and the switcher drawer
+// make, in one place. The camera tools are the
 // ptz plugin's (plugins/ptz/gmx-plugin.toml), reached as `ptz/<tool>` through
 // the core's public `tool.call`, the way an agent or `gmx ctl` reaches them.
 // The switcher tools are the atem plugin's (plugins/atem/gmx-plugin.toml),
@@ -9,6 +10,7 @@ import * as shape from "./shapes.js";
 
 export const TOOLS = {
   cameras: "ptz/camera_list",
+  add: "ptz/camera_add", // {id, protocol, address, source}
   move: "ptz/move", // {camera, pan, tilt, zoom}: -1 to 1, held 300 ms
   stop: "ptz/stop", // stops the camera and turns its tracking off
   focus: "ptz/focus", // {camera, mode: auto | manual | one_push | near | far | stop, speed}
@@ -35,6 +37,9 @@ export const TOOLS = {
   macro: "atem/macro",
   transition: "atem/transition",
   mode: "atem/mode",
+  connect: "atem/connect", // {id, address, name, mode, map}
+  disconnect: "atem/disconnect",
+  map: "atem/map", // {switcher, source, input | null}
 };
 
 /**
@@ -68,6 +73,7 @@ export function cameraApi(client) {
     client,
     tool,
     cameras: async () => list(await tool("cameras"), "cameras").map(shape.camera),
+    add: (camera) => tool("add", camera),
     move: (camera, pan, tilt, zoom = 0) => tool("move", { camera, pan, tilt, zoom }),
     /** Let go: zero speeds, which leaves tracking as it was. The stop tool would turn it off. */
     still: (camera) => tool("move", { camera, pan: 0, tilt: 0, zoom: 0 }),
@@ -98,9 +104,8 @@ export function cameraApi(client) {
     atemMacro: (switcher, index) => tool("macro", { switcher, index, action: "run" }),
     atemTransition: (switcher, more) => tool("transition", { switcher, me: 0, ...more }),
     atemMode: (switcher, mode) => tool("mode", { switcher, mode }),
-    // GodwinMix's own programme, by protocol method.
-    take: (source, transition) => client.call("program.take", transition ? { source, transition } : { source }),
-    black: () => client.call("program.take", { source: "" }),
-    key: (scene, on) => client.call("program.key.set", { scene, on }),
+    atemConnect: (set) => tool("connect", set),
+    atemDisconnect: (switcher) => tool("disconnect", { switcher }),
+    atemMap: (switcher, source, input) => tool("map", { switcher, source, input }),
   };
 }

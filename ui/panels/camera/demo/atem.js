@@ -29,7 +29,7 @@ export function switcher(id, name, model, n, cams, mode) {
 /** A copy of a switcher, so a caller can keep it. */
 export const snapshot = (s) => JSON.parse(JSON.stringify(s));
 
-/** What `atem/state` answers, in the plugin's shape (plugins/atem/src/view.rs), so the window's adapter in shapes.js is what reads it. */
+/** What `atem/state` answers, in the plugin's shape (plugins/atem/src/view.rs), so the adapter in shapes.js is what reads it. */
 export function toPlugin(s) {
   const c = snapshot(s);
   const on = (bus) => c.mes[0][bus];

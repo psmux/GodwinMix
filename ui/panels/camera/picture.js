@@ -1,8 +1,8 @@
-// A camera's picture on a card, and the people the tracker sees drawn over
-// it. The demo paints its pictures straight into the canvas. A real camera
-// is a GodwinMix source, so its picture is the core's snapshot of that
-// source, asked for about three times a second and only while the window is
-// on screen.
+// A camera's picture in camera properties, and the people the tracker sees
+// drawn over it there and over the Preview monitor. The demo paints its
+// pictures straight into the canvas. A real camera is a GodwinMix source, so
+// its picture is the core's snapshot of that source, asked for about three
+// times a second and only while camera properties is open.
 
 const EVERY_MS = 330;
 

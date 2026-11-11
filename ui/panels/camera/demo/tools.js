@@ -3,6 +3,7 @@
 
 import * as atem from "./atem.js";
 import { ptzTools } from "./ptz.js";
+import { camera } from "./rig.js";
 
 export function handlers(d) {
   const sw = (a) => {
@@ -26,5 +27,22 @@ export function handlers(d) {
     macro: (a) => ((sw(a).lastMacro = a.index), ok()),
     transition: (a) => (Object.assign(sw(a).mes[a.me || 0], a.style ? { style: a.style } : {}, a.rate ? { rate: a.rate } : {}), ok()),
     mode: (a) => ((sw(a).mode = a.mode), ok()),
+    add: (a) => {
+      d.cams = d.cams.filter((c) => c.id !== a.id).concat(camera(a.id, a.id, { cx: 0.5, cy: 0.62, w: 0.5 }));
+      d.cams[d.cams.length - 1].source = a.source || a.id;
+      return { camera: a.id };
+    },
+    connect: (a) => {
+      const s = atem.switcher(a.id, a.name || a.id, "ATEM Mini", 4, d.cams, a.mode || "own");
+      d.atems = d.atems.filter((x) => x.id !== a.id).concat(s);
+      return { switcher: a.id, connected: true };
+    },
+    disconnect: (a) => ((d.atems = d.atems.filter((x) => x !== sw(a))), ok()),
+    map: (a) => {
+      const s = sw(a);
+      if (a.input === null) delete s.map[a.source];
+      else s.map[a.source] = a.input;
+      return { switcher: s.id, map: s.map };
+    },
   };
 }

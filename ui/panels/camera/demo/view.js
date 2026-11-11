@@ -1,5 +1,5 @@
 // The demo's follow loop as the ptz plugin reports it: the same JSON that
-// plugins/ptz/src/follow/view.rs builds, so the window reads the demo and a
+// plugins/ptz/src/follow/view.rs builds, so the drawer reads the demo and a
 // real camera through one path in shapes.js.
 
 import { observe } from "./world.js";

@@ -1,13 +1,15 @@
-// A pretend mixer for the camera window: three PTZ cameras on one stage
-// with people walking about, two ATEM switchers, and GodwinMix's own
-// programme. It has the shape of the real client (call, on, onRender,
-// listen), so the panel and api.js cannot tell the difference, and it
-// counts every call so a test can read what was sent. Its camera tools
+// Pretend cameras and switchers, for trying camera properties and the
+// switcher drawer with no hardware: three PTZ cameras on one stage with
+// people walking about, two ATEM switchers, and a programme of its own that
+// follows GodwinMix's. It has the shape of the real client (call, on,
+// onRender, listen), so api.js cannot tell the difference, and it counts
+// every call so a test can read what was sent. Its camera tools
 // answer in the ptz plugin's own shapes, so the demo goes through the same
 // translation in shapes.js as a real camera does.
 //
-// The clock runs only between start() and stop(), which the panel calls
-// while it is on screen. A test passes {clock: false} and steps it by hand.
+// `sources` names the GodwinMix sources the pretend cameras stand in for,
+// the first one the centre camera. The clock runs only between start() and
+// stop(), which hub.js calls while something is reading. A test passes {clock: false} and steps it by hand.
 
 import { TOOLS } from "../api.js";
 import { world, stepWorld } from "./world.js";
@@ -18,18 +20,22 @@ import { switcher, stepSwitcher, sourceOn } from "./atem.js";
 
 const BY_NAME = Object.fromEntries(Object.entries(TOOLS).map(([k, v]) => [v, k]));
 
-function rigs() {
-  return [
+function rigs(sources) {
+  const all = [
     camera("cam-wide", "Wide", { cx: 0.5, cy: 0.5, w: 1 }),
     camera("cam-centre", "Centre", { cx: 0.5, cy: 0.62, w: 0.4 }, { tint: "rgba(255,190,120,0.05)" }),
     camera("cam-side", "Side", { cx: 0.5, cy: 0.62, w: 0.45 }, { mirror: true, tint: "rgba(120,170,255,0.06)" }),
   ];
+  if (!sources || !sources.length) return all;
+  const order = [all[1], all[0], all[2]].slice(0, sources.length);
+  order.forEach((c, i) => Object.assign(c, { source: sources[i].id, name: sources[i].name || sources[i].id }));
+  return order;
 }
 
 export function demoClient(opts = {}) {
   let t = 0;
   const listeners = new Map();
-  const d = { world: world(opts.seed || 7), cams: rigs(), now: () => t * 1000, calls: [] };
+  const d = { world: world(opts.seed || 7), cams: rigs(opts.sources), now: () => t * 1000, calls: [] };
   d.atems = [switcher("atem-main", "Main switcher", "ATEM Television Studio HD8", 8, d.cams, "follow")];
   if (opts.atems !== 1) d.atems.push(switcher("atem-second", "Second room", "ATEM Mini Pro", 4, d.cams, "own"));
   if (opts.atems === 0) d.atems = [];

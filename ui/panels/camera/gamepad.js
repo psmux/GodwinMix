@@ -1,12 +1,13 @@
 // A game controller as a camera joystick: the left stick points, the right
-// stick zooms, A cuts, B fades, and the shoulder buttons pick the camera
-// before or after. It is read only while the window is on screen and a
-// controller is plugged in, once a frame.
+// stick zooms, A takes Preview to programme and B cuts, through the same
+// commands as the Take and Cut buttons. It is read only while camera
+// properties or the Preview overlay is open and a controller is plugged in,
+// once a frame.
 
 const DEAD = 0.15;
 const dz = (v) => (Math.abs(v) < DEAD ? 0 : (v - Math.sign(v) * DEAD) / (1 - DEAD));
 
-/** `on` has {move(pan, tilt), zoom(v), stop(), cut(), fade(), step(dir)}. */
+/** `on` has {move(pan, tilt), zoom(v), stop(), take(), cut()}. */
 export function gamepads(on) {
   let raf = 0;
   let was = { moving: false, zooming: false, buttons: [] };
@@ -25,10 +26,8 @@ export function gamepads(on) {
     if (zoom || was.zooming) on.zoom(zoom);
     const pressed = pad.buttons.map((b) => b.pressed);
     const down = (i) => pressed[i] && !was.buttons[i];
-    if (down(0)) on.cut();
-    if (down(1)) on.fade();
-    if (down(4)) on.step(-1);
-    if (down(5)) on.step(1);
+    if (down(0)) on.take();
+    if (down(1)) on.cut();
     was = { moving, zooming: !!zoom, buttons: pressed };
     raf = requestAnimationFrame(read);
   }
