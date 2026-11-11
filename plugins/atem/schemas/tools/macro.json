@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "macro",
+  "description": "Run a macro saved on the switcher, by its index, or stop the one running.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The macro's slot, counted from 0, as state lists them."
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "run",
+        "stop"
+      ],
+      "default": "run"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

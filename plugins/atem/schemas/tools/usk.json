@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "usk",
+  "description": "Put an upstream keyer on or off air.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "me": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "title": "M/E",
+      "description": "The mix effect bus, counted from 0."
+    },
+    "keyer": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "on": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "on"
+  ],
+  "additionalProperties": false
+}
