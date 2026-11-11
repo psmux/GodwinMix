@@ -47,7 +47,11 @@ export function previewOverlay(panel, hub) {
   const boxes = livePicture(hub, () => cam, act, { picture: false });
   boxes.canvas.classList.add("cam-boxes");
   const name = el("span.cam-ov-name");
-  const toggle = el("button.btn.icon.cam-ov-toggle", { type: "button", "aria-expanded": "true", onclick: () => fold(!root.classList.contains("folded")) }, [cameraIcon(16)]);
+  // On a Preview too small for the strip (a phone), the button opens camera
+  // properties instead, which has room for every control.
+  const full = () => cam && import("./props.js").then((m) => m.openCamera(hub.real, (hub.real.store && hub.real.store.source(cam.source)) || { id: cam.source }));
+  const toggle = el("button.btn.icon.cam-ov-toggle", { type: "button", "aria-expanded": "true",
+    onclick: () => (root.classList.contains("mini") ? full() : fold(!root.classList.contains("folded"))) }, [cameraIcon(16)]);
   const body = el("div.cam-ov-body", {}, [hand.stick.root, el("div.cam-ov-side", {}, [hand.zoom.root, hand.chips, el("div.row", {}, [hand.track.root, name])])]);
   const root = el("div.cam-ov", { hidden: true, role: "group", "aria-label": "Camera in Preview", ondblclick: (e) => e.stopPropagation() }, [toggle, body]);
   frame.append(boxes.canvas, root);
@@ -73,7 +77,9 @@ export function previewOverlay(panel, hub) {
 
   function fit() {
     if (!cam) return;
+    root.classList.toggle("mini", frame.clientWidth < 360);
     const box = pictureBox(panel.previewCanvas, frame);
+    boxes.canvas.hidden = !(box.width > 0 && box.height > 0);
     Object.assign(boxes.canvas.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
   }
 
@@ -81,7 +87,7 @@ export function previewOverlay(panel, hub) {
     if (!cam) return;
     const t = hub.track.get(cam.id);
     hand.sync(t);
-    name.textContent = `${cam.name}: ${trackWords(t)}`;
+    name.textContent = trackWords(t);
     fit();
   }
 
@@ -103,7 +109,7 @@ export function previewOverlay(panel, hub) {
       if (!cam) return (boxes.stop(), pad.stop());
       drive.use(cam.id);
       offPeople = hub.want("people:" + cam.id);
-      toggle.title = `${cam.name}: camera controls`;
+      toggle.title = "Camera controls";
       boxes.start();
       pad.start();
       sync();

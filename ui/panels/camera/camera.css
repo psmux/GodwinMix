@@ -124,6 +124,7 @@
 }
 .atem-chip:hover { border-color: var(--dim); }
 .atem-chip > .ellipsis { max-width: 12em; }
+@container (max-width: 1180px) { .atem-chip > .ellipsis { display: none; } }
 .atem-bus { padding: 0 5px; border-radius: 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; line-height: 16px; }
 .atem-bus.pgm { background: var(--live); color: #fff; }
 .atem-bus.pvw { background: var(--ok); color: #04140b; }
@@ -140,8 +141,9 @@
   background: rgba(18, 18, 18, 0.74); border: 1px solid rgba(255, 255, 255, 0.14);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); cursor: default;
 }
-.cam-ov.folded { padding: 3px; }
-.cam-ov.folded .cam-ov-body { display: none; }
+.cam-ov.folded, .cam-ov.mini { padding: 3px; }
+.cam-ov.folded .cam-ov-body, .cam-ov.mini .cam-ov-body { display: none; }
+.preview-frame:has(> .cam-boxes) { overflow: hidden; }
 .cam-ov-toggle { line-height: 0; }
 .cam-ov-body { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cam-ov-side { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 230px; }
