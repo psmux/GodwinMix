@@ -14,6 +14,17 @@ pub struct Hungarian {
 }
 
 impl Hungarian {
+    /// Makes room for a `k` by `k` problem.
+    pub fn reserve(&mut self, k: usize) {
+        for buf in [&mut self.u, &mut self.v, &mut self.minv] {
+            buf.reserve(k + 1);
+        }
+        for buf in [&mut self.p, &mut self.way] {
+            buf.reserve(k + 1);
+        }
+        self.used.reserve(k + 1);
+    }
+
     fn reset(&mut self, k: usize) {
         for buf in [&mut self.u, &mut self.v, &mut self.minv] {
             buf.clear();

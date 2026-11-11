@@ -19,7 +19,9 @@ pub struct Chooser {
 
 impl Chooser {
     pub fn new(policy: Choose, config: ChooseConfig) -> Self {
-        Self { policy, config, current: None, last_rect: None, missing_since: None }
+        let mut c = Self { policy, config, current: None, last_rect: None, missing_since: None };
+        c.set_policy(policy);
+        c
     }
 
     /// Changes the policy and lets the next frame choose afresh.

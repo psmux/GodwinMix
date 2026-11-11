@@ -6,7 +6,7 @@ use super::hungarian::Hungarian;
 const GATED: f64 = 1.0e6;
 
 /// Scratch space for matching, reused every frame.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Assoc {
     /// Slot indices taking part in this pass.
     pub rows: Vec<usize>,
@@ -17,6 +17,22 @@ pub struct Assoc {
     cost: Vec<f64>,
     assign: Vec<usize>,
     hungarian: Hungarian,
+}
+
+impl Default for Assoc {
+    /// Room for 32 tracks against 32 detections before anything grows.
+    fn default() -> Self {
+        let mut hungarian = Hungarian::default();
+        hungarian.reserve(32);
+        Self {
+            rows: Vec::with_capacity(64),
+            cols: Vec::with_capacity(64),
+            pairs: Vec::with_capacity(64),
+            cost: Vec::with_capacity(32 * 32),
+            assign: Vec::with_capacity(32),
+            hungarian,
+        }
+    }
 }
 
 impl Assoc {

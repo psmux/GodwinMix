@@ -76,10 +76,14 @@ pub fn paint(walkers: &[Walker], n: usize, fps: f32, w: u32, h: u32, out: &mut V
         let r = wk.at(n, fps);
         let (x0, y0) = ((r.x * w as f32).max(0.0) as u32, (r.y * h as f32).max(0.0) as u32);
         let (x1, y1) = ((r.right() * w as f32).min(w as f32) as u32, (r.bottom() * h as f32).min(h as f32) as u32);
+        // Clothes with a pattern in them, as real ones have.
+        let dark = wk.colour.map(|c| c / 2);
+        let left = r.x * w as f32;
         for y in y0..y1 {
             for x in x0..x1 {
                 let i = ((y * w + x) * 3) as usize;
-                out[i..i + 3].copy_from_slice(&wk.colour);
+                let stripe = ((x as f32 - left) / 3.0) as i32 % 2 == 0;
+                out[i..i + 3].copy_from_slice(if stripe { &wk.colour } else { &dark });
             }
         }
     }
