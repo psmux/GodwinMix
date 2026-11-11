@@ -286,6 +286,13 @@ impl Tokens {
     /// are for. A token per instance rather than per plugin, so revoking one
     /// source does not silence the other three.
     pub fn mint_for_plugin(&self, plugin: &str, instance: &str, node: Option<&str>) -> String {
+        self.mint_for_plugin_with(plugin, instance, node, &[])
+    }
+
+    /// The same, carrying `grants` on top of `plugin`: the core scopes the
+    /// plugin's manifest asked for. Anything above `operate` is dropped, so a
+    /// manifest can never give a plugin `admin`.
+    pub fn mint_for_plugin_with(&self, plugin: &str, instance: &str, node: Option<&str>, grants: &[Scope]) -> String {
         let mut secret = [0u8; 32];
         if getrandom::fill(&mut secret).is_err() {
             tracing::warn!(
@@ -296,7 +303,12 @@ impl Tokens {
             return String::new();
         }
         let secret: String = secret.iter().map(|b| format!("{b:02x}")).collect();
-        let token = Token::for_plugin(instance, &secret, plugin, node);
+        let mut token = Token::for_plugin(instance, &secret, plugin, node);
+        for g in grants {
+            if matches!(g, Scope::Read | Scope::Operate) && !token.scopes.contains(g) {
+                token.scopes.push(*g);
+            }
+        }
         let mut minted = self.minted.lock();
         minted.retain(|t| t.id != instance);
         minted.push(token);
@@ -667,5 +679,18 @@ mod tests {
         assert!(!constant_time_eq(b"abc", b"ab"));
         assert!(!constant_time_eq(b"ab", b"abc"));
         assert!(!constant_time_eq(b"abc", b""));
+    }
+
+    #[test]
+    fn a_plugin_granted_read_and_operate_reaches_them_and_never_admin() {
+        let tokens = Tokens::default();
+        let secret = tokens.mint_for_plugin_with("atem", "atem-atem", None, &[Scope::Operate, Scope::Admin]);
+        let minted = tokens.minted.lock().iter().find(|t| t.secret == secret).cloned().expect("minted");
+        assert!(minted.has(Scope::Operate) && minted.has(Scope::Read), "operate is granted, and read with it");
+        assert!(!minted.has(Scope::Admin), "admin is never granted to a plugin");
+        assert_eq!(minted.plugin.as_deref(), Some("atem"), "tool.call stays narrowed to its own tools");
+        let plain = tokens.mint_for_plugin("ndi", "cam1", None);
+        let plain = tokens.minted.lock().iter().find(|t| t.secret == plain).cloned().expect("minted");
+        assert!(!plain.has(Scope::Read), "no grants, no read");
     }
 }

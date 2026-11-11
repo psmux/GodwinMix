@@ -9,6 +9,8 @@ repository = "https://github.com/psmux/godwinmix"
 platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
 placements = ["sidecar", "node"]
 process = "singleton"
+# `operate` so follow and lead can watch takes and make them. Not `admin`.
+core_scopes = ["operate"]
 
 # Staged into bin/ by `dev/plugins.sh build` or `./build`: a workspace
 # member's target directory sits above the plugin, and a manifest path may not

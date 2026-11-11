@@ -9,6 +9,9 @@ repository = "https://github.com/psmux/godwinmix"
 platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
 placements = ["sidecar", "node"]
 process = "singleton"
+# `read` so the core serves this plugin the pictures it tracks and the stills a
+# preset keeps. Nothing more: it never takes.
+core_scopes = ["read"]
 
 # Staged into bin/ by `dev/plugins.sh build` or `./build`: a workspace
 # member's target directory sits above the plugin, and a manifest path may not

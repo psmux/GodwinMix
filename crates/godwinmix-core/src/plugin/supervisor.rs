@@ -184,6 +184,14 @@ impl Supervisor {
         *self.settings.lock() = settings;
     }
 
+    /// `[plugins.<name>] core_scopes`, when the operator set it: the most of
+    /// the manifest's `core_scopes` this plugin's token may carry.
+    fn narrowed_scopes(&self, plugin: &str) -> Option<Vec<String>> {
+        let settings = self.settings.lock();
+        let list = settings.get(plugin)?.get("core_scopes")?.as_array()?;
+        Some(list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+    }
+
     fn params_for(&self, plugin: &str) -> Params {
         let mut params = self.settings.lock().get(plugin).cloned().unwrap_or_default();
         self.routes.add_extras(plugin, &mut params);
@@ -311,7 +319,7 @@ impl Supervisor {
         let launched = loader::launch_for(
             provide,
             &instance,
-            loader::mint_token(provide, &instance),
+            loader::mint_token_narrowed(provide, &instance, self.narrowed_scopes(&manifest.plugin).as_deref()),
             loader::rpc_url(),
         )?;
         Ok(SidecarSpec {

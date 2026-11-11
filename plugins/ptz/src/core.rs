@@ -39,8 +39,11 @@ impl Core {
         format!("{}/api/v1/snapshot/{}{}", self.base, escape(source), self.query(width, true))
     }
 
+    /// `full=true`: the source's own picture made at `width`, not a cell cut
+    /// out of the multiview mosaic, which is a few dozen pixels across and is
+    /// not there at all when the multiview is switched off.
     pub fn mjpeg_url(&self, source: &str, width: u32) -> String {
-        format!("{}/mjpeg/{}{}", self.base, escape(source), self.query(width, false))
+        format!("{}/mjpeg/{}{}&full=true", self.base, escape(source), self.query(width, false))
     }
 
     /// One still of `source`, `width` pixels across.
@@ -87,7 +90,7 @@ mod tests {
     fn the_core_is_found_from_its_rpc_address() {
         let c = Core::from_url("ws://127.0.0.1:8080/rpc", Some("t k".into())).unwrap();
         assert_eq!(c.base, "http://127.0.0.1:8080");
-        assert_eq!(c.mjpeg_url("cam 1", 320), "http://127.0.0.1:8080/mjpeg/cam%201?width=320&token=t%20k");
+        assert_eq!(c.mjpeg_url("cam 1", 320), "http://127.0.0.1:8080/mjpeg/cam%201?width=320&token=t%20k&full=true");
         assert!(c.snapshot_url("cam1", 160).contains("/api/v1/snapshot/cam1?width=160&force=true"));
         assert_eq!(Core::from_url("", None), None);
     }

@@ -20,7 +20,7 @@ static MINTING: OnceLock<Tokens> = OnceLock::new();
 pub fn mint_from(tokens: &Tokens) {
     let _ = MINTING.set(tokens.clone());
     let minting = tokens.clone();
-    loader::set_token_minter(Box::new(move |plugin, instance| minting.mint_for_plugin(plugin, instance, None)));
+    loader::set_token_minter(Box::new(move |plugin, instance, grants| minting.mint_for_plugin_with(plugin, instance, None, grants)));
 }
 
 /// `tokens`, accepting the tokens plugins were given as well.
