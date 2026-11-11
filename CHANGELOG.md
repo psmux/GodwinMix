@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.33 (2026-11-11)
+
+PTZ cameras that follow the speaker, Blackmagic ATEM switchers driven from GodwinMix, and one window for a volunteer to run both.
+
+* A new Cameras window (View > Cameras). One card per camera with its live picture and a box round each person the tracker sees, red on air and green for next, then three steps: pick the next camera, frame it with a joystick, zoom and Close, Waist, Full or Wide, and take it live with Cut, Fade, Black or the lower third. Tap a person to follow them. Saved shots show as pictures. Pro view has every switcher bus, the transition, keyers, aux and macros. A Demo switch runs the whole window against simulated cameras and switchers, with no hardware.
+* The `ptz` plugin moves PTZ cameras over VISCA over IP, VISCA over TCP, ONVIF and Canon's CR-N web control, with presets that keep a thumbnail. The joystick stops a camera by itself 300 ms after the last command, so a closed tab never leaves one turning. A slow command no longer holds up the joystick.
+* Auto tracking: the plugin finds people with YOLOX nano (Apache 2.0), tracks them with ids that survive crossing and a pulpit in the way, and steers the camera to keep the chosen one framed, without hunting. It knows when the camera itself is moving. On one core it takes about 7 ms a frame on a desktop and detects about nine times a second on a Raspberry Pi 4.
+* `godwinmix-track` is that tracking engine as a Rust library of its own, with no media stack, for anything that wants to know where people are: a camera, a digital crop of one wide shot, the director, or an agent. `track_observe` tells an agent who is in a camera's picture.
+* The `atem` plugin drives one or more ATEM switchers over their network protocol: programme and preview, cut and auto, transitions, downstream and upstream keys, fade to black, aux and macros. In follow mode a GodwinMix take also cuts the switcher; in lead mode a cut on the switcher's panel moves GodwinMix, so the hardware panel stays in charge while GodwinMix records and streams. A guard stops the two from cutting each other in a loop.
+* A plugin's manifest may now ask for the core scopes it needs with `core_scopes`: `read` or `operate`, never `admin`. A plugin the core started could not read a preview or make a take before, so `director`, `osc`, `tally`, `ptz` and `atem` now declare theirs. An operator can narrow a plugin's scopes in its settings and never widen them.
+* Service plugins the core starts could not reach it at all: the address in `GMX_RPC` became `/rpc/rpc`. Fixed for every plugin, in the client library.
+* `dev/camera-live.sh` runs the cameras and the switcher against a real core, with fake cameras, a fake ATEM (`cargo run -p godwinmix-atem --example fake_atem`) and a photograph of two people, and checks every path above.
+* Not tried yet on real hardware: the Canon driver's zoom range and exposure units, the ATEM protocol against a real switcher, and the default camera optics. The reference pages say what is unverified.
+
 ## 0.3.32 (2026-11-08)
 
 The Mac downloads are signed and notarised, so macOS opens them without a warning.
