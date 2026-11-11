@@ -111,11 +111,7 @@ impl BoxFilter {
     pub fn carry(&mut self, dx: f32, dy: f32, scale: f32) {
         self.axes[0].p = 0.5 + (self.axes[0].p - 0.5) * scale + dx;
         self.axes[1].p = 0.5 + (self.axes[1].p - 0.5) * scale + dy;
-        for a in &mut self.axes {
-            if scale != 1.0 {
-                a.v *= scale;
-            }
-        }
+        self.axes.iter_mut().for_each(|a| a.v *= scale);
         self.axes[2].p *= scale;
         self.axes[3].p *= scale;
     }

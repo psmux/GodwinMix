@@ -16,6 +16,18 @@ runtime; without features it depends on the standard library alone. The
 `tract` feature adds the YOLOX nano person detector (Apache 2.0), fetched on
 first use and checked by SHA256.
 
+On a PTZ camera the picture moves because the camera does. Give
+`FollowConfig::camera` the camera's `CameraOptics` and the follower turns
+the speed it sends into an `EgoMotion`: the tracker carries every box with
+the picture (`Tracker::update_with_camera`), so a pan is not read as
+everyone walking, and the motion detector rests while the camera moves.
+`tests/ego.rs` runs it in a closed loop with a simulated camera that pans
+and zooms.
+
+The example and the bench build for `aarch64-unknown-linux-musl` as they
+are, for a Raspberry Pi; the `tract` feature then needs a C compiler for
+the target. The commands are in the reference, under "For a Raspberry Pi".
+
 * How it works: [`docs/explanation/auto-tracking.md`](../../docs/explanation/auto-tracking.md)
 * The surface: [`docs/reference/track.md`](../../docs/reference/track.md)
 * Using it: [`docs/how-to/track-people-in-a-picture.md`](../../docs/how-to/track-people-in-a-picture.md)
@@ -24,6 +36,7 @@ first use and checked by SHA256.
 cargo test -p godwinmix-track                       # no model, no network
 cargo test -p godwinmix-track --features tract      # fetches the model once
 cargo bench -p godwinmix-track --features tract
+cargo bench -p godwinmix-track -- motion            # only the names with "motion"
 cargo run --release -p godwinmix-track --example follow
 ```
 
@@ -32,23 +45,25 @@ cargo run --release -p godwinmix-track --example follow
 `cargo bench -p godwinmix-track --features tract` on 2026-11-11, one core of
 an AMD Ryzen 9 9950X3D, Windows 11, Rust 1.99.1, with the workspace's bench
 profile (opt-level `s`, fat LTO; opt-level 3 for every crate was measured too
-and is about 4% faster, not worth a profile of its own). The motion rows use
+and is about 4% faster, not worth a profile of its own). Each time is the median of 30 samples taken by the bench's own harness
+(`benches/chain/harness.rs`), measured again after the camera motion
+work; the earlier numbers were criterion's and agree within a few per cent. The motion rows use
 a made up 320 by 180 RGB scene with five people walking; the model rows use
 the committed photograph `tests/images/two-people.jpg` scaled to 320 by 240.
 
 | Stage | Time a frame |
 |---|---|
-| detect: motion, 320x180 | 48.7 µs |
-| detect: YOLOX nano at 320x256 | 7.41 ms |
-| detect: YOLOX nano at 320x320 | 9.49 ms |
-| detect: YOLOX nano at 416x416 | 17.8 ms |
-| detect: YOLOX nano 320x256 and MoveNet Lightning on one person | 19.9 ms |
+| detect: motion, 320x180 | 49.8 µs |
+| detect: YOLOX nano at 320x256 | 7.69 ms |
+| detect: YOLOX nano at 320x320 | 10.3 ms |
+| detect: YOLOX nano at 416x416 | 18.4 ms |
+| detect: YOLOX nano 320x256 and MoveNet Lightning on one person | 19.8 ms |
 | track: 5 people | 0.59 µs |
-| choose, frame and steer | 0.09 µs |
-| whole chain, motion | 53.4 µs |
-| whole chain, YOLOX nano 320x256, detect every frame | 6.91 ms |
+| choose, frame and steer | 0.10 µs |
+| whole chain, motion | 54.0 µs |
+| whole chain, YOLOX nano 320x256, detect every frame | 6.88 ms |
 | whole chain, YOLOX nano 320x256, detect every third frame | 2.31 ms |
-| whole chain, YOLOX nano every frame, MoveNet every third | 11.7 ms |
+| whole chain, YOLOX nano every frame, MoveNet every third | 10.6 ms |
 
 The budget is 15 ms a frame at 320 wide, and every whole chain row is under
 it. MoveNet costs about 12.5 ms a person, so keypoints on every frame are
