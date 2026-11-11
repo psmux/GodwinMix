@@ -14,13 +14,13 @@ const open = (client, id) => import("./switcher.js").then((m) => m.openSwitcher(
 
 function row(hub, id, act) {
   const dot = el("span.dot");
-  const name = el("strong");
-  const label = el("span.sm.dim");
+  const name = el("strong.ellipsis");
+  const label = el("span.sm.dim.ellipsis.grow");
   const pgm = el("span.atem-bus.pgm");
   const pvw = el("span.atem-bus.pvw");
   let detail = null;
   const node = el("div.output-row.atem-row", { "data-switcher": id }, [el("div.row", {}, [
-    dot, name, label, el("span.grow"),
+    dot, name, label,
     el("button.btn.icon", { type: "button", text: "Edit", onclick: () => open(hub.real, id) }),
     el("button.btn.icon.danger", { type: "button", text: "Remove", onclick: async () => {
       const ask = `Remove "${name.textContent}"? GodwinMix stops talking to it. The switcher itself keeps working.`;
