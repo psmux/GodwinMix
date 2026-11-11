@@ -69,6 +69,49 @@
       "examples": [
         "camera:pulpit"
       ]
+    },
+    "optics": {
+      "type": "object",
+      "title": "Optics",
+      "description": "The camera's field of view and top speeds, so tracking can tell the camera's own pan, tilt and zoom from people walking. Each field left out keeps its default, which suits a 20x camera at a mid zoom; the field of view is for the zoom the camera mostly tracks at.",
+      "properties": {
+        "hfov_deg": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 180,
+          "default": 30,
+          "description": "Horizontal field of view, degrees."
+        },
+        "vfov_deg": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 180,
+          "default": 17,
+          "description": "Vertical field of view, degrees."
+        },
+        "pan_deg_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 720,
+          "default": 60,
+          "description": "Degrees a second at full pan speed."
+        },
+        "tilt_deg_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 720,
+          "default": 30,
+          "description": "Degrees a second at full tilt speed."
+        },
+        "zoom_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 0.7,
+          "description": "The natural log of how much the picture grows in a second at full zoom speed: 0.7 doubles it."
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

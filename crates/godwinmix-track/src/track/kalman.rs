@@ -105,6 +105,21 @@ impl BoxFilter {
         }
     }
 
+    /// Carries the box with the picture when the camera moves: shifted by
+    /// `dx`, `dy` and scaled by `scale` about the frame's centre. The
+    /// velocity stays the person's own.
+    pub fn carry(&mut self, dx: f32, dy: f32, scale: f32) {
+        self.axes[0].p = 0.5 + (self.axes[0].p - 0.5) * scale + dx;
+        self.axes[1].p = 0.5 + (self.axes[1].p - 0.5) * scale + dy;
+        for a in &mut self.axes {
+            if scale != 1.0 {
+                a.v *= scale;
+            }
+        }
+        self.axes[2].p *= scale;
+        self.axes[3].p *= scale;
+    }
+
     pub fn rect(&self) -> Rect {
         let [cx, cy, w, h] = self.axes.map(|a| a.p);
         Rect::from_center(cx, cy, w, h)

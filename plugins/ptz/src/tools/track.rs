@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use super::args::{camera, invalid, num, text};
 use super::{answer, later, Plan, Work};
 use crate::follow::detector::Switching;
-use crate::follow::{view, wait_seen, Ctl, Loop};
+use crate::follow::{view, wait_seen, Ctl, Look, Loop};
 use crate::rig::{Camera, Rig};
 
 /// An observing loop ends this long after the last call that asked.
@@ -25,7 +25,8 @@ fn ensure<'a>(rig: &'a mut Rig, a: &Value, steering: bool) -> Result<&'a Camera,
     if !cam.follow.as_ref().is_some_and(Loop::is_running) {
         let frames = crate::frames::open(core.as_ref(), &cam.spec, width).map_err(|why| RpcError::new(codes::WRONG_STATE, why).with_data(json!({"camera": cam.spec.id})))?;
         let detector = Switching::new(kind, models);
-        cam.follow = Some(Loop::start(cam.handle.clone(), frames, detector, framing, steering, LINGER));
+        let look = Look { framing, steering, optics: Some(cam.spec.optics) };
+        cam.follow = Some(Loop::start(cam.handle.clone(), frames, detector, look, LINGER));
     } else if steering {
         cam.follow.as_ref().expect("checked").send(Ctl::Steer(true));
     }

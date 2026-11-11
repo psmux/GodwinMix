@@ -36,7 +36,7 @@ fn main() {
         })
         .collect();
     let pictures: Vec<_> = jpegs.iter().map(|j| decode(j).unwrap()).collect();
-    let mut f = run_follower(godwinmix_track::Framing::Waist, Switching::ready(Kind::Motion, motion()));
+    let mut f = run_follower(godwinmix_track::Framing::Waist, Switching::ready(Kind::Motion, motion()), None);
     let mut out = godwinmix_track::FollowOutput::default();
     let start = Instant::now();
     let mut step_times = Vec::new();

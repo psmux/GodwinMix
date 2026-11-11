@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use godwinmix_ptz::Velocity;
-use godwinmix_track::{Fallback, FollowConfig, FollowOutput, FollowState, Follower, FrameStyle, Framing};
+use godwinmix_track::{CameraOptics, Fallback, FollowConfig, FollowOutput, FollowState, Follower, FrameStyle, Framing, PtzVelocity};
 
 use super::detector::{motion, Kind, Switching};
 use super::{Ctl, Seen};
@@ -25,11 +25,14 @@ pub struct Job {
     pub steering: bool,
     /// Taken by the thread when it starts.
     pub detector: Option<Switching>,
+    pub optics: Option<CameraOptics>,
 }
 
-pub fn follower(framing: Framing, detector: Switching) -> Follower<Switching> {
+/// The Follower the loop runs. With `optics`, it takes the camera's own
+/// motion out of what it sees (see `godwinmix_track::ego`).
+pub fn follower(framing: Framing, detector: Switching, optics: Option<CameraOptics>) -> Follower<Switching> {
     let style = FrameStyle { framing, ..FrameStyle::default() };
-    Follower::new(detector, FollowConfig { style, ..FollowConfig::default() })
+    Follower::new(detector, FollowConfig { style, camera: optics, ..FollowConfig::default() })
 }
 
 fn apply(f: &mut Follower<Switching>, c: Ctl, steering: &mut bool) {
@@ -52,7 +55,7 @@ fn apply(f: &mut Follower<Switching>, c: Ctl, steering: &mut bool) {
 
 pub fn run(mut job: Job) {
     let detector = job.detector.take().unwrap_or_else(|| Switching::ready(Kind::Motion, motion()));
-    let mut f = follower(job.framing, detector);
+    let mut f = follower(job.framing, detector, job.optics);
     let mut out = FollowOutput::default();
     let mut steering = job.steering;
     let mut in_fallback = false;
@@ -78,6 +81,10 @@ pub fn run(mut job: Job) {
             }
         };
         let Some(frame) = picture.frame() else { continue };
+        // What the camera really moves at, joystick included: the motion
+        // lane's last speed.
+        let m = job.camera.status.lock().unwrap().moving;
+        f.set_camera_velocity(PtzVelocity { pan: m.pan, tilt: m.tilt, zoom: m.zoom });
         let started = Instant::now();
         f.step_into(&frame, started, &mut out);
         let step_ms = started.elapsed().as_secs_f32() * 1000.0;

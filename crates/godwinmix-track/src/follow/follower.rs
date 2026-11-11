@@ -3,25 +3,34 @@
 use std::time::Instant;
 
 use super::{FollowConfig, FollowOutput};
-use crate::choose::{Choice, Choose, Chooser, Fallback, FollowState};
+use crate::choose::{Choice, Chooser, Fallback, FollowState};
 use crate::detect::{Detection, Detector};
+use crate::ego::EgoMotion;
 use crate::frame::FrameRef;
-use crate::framing::{frame_target, Framing};
-use crate::geom::{Point, Rect};
-use crate::steer::{CropSteer, PtzSteer};
-use crate::track::{Track, TrackId, Tracker};
+use crate::framing::frame_target;
+use crate::geom::Rect;
+use crate::steer::{CropSteer, PtzSteer, PtzVelocity};
+use crate::track::{Track, Tracker};
 
 /// Detect, track, choose, frame and steer.
 pub struct Follower<D = Box<dyn Detector + Send>> {
-    detector: D,
-    config: FollowConfig,
-    tracker: Tracker,
-    chooser: Chooser,
-    ptz: PtzSteer,
+    pub(super) detector: D,
+    pub(super) config: FollowConfig,
+    pub(super) tracker: Tracker,
+    pub(super) chooser: Chooser,
+    pub(super) ptz: PtzSteer,
     crop: CropSteer,
     dets: Vec<Detection>,
-    frames: u64,
-    active: bool,
+    pub(super) frames: u64,
+    pub(super) active: bool,
+    /// What the camera was last told, from outside; see `set_camera_velocity`.
+    pub(super) moving: Option<PtzVelocity>,
+    /// What this follower last told it.
+    last_cmd: PtzVelocity,
+    /// How far the camera has zoomed since the follow started, from the
+    /// zoom speeds it was told: the optics' field of view is for 1.
+    pub(super) zoom_scale: f32,
+    last_t: Option<Instant>,
 }
 
 impl<D: Detector> Follower<D> {
@@ -36,6 +45,10 @@ impl<D: Detector> Follower<D> {
             dets: Vec::with_capacity(64),
             frames: 0,
             active: true,
+            moving: None,
+            last_cmd: PtzVelocity::STOP,
+            zoom_scale: 1.0,
+            last_t: None,
         }
     }
 
@@ -54,11 +67,13 @@ impl<D: Detector> Follower<D> {
         let every = self.config.detect_every.max(1) as u64;
         out.detected = self.frames % every == 0 && frame.validate().is_ok();
         self.frames += 1;
+        let ego = self.ego(t);
         let tracks = if out.detected {
+            self.detector.camera_motion(ego);
             self.detector.detect_into(frame, &mut self.dets);
-            self.tracker.update_with_frame(&self.dets, Some(frame), t)
+            self.tracker.update_with_camera(&self.dets, Some(frame), t, ego)
         } else {
-            self.tracker.coast(t)
+            self.tracker.coast_with_camera(t, ego)
         };
         out.tracks.clear();
         out.tracks.extend_from_slice(tracks);
@@ -77,6 +92,22 @@ impl<D: Detector> Follower<D> {
         out.target = choice.target;
         out.shot = shot;
         out.state = choice.state;
+        out.ego = ego;
+        self.last_cmd = out.ptz;
+    }
+
+    /// The camera's motion over the step to `t`: what it was told last,
+    /// through the optics, when the config has them. A camera zoomed in
+    /// twice as far sees a pan move its picture twice as fast.
+    fn ego(&mut self, t: Instant) -> EgoMotion {
+        let told = self.moving.take().unwrap_or(self.last_cmd);
+        let dt = self.last_t.map_or(0.0, |l| t.saturating_duration_since(l).as_secs_f32());
+        self.last_t = Some(t);
+        let Some(optics) = self.config.camera else { return EgoMotion::STILL };
+        let e = optics.ego(told);
+        let e = EgoMotion { dx: e.dx * self.zoom_scale, dy: e.dy * self.zoom_scale, zoom: e.zoom };
+        self.zoom_scale = (self.zoom_scale * (e.zoom * dt).exp()).clamp(0.05, 50.0);
+        e
     }
 
     fn shot(&self, choice: &Choice, tracks: &[Track], aspect: f32) -> Option<Rect> {
@@ -86,58 +117,5 @@ impl<D: Detector> Follower<D> {
             track.rect = r;
         }
         Some(frame_target(&track, &self.config.style, aspect))
-    }
-
-    /// Follows this id only.
-    pub fn follow(&mut self, id: TrackId) {
-        self.set_policy(Choose::Locked(id));
-    }
-
-    /// Follows whoever is nearest `p` now, and keeps them.
-    pub fn follow_point(&mut self, p: Point) {
-        let near = self.tracker.tracks().iter().filter(|t| t.is_confirmed()).min_by(|a, b| {
-            a.rect.center().distance(p).total_cmp(&b.rect.center().distance(p))
-        });
-        match near {
-            Some(t) => self.follow(t.id),
-            None => self.set_policy(Choose::Nearest(p)),
-        }
-    }
-
-    pub fn set_policy(&mut self, policy: Choose) {
-        self.active = true;
-        self.config.policy = policy;
-        self.chooser.set_policy(policy);
-    }
-
-    pub fn set_framing(&mut self, framing: Framing) {
-        self.config.style.framing = framing;
-    }
-
-    /// Stops following: tracks are still reported, the camera eases to a
-    /// stop and the crop holds.
-    pub fn stop(&mut self) {
-        self.active = false;
-    }
-
-    pub fn config(&self) -> &FollowConfig {
-        &self.config
-    }
-
-    pub fn tracker(&self) -> &Tracker {
-        &self.tracker
-    }
-
-    pub fn detector_mut(&mut self) -> &mut D {
-        &mut self.detector
-    }
-
-    /// Forgets every track and stops, for a cut or a preset move.
-    pub fn reset(&mut self) {
-        self.tracker.reset();
-        self.detector.reset();
-        self.ptz.reset();
-        self.chooser.set_policy(self.config.policy);
-        self.frames = 0;
     }
 }

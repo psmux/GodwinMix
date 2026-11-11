@@ -35,6 +35,15 @@ pub enum Ctl {
     Policy(Choose),
 }
 
+/// How a loop starts: the framing, whether it steers, and the camera's
+/// optics for telling its own motion from people's.
+#[derive(Debug, Clone, Copy)]
+pub struct Look {
+    pub framing: Framing,
+    pub steering: bool,
+    pub optics: Option<godwinmix_track::CameraOptics>,
+}
+
 /// What the loop last saw, shared with the tools.
 #[derive(Debug, Clone, Default)]
 pub struct Seen {
@@ -63,12 +72,13 @@ pub struct Loop {
 }
 
 impl Loop {
-    pub fn start(camera: Handle, frames: Box<dyn Frames>, detector: Switching, framing: Framing, steering: bool, linger: Duration) -> Loop {
+    pub fn start(camera: Handle, frames: Box<dyn Frames>, detector: Switching, look: Look, linger: Duration) -> Loop {
+        let Look { framing, steering, optics } = look;
         let (ctl, rx) = channel();
         let seen = Arc::new(Mutex::new(Seen { from: frames.describe(), framing: Some(framing), steering, detector: detector.status.clone(), ..Seen::default() }));
         let stop = Arc::new(AtomicBool::new(false));
         let asked = Arc::new(Mutex::new(Instant::now()));
-        let job = run::Job { camera, frames, rx, seen: seen.clone(), stop: stop.clone(), asked: asked.clone(), linger, framing, steering, detector: Some(detector) };
+        let job = run::Job { camera, frames, rx, seen: seen.clone(), stop: stop.clone(), asked: asked.clone(), linger, framing, steering, detector: Some(detector), optics };
         std::thread::Builder::new().name("ptz-follow".into()).spawn(move || run::run(job)).expect("a follow thread");
         Loop { ctl, seen, stop, asked }
     }

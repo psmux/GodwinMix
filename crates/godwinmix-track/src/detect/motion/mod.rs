@@ -5,47 +5,16 @@
 //! anything that moves, so its detections are `Class::Motion`.
 
 mod blobs;
+mod config;
 mod merge;
 
 use blobs::Blobs;
+pub use config::MotionConfig;
 
 use super::{Class, Detection, Detector};
+use crate::ego::EgoMotion;
 use crate::frame::FrameRef;
 use crate::geom::Rect;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct MotionConfig {
-    /// The width the frame is scaled to before anything else, in pixels.
-    pub width: usize,
-    /// How far, 0 to 255, a pixel's brightness must move from the
-    /// background to count as changed.
-    pub threshold: u8,
-    /// The background learns 1 / 2^`learn_shift` of each new frame.
-    pub learn_shift: u8,
-    /// Changed pixels are counted in square blocks of this many pixels.
-    pub block: usize,
-    /// The fraction of a block that must change for it to count.
-    pub block_fill: f32,
-    /// Boxes smaller than this, as a fraction of the frame, are dropped.
-    pub min_area: f32,
-    /// When more than this fraction of the frame changes at once, the light
-    /// changed or the camera moved: the background starts again.
-    pub max_coverage: f32,
-}
-
-impl Default for MotionConfig {
-    fn default() -> Self {
-        Self {
-            width: 160,
-            threshold: 24,
-            learn_shift: 5,
-            block: 4,
-            block_fill: 0.25,
-            min_area: 0.003,
-            max_coverage: 0.5,
-        }
-    }
-}
 
 /// A detector that finds what moves against a learned background.
 #[derive(Debug, Default)]
@@ -57,6 +26,8 @@ pub struct MotionDetector {
     bg: Vec<u16>,
     blobs: Blobs,
     warm: bool,
+    /// The camera is moving too fast to compare pictures.
+    moving: bool,
 }
 
 impl MotionDetector {
@@ -117,6 +88,9 @@ impl Detector for MotionDetector {
         }
         self.resize(frame);
         frame.downscale_luma(&mut self.cur, self.w, self.h);
+        if self.moving {
+            return;
+        }
         if !self.warm {
             return self.relearn();
         }
@@ -146,5 +120,15 @@ impl Detector for MotionDetector {
 
     fn reset(&mut self) {
         self.warm = false;
+    }
+
+    /// A camera moving faster than `max_camera_speed` pauses the detector;
+    /// once it is still the background is learned afresh from the new view.
+    fn camera_motion(&mut self, ego: EgoMotion) {
+        let moving = ego.speed() > self.config.max_camera_speed;
+        if self.moving && !moving {
+            self.warm = false;
+        }
+        self.moving = moving;
     }
 }

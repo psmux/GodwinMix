@@ -108,4 +108,8 @@ impl<D: Detector> Detector for PoseDetector<D> {
     fn reset(&mut self) {
         self.inner.reset();
     }
+
+    fn camera_motion(&mut self, ego: crate::ego::EgoMotion) {
+        self.inner.camera_motion(ego)
+    }
 }

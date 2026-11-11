@@ -1,6 +1,7 @@
 //! One camera as a person describes it, and the slug rule for its id.
 
 use godwinmix_ptz::{Protocol, Target};
+use godwinmix_track::CameraOptics;
 use serde_json::{json, Value};
 
 /// One camera as a person describes it.
@@ -19,6 +20,9 @@ pub struct CameraSpec {
     /// A frame bus name to read the picture from instead, `camera:cam-pulpit`.
     /// Linux and macOS only.
     pub bus: Option<String>,
+    /// Field of view and top speeds, so tracking can tell the camera's own
+    /// motion from people walking.
+    pub optics: CameraOptics,
 }
 
 impl CameraSpec {
@@ -30,9 +34,11 @@ impl CameraSpec {
 
     /// The record a caller sees: everything but the password.
     pub fn public(&self) -> Value {
+        let o = &self.optics;
         json!({
             "id": self.id, "protocol": self.protocol.slug(), "address": self.address,
             "user": self.user, "profile": self.profile, "source": self.source, "bus": self.bus,
+            "optics": {"hfov_deg": o.hfov_deg, "vfov_deg": o.vfov_deg, "pan_deg_s": o.pan_deg_s, "tilt_deg_s": o.tilt_deg_s, "zoom_rate": o.zoom_rate},
         })
     }
 
@@ -54,7 +60,22 @@ impl CameraSpec {
             profile: text("profile"),
             source: text("source"),
             bus: text("bus"),
+            optics: optics(v.get("optics")),
         })
+    }
+}
+
+/// `optics` with any field left out at its default, each kept in a range a
+/// camera can have.
+fn optics(v: Option<&Value>) -> CameraOptics {
+    let d = CameraOptics::default();
+    let num = |k: &str, def: f32, lo: f32, hi: f32| v.and_then(|v| v.get(k)).and_then(Value::as_f64).map_or(def, |n| (n as f32).clamp(lo, hi));
+    CameraOptics {
+        hfov_deg: num("hfov_deg", d.hfov_deg, 1.0, 180.0),
+        vfov_deg: num("vfov_deg", d.vfov_deg, 1.0, 180.0),
+        pan_deg_s: num("pan_deg_s", d.pan_deg_s, 0.0, 720.0),
+        tilt_deg_s: num("tilt_deg_s", d.tilt_deg_s, 0.0, 720.0),
+        zoom_rate: num("zoom_rate", d.zoom_rate, 0.0, 10.0),
     }
 }
 

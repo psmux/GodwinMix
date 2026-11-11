@@ -1,11 +1,13 @@
 //! The whole chain in one call: detect (every Nth frame), track, choose,
 //! frame and steer. What a PTZ follow loop or a virtual camera runs.
 
+mod control;
 mod follower;
 
 pub use follower::Follower;
 
 use crate::choose::{Choose, ChooseConfig, FollowState};
+use crate::ego::{CameraOptics, EgoMotion};
 use crate::framing::FrameStyle;
 use crate::geom::Rect;
 use crate::steer::{CropConfig, PtzConfig, PtzVelocity};
@@ -24,6 +26,10 @@ pub struct FollowConfig {
     pub style: FrameStyle,
     pub ptz: PtzConfig,
     pub crop: CropConfig,
+    /// A PTZ camera's optics, so the follower knows how its own commands
+    /// move the picture (see [`crate::ego`]). `None` for a fixed camera or
+    /// a digital crop, where the picture never moves.
+    pub camera: Option<CameraOptics>,
 }
 
 impl Default for FollowConfig {
@@ -36,6 +42,7 @@ impl Default for FollowConfig {
             style: FrameStyle::default(),
             ptz: PtzConfig::default(),
             crop: CropConfig::default(),
+            camera: None,
         }
     }
 }
@@ -56,6 +63,8 @@ pub struct FollowOutput {
     pub state: FollowState,
     /// True when the detector ran on this frame.
     pub detected: bool,
+    /// How the camera moved the picture over this step.
+    pub ego: EgoMotion,
 }
 
 impl Default for FollowOutput {
@@ -68,6 +77,7 @@ impl Default for FollowOutput {
             shot: None,
             state: FollowState::Idle,
             detected: false,
+            ego: EgoMotion::STILL,
         }
     }
 }

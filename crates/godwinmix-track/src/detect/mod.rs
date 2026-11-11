@@ -101,6 +101,11 @@ pub trait Detector {
     /// Forgets anything learned from earlier frames, for a cut or a camera
     /// move. Backends that keep nothing need not implement it.
     fn reset(&mut self) {}
+
+    /// How the camera moves as the next frames are taken. A backend that
+    /// compares frames (motion) uses it; one that looks at each frame alone
+    /// (a model) need not implement it.
+    fn camera_motion(&mut self, _ego: crate::ego::EgoMotion) {}
 }
 
 impl<D: Detector + ?Sized> Detector for Box<D> {
@@ -114,6 +119,10 @@ impl<D: Detector + ?Sized> Detector for Box<D> {
 
     fn reset(&mut self) {
         (**self).reset()
+    }
+
+    fn camera_motion(&mut self, ego: crate::ego::EgoMotion) {
+        (**self).camera_motion(ego)
     }
 }
 

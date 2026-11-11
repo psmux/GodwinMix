@@ -54,6 +54,7 @@ pub fn seen(camera: &str, s: &Seen) -> Value {
         "picture": {"width": s.size.0, "height": s.size.1, "from": s.from},
         "age_ms": s.last_frame.map(|t| t.elapsed().as_millis() as u64),
         "error": s.error,
+        "camera_motion": {"dx": round(s.out.ego.dx), "dy": round(s.out.ego.dy), "zoom": round(s.out.ego.zoom)},
         "detector": {"running": s.detector.running.slug(), "wanted": s.detector.wanted.slug(), "stage": s.detector.stage, "why": s.detector.why},
     })
 }

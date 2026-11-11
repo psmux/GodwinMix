@@ -5,6 +5,7 @@
 
 mod appearance;
 mod assoc;
+mod camera;
 mod hungarian;
 mod kalman;
 mod life;

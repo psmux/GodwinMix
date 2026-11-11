@@ -13,6 +13,7 @@
 
 pub mod choose;
 pub mod detect;
+pub mod ego;
 pub mod follow;
 pub mod frame;
 pub mod framing;
@@ -23,6 +24,7 @@ pub mod track;
 pub use choose::{Choice, Choose, ChooseConfig, Chooser, Fallback, FollowState};
 pub use detect::motion::{MotionConfig, MotionDetector};
 pub use detect::{Class, Detection, Detector, Joint, Keypoint, Keypoints};
+pub use ego::{CameraOptics, EgoMotion};
 pub use follow::{FollowConfig, FollowOutput, Follower};
 pub use frame::{FrameError, FrameRef, PixelFormat};
 pub use framing::{frame_target, FrameStyle, Framing};

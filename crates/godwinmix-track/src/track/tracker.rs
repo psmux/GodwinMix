@@ -6,6 +6,7 @@ use std::time::Instant;
 use super::assoc::Assoc;
 use super::{BoxFilter, Histogram, Track, TrackId, TrackState, TrackerConfig};
 use crate::detect::Detection;
+use crate::ego::EgoMotion;
 use crate::frame::FrameRef;
 
 /// One track and what the tracker keeps beside it.
@@ -31,6 +32,8 @@ pub struct Tracker {
     pub(super) next_id: u32,
     pub(super) last_t: Option<Instant>,
     pub(super) frames: u64,
+    /// The camera's motion over the step being taken; see `camera.rs`.
+    pub(super) ego: EgoMotion,
 }
 
 impl Default for Tracker {
@@ -51,6 +54,7 @@ impl Tracker {
             next_id: 1,
             last_t: None,
             frames: 0,
+            ego: EgoMotion::STILL,
         }
     }
 
@@ -119,6 +123,10 @@ impl Tracker {
                 s.kf.damp((-dt * 2.0).exp());
             }
             s.kf.predict(dt);
+            if !self.ego.is_still() {
+                let (dx, dy, scale) = self.ego.over(dt);
+                s.kf.carry(dx, dy, scale);
+            }
         }
     }
 
