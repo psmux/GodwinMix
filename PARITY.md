@@ -58,8 +58,8 @@ Mark an item done only when it is merged with its tests and its how to page.
 | Item | Today | Where it goes | State |
 |---|---|---|---|
 | Virtual camera out, for Zoom and Teams | none | plugin, one backend per OS | |
-| PTZ control: VISCA over IP, ONVIF moves, Canon IP, presets, auto tracking | ONVIF discovery only | `godwinmix-track`, `godwinmix-ptz` and a `ptz` plugin, see CAMERA_PLAN.md | planned |
-| ATEM switcher control, several at once, with tally and follow modes | none | `godwinmix-atem` and an `atem` plugin, see CAMERA_PLAN.md | planned |
+| PTZ control: VISCA over IP, ONVIF moves, Canon IP, presets, auto tracking | ONVIF discovery only | `godwinmix-track`, `godwinmix-ptz` and a `ptz` plugin | done in 0.3.33 |
+| ATEM switcher control, several at once, with tally and follow modes | none | `godwinmix-atem` and an `atem` plugin | done in 0.3.33 |
 | SDI and DeckLink out | the DeckLink plugin is a source only | plugin, `decklink` | |
 | Window capture by handle | a region where the window sits | plugin, `screen` | |
 | Game capture on Windows | none | plugin, `screen` | |

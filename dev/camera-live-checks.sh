@@ -94,6 +94,6 @@ n="$(grep -c 'took CPgI' "$WORK/atem.log")"
 [[ "$n" -lt 8 ]] && ok "$n programme commands sent to the switcher in all" || bad "$n programme commands: a loop?"
 tool atem/mode '{"switcher":"atem-main","mode":"own"}' >/dev/null
 
-step "the plugins are still healthy"
-h="$(api plugins | jq_ '",".join(sorted(p["name"] + "=" + str(p.get("state")) for p in (d if isinstance(d, list) else d.get("plugins", [])) if p["name"] in ("ptz", "atem")))')"
-[[ "$h" != *failed* && -n "$h" ]] && ok "$h" || bad "$h"
+step "the plugins are still healthy, never restarted"
+h="$(api plugins | jq_ '",".join(sorted(i["instance"] + "=" + i["state"] + "/" + str(i["restarts"]) + "/" + str(i["rss_bytes"] // 1048576) + "MB" for p in (d if isinstance(d, list) else d.get("plugins", [])) if p["name"] in ("ptz", "atem") for i in p["instances"]))')"
+[[ "$h" == *"atem-atem=ready/0/"* && "$h" == *"ptz-ptz=ready/0/"* ]] && ok "$h" || bad "$h"

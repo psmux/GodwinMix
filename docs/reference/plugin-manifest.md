@@ -85,6 +85,7 @@ one containing `..`, is refused.
 | `placements` | array of strings | yes | At least one of `in-process`, `sidecar`, `node`, `wasm` |
 | `process` | string | no | `per-instance` (the default) or `singleton` |
 | `wasi` | array of strings | no | `filesystem`, `network`, or both. Read only at the `wasm` placement, and only half a grant: see below |
+| `core_scopes` | array of strings | no | `read`, `operate`, or both: core scopes the plugin's own token carries on top of its own tools. `admin` is refused. See below |
 
 `per-instance` means one process per instance, which is the simpler main loop
 and what the templates use. `singleton` means one process serves every instance,
@@ -510,6 +511,25 @@ Media never crosses a component boundary. A `source`, `output`, `filter` or
 `encoder` asked to run at the `wasm` placement is refused with `-32005`, and
 `data.placements` names the three that do carry media. See
 [why WASM is not on the frame path](../explanation/why-wasm-is-not-on-the-frame-path.md).
+
+### `core_scopes`, and what installing grants
+
+A plugin's token reaches its own tools and nothing else, unless its manifest
+asks for more. `core_scopes = ["read"]` lets it read state, stills and the
+`/mjpeg/` previews, which is what `ptz` needs to track. `core_scopes =
+["operate"]` lets it take and change sources too, which is what `atem`,
+`director` and `osc` need; `operate` includes `read`. A manifest that lists
+`admin` does not validate: removing sources, tokens and plugins stays with a
+person.
+
+Installing the plugin is the grant. `plugin.describe` shows the list, and an
+operator who wants less writes a shorter one in the plugin's settings table,
+which can narrow the manifest and never widen it:
+
+```toml
+[plugins.atem]
+core_scopes = ["read"]    # watch the switcher, never take
+```
 
 ### `wasi`, and why it takes two
 

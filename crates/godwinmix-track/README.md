@@ -72,6 +72,25 @@ tracker carries each person's keypoints along with their box in between.
 The quantised MoveNet build was tried and is slower in tract (120 ms) and
 less accurate, so the fp32 one is used.
 
+### On a Raspberry Pi 4
+
+One core of a Raspberry Pi 4 Model B, a static `aarch64-unknown-linux-musl`
+build made with `cargo zigbuild --release --features tract`, on 2026-11-11.
+The bench was the criterion one of that day; the YOLOX row is the `follow`
+example's own per frame time.
+
+| Stage | Time a frame |
+|---|---|
+| detect: motion, 320x180 | 300 µs |
+| track: 5 people | 4.6 µs |
+| choose, frame and steer | 0.67 µs |
+| whole chain, motion | 325 µs |
+| whole chain, YOLOX nano at 320 wide, a frame it detects on | 107 ms |
+
+So a Pi follows on motion with room to spare, and with YOLOX it detects
+about nine times a second on one core. Following at 10 frames a second and
+detecting on one in three costs about a third of a core.
+
 `tests/budget.rs` fails when the motion chain allocates after warm up or, in
 a release build, goes over the budget. The tract backends allocate inside
 tract on each run; nothing else does.

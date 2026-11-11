@@ -33,11 +33,15 @@ dev/plugins.sh clean
 
 `plugins/*/bin/` is in `.gitignore`.
 
-## Running a service plugin today
+## Running a service plugin
 
-`SidecarService` and `SidecarDevice` are built in `godwinmix-host` and the
-mixer does not yet construct either, so a `service` plugin is not started by
-the core. Each of these three also runs by hand against a live core:
+An installed service plugin is started by the core, which hands it `GMX_RPC`
+and a token of its own. That token reaches the plugin's own tools, plus the
+core scopes its manifest lists in `core_scopes`: `read` for `tally` and `ptz`,
+`operate` for `osc`, `director` and `atem`. Never `admin`. An operator who
+wants less sets `[plugins.<name>] core_scopes` to a shorter list.
+
+Each also runs by hand against a live core, with an operator's token:
 
 ```sh
 gmx-osc      --url http://127.0.0.1:8080 --token TOKEN --listen 0.0.0.0:9000
@@ -46,8 +50,10 @@ gmx-director --url http://127.0.0.1:8080 --token TOKEN --min-hold 6
 gmx-atem     --url http://127.0.0.1:8080 --token TOKEN --switcher atem-main=192.0.2.10
 ```
 
-Each chooses its mode on `PluginEnv::started_by_core()`, so when the core does
-start services, neither the binaries nor the manifests change.
+Each chooses its mode on `PluginEnv::started_by_core()`.
+
+`dev/camera-live.sh` runs `ptz` and `atem` the first way, installed into a
+real core, with fake cameras and a fake ATEM.
 
 ## Testing them
 

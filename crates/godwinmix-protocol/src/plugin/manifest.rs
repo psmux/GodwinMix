@@ -1211,6 +1211,17 @@ skill = "SKILL.md"
     }
 
     #[test]
+    fn core_scopes_take_read_and_operate_and_never_admin() {
+        let ok = GOOD.replacen("[plugin]\n", "[plugin]\ncore_scopes = [\"read\", \"operate\"]\n", 1);
+        let m = Manifest::parse(&ok).unwrap();
+        assert!(m.validate(None).is_empty(), "read and operate are grantable");
+        assert_eq!(m.plugin.core_scopes, vec!["read", "operate"]);
+        let bad = GOOD.replacen("[plugin]\n", "[plugin]\ncore_scopes = [\"admin\"]\n", 1);
+        let got = Manifest::parse(&bad).unwrap().validate(None);
+        assert!(paths(&got).contains(&"plugin.core_scopes[0]"), "admin is refused: {got:?}");
+    }
+
+    #[test]
     fn every_problem_is_reported_in_one_pass() {
         let text = r#"
 [plugin]

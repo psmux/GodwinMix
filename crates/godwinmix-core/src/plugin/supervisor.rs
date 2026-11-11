@@ -319,7 +319,7 @@ impl Supervisor {
         let launched = loader::launch_for(
             provide,
             &instance,
-            loader::mint_token_narrowed(provide, &instance, self.narrowed_scopes(&manifest.plugin).as_deref()),
+            loader::mint_token_narrowed(provide, &instance, self.narrowed_scopes(manifest.plugin).as_deref()),
             loader::rpc_url(),
         )?;
         Ok(SidecarSpec {
