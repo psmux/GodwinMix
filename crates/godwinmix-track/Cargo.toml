@@ -1,0 +1,39 @@
+# The tracking engine: frames in as borrowed pixel slices, people and camera
+# commands out. No media stack and no async runtime, so the PTZ follow loop, a
+# digital crop, the director, the replay and agents can all use it. See
+# docs/explanation/auto-tracking.md and docs/reference/track.md.
+
+[package]
+name = "godwinmix-track"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Detect, track, choose, frame and steer: a pure Rust person tracking engine for camera control"
+
+[dependencies]
+# Only the `tract` feature brings anything in. Without it the crate is the
+# motion detector, the tracker and the steering, on the standard library alone.
+tract-onnx = { version = "0.23", optional = true }
+# The model download and its SHA256 check. ring is already in the tree under
+# rustls; ureq is a blocking client, so no async runtime comes with it.
+ureq = { version = "3", optional = true }
+ring = { workspace = true, optional = true }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[features]
+default = []
+# The ONNX person detector, run by tract. Fetches its model on first use.
+tract = ["dep:tract-onnx", "dep:ureq", "dep:ring"]
+
+[[bench]]
+name = "chain"
+path = "benches/chain/main.rs"
+harness = false
+
+[[example]]
+name = "follow"
+path = "examples/follow/main.rs"

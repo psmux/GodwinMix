@@ -100,6 +100,7 @@ pub mod manifest;
 pub mod media;
 pub mod pacing;
 pub mod plugin;
+pub mod reply;
 pub mod runtime;
 pub mod skill;
 pub mod transcript;
@@ -119,6 +120,7 @@ pub mod prelude {
         Device, DeviceHandler, Filter, FilterHandler, Output, OutputHandler, Reporter, Service,
         ServiceHandler, Source, SourceHandler, Transition, TransitionHandler,
     };
+    pub use crate::reply::Reply;
     pub use crate::runtime;
     pub use crate::wire::{
         codes, AudioSet, AudioState, Candidate, Canvas, Configure, Health, HealthState,

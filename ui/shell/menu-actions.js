@@ -74,6 +74,7 @@ const ACTIONS = {
   },
   "view.studio": () => setSetting("producer", !settings().producer),
   "view.reset-layout": () => workspace()?.reset(),
+  "view.volunteer": () => import("./dock-presets.js").then((m) => m.useReady(workspace(), m.READY[0])),
   "view.theme": (client, id) => applyTheme(id),
   "source.add-kind": (client, category) => addOfKind(client, category),
   "data.open": (client) => import("../panels/data/dialog.js").then((m) => m.openLiveData(client)),

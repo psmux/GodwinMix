@@ -701,7 +701,7 @@ static RPC: OnceLock<String> = OnceLock::new();
 /// So the server installs a minter at startup and the loader asks it. Without
 /// one, a plugin is given an empty `GMX_TOKEN`, which is what an embedded core
 /// with no control server should hand out.
-type Minter = Box<dyn Fn(&str, &str) -> String + Send + Sync>;
+type Minter = Box<dyn Fn(&str, &str, &[godwinmix_protocol::scope::Scope]) -> String + Send + Sync>;
 
 static MINTER: OnceLock<Minter> = OnceLock::new();
 
@@ -711,11 +711,34 @@ pub fn set_token_minter(minter: Minter) {
 
 /// A token for one instance, scoped `plugin:<name>`.
 pub fn mint_token(type_id: &str, instance: &str) -> String {
+    mint_token_narrowed(type_id, instance, None)
+}
+
+/// The same, carrying the core scopes the plugin's manifest asks for in
+/// `core_scopes`, kept to those in `allow` when the operator narrowed them
+/// with `[plugins.<name>] core_scopes`. Never wider than the manifest.
+pub fn mint_token_narrowed(type_id: &str, instance: &str, allow: Option<&[String]>) -> String {
     let plugin = type_id.split('/').next().unwrap_or(type_id);
+    let grants = grants_for(plugin, allow);
     match MINTER.get() {
-        Some(mint) => mint(plugin, instance),
+        Some(mint) => mint(plugin, instance, &grants),
         None => String::new(),
     }
+}
+
+/// What a plugin's token carries beyond its own tools.
+pub fn grants_for(plugin: &str, allow: Option<&[String]>) -> Vec<godwinmix_protocol::scope::Scope> {
+    use godwinmix_protocol::scope::Scope;
+    let asked = get(plugin).map(|p| p.manifest.plugin.core_scopes.clone()).unwrap_or_default();
+    asked
+        .iter()
+        .filter(|s| allow.is_none_or(|a| a.iter().any(|x| x == *s)))
+        .filter_map(|s| match s.as_str() {
+            "read" => Some(Scope::Read),
+            "operate" => Some(Scope::Operate),
+            _ => None,
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

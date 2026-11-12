@@ -1,0 +1,189 @@
+[plugin]
+name = "atem"
+version = "0.1.0"
+api = 1
+description = "Blackmagic ATEM switchers: several at once, every bus, keyer, aux and macro as a tool, and modes where GodwinMix and the switcher cut together"
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "singleton"
+# `operate` so follow and lead can watch takes and make them. Not `admin`.
+core_scopes = ["operate"]
+
+# Staged into bin/ by `dev/plugins.sh build` or `./build`: a workspace
+# member's target directory sits above the plugin, and a manifest path may not
+# climb out of the plugin's own directory.
+[run]
+bin = { "linux-x86_64" = "bin/gmx-atem", "linux-aarch64" = "bin/gmx-atem", "macos-aarch64" = "bin/gmx-atem", "macos-x86_64" = "bin/gmx-atem", "windows-x86_64" = "bin/gmx-atem.exe" }
+
+[[provides]]
+kind = "service"
+id = "atem"
+settings = "schemas/atem.json"
+skill = "skills/atem/SKILL.md"
+capabilities = ["health"]
+
+
+[[tools]]
+name = "list"
+description = "List the connected switchers, whether each is up, why not when it is not, and its mode. Example: list {} answers {switchers: [{id: \"atem-main\", name: \"Main switcher\", connected: true, mode: \"follow\", why: null}]}."
+input = "schemas/tools/list.json"
+output = "schemas/tools/list.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "state"
+description = "Everything one switcher has said about itself: product, firmware, inputs with long and short names, each M/E's programme, preview, transition and upstream keys, the downstream keys with on air and tie, fade to black, aux outputs, macros, tally and the source map. Example: state {switcher: \"atem-main\"}."
+input = "schemas/tools/state.json"
+output = "schemas/tools/state.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "tally"
+description = "Which inputs are on programme and preview, and the same by GodwinMix source id through the map. Without a switcher, every mapped source across every switcher, programme on any winning. Example: tally {} answers {sources: {\"cam-pulpit\": \"program\"}}."
+input = "schemas/tools/tally.json"
+output = "schemas/tools/tally.out.json"
+annotations = { readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "connect"
+description = "Start talking to a switcher, under a slug of your choosing; it keeps reconnecting by itself until disconnect. Example: connect {id: \"atem-main\", address: \"192.0.2.10\", name: \"Main switcher\", mode: \"follow\", map: {\"cam-pulpit\": 1}}."
+input = "schemas/tools/connect.json"
+output = "schemas/tools/connect.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "disconnect"
+description = "Close a switcher's session and forget it. Example: disconnect {switcher: \"atem-overflow\"}."
+input = "schemas/tools/disconnect.json"
+output = "schemas/tools/disconnect.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "map"
+description = "Say which ATEM input shows a GodwinMix source, for follow, lead, tally and inputs given by source id. A null input removes it. Example: map {switcher: \"atem-main\", source: \"cam-pulpit\", input: 1}."
+input = "schemas/tools/map.json"
+output = "schemas/tools/map.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "mode"
+description = "Set how a switcher moves with GodwinMix: own, follow or lead. Example: mode {switcher: \"atem-main\", mode: \"follow\"}."
+input = "schemas/tools/mode.json"
+output = "schemas/tools/mode.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "cut"
+description = "Cut: swap programme and preview on an M/E at once. Example: cut {switcher: \"atem-main\", me: 0}."
+input = "schemas/tools/cut.json"
+output = "schemas/tools/cut.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "auto"
+description = "Run the selected transition at its rate, from preview to programme. Example: auto {switcher: \"atem-main\", me: 0}."
+input = "schemas/tools/auto.json"
+output = "schemas/tools/auto.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "preview"
+description = "Put an input on preview. Example: preview {switcher: \"atem-main\", me: 0, input: 2}."
+input = "schemas/tools/preview.json"
+output = "schemas/tools/preview.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "program"
+description = "Put an input on programme at once, with no transition. Example: program {switcher: \"atem-main\", me: 0, input: 2}."
+input = "schemas/tools/program.json"
+output = "schemas/tools/program.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "transition"
+description = "Set the next transition's style, its rate in frames, or move the bar (0 to 1). Rates are set for mix, dip and wipe. Example: transition {switcher: \"atem-main\", me: 0, style: \"mix\", rate: 25}."
+input = "schemas/tools/transition.json"
+output = "schemas/tools/transition.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "dsk"
+description = "A downstream keyer: on or off air at once, auto (its own transition), or tie (to the next transition; toggles unless tie is given). Example: dsk {switcher: \"atem-main\", keyer: 0, action: \"auto\"}."
+input = "schemas/tools/dsk.json"
+output = "schemas/tools/dsk.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "usk"
+description = "Put an upstream keyer on or off air. Example: usk {switcher: \"atem-main\", me: 0, keyer: 0, on: true}."
+input = "schemas/tools/usk.json"
+output = "schemas/tools/usk.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "ftb"
+description = "Fade to black, or back from it, at the fade rate. Example: ftb {switcher: \"atem-main\"}."
+input = "schemas/tools/ftb.json"
+output = "schemas/tools/ftb.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+# AUX is a reserved file name on Windows, with any extension, so this tool's
+# schemas are named aux_source.
+[[tools]]
+name = "aux"
+description = "Route an input to an aux output, counted from 0. Example: aux {switcher: \"atem-main\", aux: 0, input: 10010} sends the programme to aux 1."
+input = "schemas/tools/aux_source.json"
+output = "schemas/tools/aux_source.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = true, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+[[tools]]
+name = "macro"
+description = "Run a macro saved on the switcher, by its index, or stop the one running. Example: macro {switcher: \"atem-main\", index: 0, action: \"run\"}."
+input = "schemas/tools/macro.json"
+output = "schemas/tools/macro.out.json"
+annotations = { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = true }
+user_invocable = true
+model_invocable = true
+
+# `gmx plugin add ./plugins/atem` runs this when bin/gmx-atem is not there.
+# The command runs in the directory you named: this plugin is a workspace
+# member and its dependencies are path dependencies two levels up.
+[build]
+command = "sh build"
+output = "bin/gmx-atem"

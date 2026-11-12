@@ -222,6 +222,12 @@ pub trait Service: Send {
     fn tool_call(&mut self, _name: &str, _arguments: Value) -> Result<ToolResult, RpcError> {
         Err(not_implemented("tool.call", "tools"))
     }
+    /// A tool call answered through `reply`, now or from another thread, so
+    /// a slow tool does not hold up the calls behind it. By default it is
+    /// `tool_call`, answered at once and in order.
+    fn tool_call_later(&mut self, name: &str, arguments: Value, reply: crate::reply::Reply) {
+        reply.tool(self.tool_call(name, arguments));
+    }
     fn call(&mut self, method: &str, _params: Value) -> Result<Value, RpcError> {
         Err(unknown_method(method))
     }
@@ -294,6 +300,16 @@ pub trait Handler: Send {
     fn on_health(&mut self) -> Health;
     /// Everything else, already checked against the state machine.
     fn on_call(&mut self, method: &str, params: Value) -> Result<Value, RpcError>;
+    /// Whether `method` is answered through [`Handler::on_call_later`]
+    /// rather than `on_call`.
+    fn answers_later(&self, _method: &str) -> bool {
+        false
+    }
+    /// Take a call and answer it through `reply`, now or later and from any
+    /// thread. The runtime moves on to the next call as soon as this returns.
+    fn on_call_later(&mut self, method: &str, params: Value, reply: crate::reply::Reply) {
+        reply.send(self.on_call(method, params));
+    }
     /// Called before the process exits, however that came about.
     fn on_shutdown(&mut self, _reason: &str) {}
     /// Whether this method puts the plugin into `running` or back out of it.
@@ -457,6 +473,17 @@ impl<S: Service> Handler for ServiceHandler<S> {
                 json(self.0.tool_call(&call.name, call.arguments)?)
             }
             other => self.0.call(other, params),
+        }
+    }
+
+    fn answers_later(&self, method: &str) -> bool {
+        method == "tool.call"
+    }
+
+    fn on_call_later(&mut self, method: &str, params: Value, reply: crate::reply::Reply) {
+        match parse::<crate::wire::ToolCall>(method, params) {
+            Ok(call) => self.0.tool_call_later(&call.name, call.arguments, reply),
+            Err(e) => reply.send(Err(e)),
         }
     }
 

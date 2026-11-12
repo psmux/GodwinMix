@@ -191,6 +191,10 @@
           "check": "flowmap"
         },
         {
+          "command": "view.volunteer",
+          "title": "Volunteer layout"
+        },
+        {
           "command": "view.reset-layout",
           "title": "Reset layout"
         },

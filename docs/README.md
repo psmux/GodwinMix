@@ -54,6 +54,11 @@ Start here if you have never run it.
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
 * [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
+* [Run PTZ cameras from Sources and Preview](how-to/run-ptz-cameras-from-sources-and-preview.md): camera properties, following a speaker, saved shots, the Preview overlay and an ATEM, with simulated cameras to practise on
+* [Connect an ATEM switcher](how-to/connect-an-atem.md): one or several, driven from the window or an agent, following or leading GodwinMix's programme
+* [Add a PTZ camera](how-to/add-a-ptz-camera.md): VISCA, ONVIF or a Canon CR-N camera, its picture, the joystick and presets
+* [Auto track a speaker](how-to/auto-track-a-speaker.md): have a PTZ camera follow one person and keep them framed
+* [Track people in a picture](how-to/track-people-in-a-picture.md): `godwinmix-track` from your own Rust code, on any frames
 * [Use the teleprompter](how-to/use-the-teleprompter.md): scripts on the desk, any number of screens in step, a mirror for the glass, keys and pedals
 * [Invite a guest](how-to/invite-a-guest.md): a link with a key of its own, a return without their own voice, and talkback
 * [Instant replay and the replay buffer](how-to/instant-replay.md): mark in and out, play back slow on any angle, save the last minutes to a file
@@ -234,6 +239,11 @@ Start here if you have never run it.
 * [Media library folders and tags](reference/media-library.md)
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
+* [The camera and switcher controls' calls](reference/camera-controls.md): every `ptz`, `track` and `atem` tool camera properties, the Preview overlay and switcher properties send
+* [The atem plugin](reference/atem.md): its tools, the state it answers, follow and lead, and tally
+* [The ATEM network protocol](reference/atem-protocol.md): packets, the session, and every block and command `godwinmix-atem` reads and sends
+* [The ptz plugin](reference/ptz.md): settings, every tool, the drivers and what each protocol can do
+* [godwinmix-track](reference/track.md): the tracking engine's layers, types and settings, and building it for a Raspberry Pi
 * [The prompter](reference/prompter.md): `prompter.*`, rows, the shared position, its events and `/prompter/`
 * [Guest invites](reference/guest-invites.md): `guest.*`, `/guest/<id>/whip` and `/whep`, what is made for a guest, and what one costs
 * [Replay](reference/replay.md): `[replay]`, the rings, `replay.*`, the replay source, the keys and what an angle costs
@@ -248,6 +258,7 @@ Start here if you have never run it.
 
 ## Explanation
 
+* [How auto tracking works](explanation/auto-tracking.md): detecting, tracking, choosing, framing and steering, and a camera that moves
 * [Why the programme never stops](explanation/why-the-programme-never-stops.md)
 * [Nothing runs unless asked](explanation/nothing-runs-unless-asked.md)
 * [Why the full screen output is a page and not a video sink](explanation/full-screen-output.md)

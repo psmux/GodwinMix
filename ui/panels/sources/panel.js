@@ -124,14 +124,18 @@ class SourcesPanel extends HTMLElement {
     this.ro.observe(this.grid);
 
     this.render(this.client.state);
+    // PTZ camera buttons on the tiles.
+    import("../camera/tiles.js").then((m) => (this.cameras = m.cameraTiles(this)));
   }
 
   setWorkspaceActive(active) {
     setWorkspaceActive(this, active);
+    this.cameras?.active(active);
   }
 
   disconnectedCallback() {
     clearInterval(this.stillTimer);
+    this.cameras?.active(false);
     for (const off of this.offs || []) off();
     this.offs = [];
     if (this.drag) this.drag.destroy();
@@ -251,6 +255,7 @@ class SourcesPanel extends HTMLElement {
 
     this.paintEmpty(s, list);
     this.retune();
+    this.cameras?.paint();
   }
 
   paintScope() {
@@ -562,6 +567,12 @@ class SourcesPanel extends HTMLElement {
     return openInteract(this.client, source);
   }
 
+  /** Camera properties, for a PTZ camera's source. */
+  openCamera(id) {
+    const source = this.client.store.source(id);
+    if (source) import("../camera/props.js").then((m) => m.openCamera(this.client, source));
+  }
+
   /** The settings drawer, fetched on the first gear click and not before. */
   async openDrawer(id, section) {
     const source = this.client.store.source(id);
@@ -601,6 +612,7 @@ class SourcesPanel extends HTMLElement {
       id && { label: "Rename", key: key("tray.rename") || "F2", disabled: many, run: () => this.beginRename(id) },
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
+      id && !many && { label: "Camera", run: () => this.openCamera(id) },
       id && !many && this.client.store.source(id)?.page && { label: "Interact with the page", run: () => this.interact(id) },
       ...look,
       id && { kind: "separator" },

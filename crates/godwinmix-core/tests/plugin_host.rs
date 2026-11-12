@@ -134,7 +134,7 @@ fn a_plugin_is_told_where_the_core_is_and_given_a_token() {
     }
     loader::set_rpc_url("ws://127.0.0.1:23399/rpc".into());
     let tokens = godwinmix_protocol::scope::Tokens::new(Vec::new(), false);
-    loader::set_token_minter(Box::new(move |plugin, instance| tokens.mint_for_plugin(plugin, instance, None)));
+    loader::set_token_minter(Box::new(move |plugin, instance, grants| tokens.mint_for_plugin_with(plugin, instance, None, grants)));
     let (dir, supervisor) = install("rpc");
     let env = echo(&supervisor, "echo")["structuredContent"]["env"].clone();
     assert_eq!(env["GMX_RPC"], "ws://127.0.0.1:23399/rpc", "{env}");

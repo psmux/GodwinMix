@@ -11,6 +11,7 @@ import { fillNote, sceneNotRunning } from "../scenes/fix-note.js";
 import { sceneKit, armedScene as armedName, follow, nextUp, whyText } from "./studio-next.js";
 import { paintSlots } from "./studio-slots.js";
 import { settings } from "../../shell/settings.js";
+import { placeCamera } from "./studio-camera.js";
 
 export { sceneKit };
 
@@ -68,4 +69,5 @@ export function render(panel, s) {
   fillNote(panel.previewNote, panel.client, missing,
     () => ({ client: panel.client, scenes: kit, scene: summary.id }),
     `The take goes ahead without ${missing.length === 1 ? "it" : "them"}.`);
+  placeCamera(panel);
 }

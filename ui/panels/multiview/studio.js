@@ -24,6 +24,7 @@ import { picker } from "./transition-picker.js";
 import { effects } from "./fx-gallery.js";
 import { rateMenu } from "./monitor-rate.js";
 import { onCutoutReadiness } from "../../shell/cutout-ready.js";
+import { watchCameras } from "./studio-camera.js";
 
 export { retunePreview, releasePreview, render };
 
@@ -120,6 +121,7 @@ export function show(panel, producer) {
   if (!panel.takeBar) return;
   panel.previewWrap.hidden = panel.takeBar.hidden = !producer;
   panel.classList.toggle("studio", producer);
+  watchCameras(panel, producer);
   if (!producer) {
     panel.picker.close();
     if (panel.effects) panel.effects.close();

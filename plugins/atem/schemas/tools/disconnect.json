@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "disconnect",
+  "description": "Close a switcher's session and forget it.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    }
+  },
+  "required": [
+    "switcher"
+  ],
+  "additionalProperties": false
+}

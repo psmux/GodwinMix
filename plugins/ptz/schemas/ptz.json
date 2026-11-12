@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PTZ cameras",
+  "description": "The cameras to drive, how tracking frames a person, and where presets' pictures are kept. Cameras can also be added while the plugin runs, with camera_add.",
+  "type": "object",
+  "properties": {
+    "cameras": {
+      "type": "array",
+      "title": "Cameras",
+      "description": "One entry per camera. A camera with a mistake in it is left out and named in the plugin's log; the others still work.",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "A slug naming the camera." },
+          "protocol": { "type": "string", "enum": ["visca-ip", "visca-tcp", "onvif", "canon", "fake"], "default": "visca-ip", "description": "How the camera is spoken to." },
+          "address": { "type": "string", "description": "The camera's IP address, with :port when it is not the protocol's usual one." },
+          "user": { "type": "string", "description": "The camera's login, for ONVIF and Canon." },
+          "password": { "type": "string", "description": "The camera's password.", "x-gmx-secret": true },
+          "profile": { "type": "string", "description": "ONVIF only: the media profile to steer." },
+          "source": { "type": "string", "description": "The mixer source showing this camera, for presets' pictures and for tracking." },
+          "bus": { "type": "string", "description": "Linux and macOS: a frame bus name to read the picture from instead." },
+          "optics": {
+            "type": "object",
+            "title": "Optics",
+            "description": "The camera's field of view and top speeds, so tracking can tell the camera's own pan, tilt and zoom from people walking. Each field left out keeps its default, which suits a 20x camera at a mid zoom; the field of view is for the zoom the camera mostly tracks at.",
+            "properties": {
+              "hfov_deg": { "type": "number", "minimum": 1, "maximum": 180, "default": 30, "description": "Horizontal field of view, degrees." },
+              "vfov_deg": { "type": "number", "minimum": 1, "maximum": 180, "default": 17, "description": "Vertical field of view, degrees." },
+              "pan_deg_s": { "type": "number", "minimum": 0, "maximum": 720, "default": 60, "description": "Degrees a second at full pan speed." },
+              "tilt_deg_s": { "type": "number", "minimum": 0, "maximum": 720, "default": 30, "description": "Degrees a second at full tilt speed." },
+              "zoom_rate": { "type": "number", "minimum": 0, "maximum": 10, "default": 0.7, "description": "The natural log of how much the picture grows in a second at full zoom speed: 0.7 doubles it." }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "examples": [
+        [
+          { "id": "cam-pulpit", "protocol": "visca-ip", "address": "192.0.2.20", "source": "pulpit" },
+          { "id": "cam-wide", "protocol": "canon", "address": "192.0.2.21", "user": "operator", "password": "camera-password", "source": "wide" }
+        ],
+        [ { "id": "cam-demo", "protocol": "fake" } ]
+      ]
+    },
+    "framing": {
+      "type": "string",
+      "title": "Framing",
+      "description": "How tracking frames a person when a follow starts: close is head and shoulders, waist from the waist up, full the whole person, wide the person and the space around them.",
+      "enum": ["close", "waist", "full", "wide"],
+      "default": "waist",
+      "examples": ["waist", "full"]
+    },
+    "track_width": {
+      "type": "integer",
+      "title": "Tracking width",
+      "description": "How wide a picture the follow loop reads, in pixels. 320 is what the tracking engine is tuned for; a slower machine can use less.",
+      "minimum": 160,
+      "maximum": 640,
+      "default": 320,
+      "examples": [320, 240],
+      "x-gmx-group": "Advanced"
+    },
+    "detector": {
+      "type": "string",
+      "title": "Person detector",
+      "description": "What the follow loop finds people with. yolox is a small neural network (YOLOX nano, about 7 ms a picture on a laptop core), downloaded once into the models directory; the motion detector stands in while it loads and if it cannot be had. yolox+pose adds MoveNet keypoints, for framing by the shoulders and hips, at about twice the cost. motion needs no model and suits a Raspberry Pi, but loses a person who stands still.",
+      "enum": ["yolox", "yolox+pose", "motion"],
+      "default": "yolox",
+      "examples": ["yolox", "motion"]
+    },
+    "models_dir": {
+      "type": "string",
+      "title": "Models directory",
+      "description": "Where the detector's model files are kept. Empty means GODWINMIX_MODELS, else models under GODWINMIX_HOME, else .godwinmix/models in the home directory.",
+      "default": "",
+      "x-gmx-group": "Advanced"
+    },
+    "joystick_hold_ms": {
+      "type": "integer",
+      "title": "Joystick hold",
+      "description": "How long one move call keeps a camera moving. A panel calls move about every 100 ms while the stick is held; when the calls stop, the camera stops this long after the last one.",
+      "minimum": 100,
+      "maximum": 2000,
+      "default": 300,
+      "x-gmx-unit": "ms",
+      "examples": [300],
+      "x-gmx-group": "Advanced"
+    },
+    "data_dir": {
+      "type": "string",
+      "title": "Data directory",
+      "description": "Where presets' names and pictures and the cameras added by tool are kept. Empty means ptz under GODWINMIX_HOME, or .godwinmix/ptz in the home directory.",
+      "default": "",
+      "examples": ["", "/var/lib/godwinmix/ptz"],
+      "x-gmx-group": "Advanced"
+    }
+  },
+  "additionalProperties": false
+}

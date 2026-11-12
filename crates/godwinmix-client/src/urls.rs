@@ -56,7 +56,11 @@ fn strip_scheme(base: &str) -> &str {
         .or_else(|| base.strip_prefix("wss://"))
         .or_else(|| base.strip_prefix("ws://"))
         .unwrap_or(base);
-    rest.trim_end_matches('/')
+    // A plugin is handed `GMX_RPC`, which already ends in `/rpc`. Taken as a
+    // base it must not become `/rpc/rpc`, so the address of /rpc itself is
+    // accepted wherever a base is.
+    let rest = rest.trim_end_matches('/');
+    rest.strip_suffix("/rpc").unwrap_or(rest)
 }
 
 fn query(pairs: &[(&str, Option<&str>)]) -> String {
@@ -109,5 +113,11 @@ mod tests {
         );
         assert_eq!(mjpeg("http://box", "program", None, None), "http://box/mjpeg/program");
         assert_eq!(whep("http://box", "program", None), "http://box/whep/program");
+    }
+
+    #[test]
+    fn the_gmx_rpc_address_works_as_a_base() {
+        assert_eq!(rpc("ws://127.0.0.1:8080/rpc", None), "ws://127.0.0.1:8080/rpc");
+        assert_eq!(rpc("ws://127.0.0.1:8080/rpc/", Some("t")), rpc("http://127.0.0.1:8080", Some("t")));
     }
 }

@@ -223,6 +223,7 @@ mod tests {
             placements: vec!["sidecar".into()],
             process: "per-instance".into(),
             wasi: Vec::new(),
+            core_scopes: Vec::new(),
         };
         let manifest = Manifest {
             plugin: meta,
