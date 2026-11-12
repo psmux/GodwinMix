@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.33 (2026-11-11)
+## 0.3.33 (2026-11-12)
 
 PTZ cameras that follow the speaker, Blackmagic ATEM switchers driven from GodwinMix, run from the source tiles, Preview and the Programme header, with a layout for a volunteer.
 
