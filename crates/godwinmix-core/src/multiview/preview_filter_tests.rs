@@ -109,7 +109,12 @@ async fn a_colour_filter_on_an_item_changes_the_preview_before_take_and_follows_
     let bins_back = preview_filter_bins(&mv);
     // And the filter taken off takes its bin with it.
     preview.set_scene(vec![full("cam1", Vec::new())]);
-    let (_, _) = until(&mut sub, Duration::from_secs(2), |img| colourful(img) > 0.4).await;
+    // The picture was colourful before and after, so wait on the bin: it
+    // is torn down off the mixer loop and a slow runner sees it a moment late.
+    let gone = tokio::time::Instant::now() + Duration::from_secs(5);
+    while preview_filter_bins(&mv) > 0 && tokio::time::Instant::now() < gone {
+        let _ = until(&mut sub, Duration::from_millis(100), |_| true).await;
+    }
     let bins_none = preview_filter_bins(&mv);
 
     drop(sub);
