@@ -46,9 +46,18 @@ pub fn serve() -> String {
             let frames = frames.clone();
             std::thread::spawn(move || {
                 let mut conn = conn;
-                let mut buf = [0u8; 4096];
-                let n = conn.read(&mut buf).unwrap_or(0);
-                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                // Read the whole request first: closing with any of it
+                // unread makes Linux reset the connection, and the reset can
+                // beat the answer to the client.
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match conn.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                let request = String::from_utf8_lossy(&buf).to_string();
                 let path = request.split_whitespace().nth(1).unwrap_or("/").to_string();
                 if path.starts_with("/api/v1/snapshot/pulpit") {
                     let _ = write!(conn, "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", frames[0].len());
