@@ -1,5 +1,6 @@
 // Mixer Settings: the mixer's own configuration, as opposed to Settings, which
-// is this page in this browser.
+// is this page in this browser. The Users card at the top is who may sign in;
+// see users-card.js.
 //
 // The form is drawn from `config.schema` by the schema kit, grouped by
 // section, so a core with more settings grows this dialog by itself. Save
@@ -22,7 +23,15 @@ export async function openMixerSettings(client) {
   } catch (e) {
     return refusedDialog(e);
   }
-  const { SchemaInspector } = await import("../kits/schema/index.js");
+  const [{ SchemaInspector }, { usersCard }, { toast }] = await Promise.all([
+    import("../kits/schema/index.js"),
+    import("./users-card.js"),
+    import("./toast.js"),
+  ]);
+  // Who signs in, above the settings themselves: the first thing an admin
+  // setting up a server for other people looks for.
+  const users = usersCard(client, { toast: (text) => toast({ text, ms: 8000 }) });
+  users.refresh().catch((e) => console.error("the users card could not load", e));
   let before = valuesFrom(got);
   const entries = new Map((got.keys || []).map((k) => [k.key, k]));
   const inspector = new SchemaInspector({ schema, ui: layoutFromSchema(schema), value: before });
@@ -119,6 +128,7 @@ export async function openMixerSettings(client) {
     body: el("div.col", {}, [
       el("p.dim", { style: { marginTop: "0" }, text: `These are the mixer's own settings, written to ${got.path}. They apply to every page and every operator. Each field says when a change takes effect.` }),
       banner,
+      users.el,
       inspector.el,
     ]),
     footer: [summary, el("span.grow"), el("button.btn", { text: "Close", onclick: () => m.close() }), saveButton],

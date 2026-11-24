@@ -31,15 +31,20 @@ const PANELS = [
 ];
 
 /**
- * Does this mixer want a token, and do we have the right one?
+ * Does this mixer want a token or a sign in, and do we have what it wants?
  *
  * One request, before the socket, because a 401 on a WebSocket is a silent
  * close and a 401 on a fetch is a number we can act on. The old page learned
  * this the hard way.
+ *
+ * A mixer with accounts gets a username and password page instead of the
+ * token box. The session is a cookie the browser sends by itself, so a page
+ * signed in that way connects with no token at all.
  */
 async function authorise(base) {
   let token = storedToken();
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  let wantsToken = false;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     let status;
     try {
       // A station answers core.info itself when no show runs.
@@ -55,11 +60,22 @@ async function authorise(base) {
     if (status !== 401) return token;
     // A saved token that is refused is worse than none: it fails silently on
     // every reload. Drop it and ask.
-    if (attempt > 0) storeToken(null);
+    if (token) storeToken(null);
+    token = null;
+    if (!wantsToken) {
+      const { authStatus } = await import("./client/auth.js");
+      if ((await authStatus(base)).accounts) {
+        const { askToSignIn } = await import("./shell/signin-page.js");
+        const how = await askToSignIn(base);
+        if (how === "session") continue;
+        if (how !== "token") return null;
+        wantsToken = true;
+      }
+    }
     // The prompt is fetched only by a mixer that asks for a token.
     const { askForToken } = await import("./shell/firstrun.js");
     const answer = await askForToken(
-      attempt === 0
+      attempt === 0 || wantsToken
         ? null
         : "That token was refused. Check it with whoever runs this mixer. If you are an admin here and the token is lost, set a new one in Mixer settings under Control token from a page that is already connected."
     );
@@ -67,6 +83,20 @@ async function authorise(base) {
     token = answer;
   }
   return token;
+}
+
+/** Signed out while the page was open: back to the sign in page. */
+function watchSignOut(client) {
+  let gone = false;
+  const back = () => {
+    if (gone) return;
+    gone = true;
+    location.reload();
+  };
+  client.on("signed-out", back);
+  client.on("error", (e) => {
+    if (e && e.error && e.error.data && e.error.data.signed_out) back();
+  });
 }
 
 async function main() {
@@ -83,8 +113,17 @@ async function main() {
   const proposed = proposeGalleryMode();
 
   const token = await authorise(location.origin);
+  // Who this page is, for the words of a refusal. Only asked of a mixer the
+  // page reached without a token, which is the one that may have accounts.
+  if (!token) {
+    import("./client/auth.js")
+      .then((m) => m.authStatus(location.origin))
+      .then((a) => { globalThis.gmxAccount = a; })
+      .catch(() => {});
+  }
   const client = await connect({ token });
   window.gmxClient = client;
+  watchSignOut(client);
   // A token set to confirm destructive calls asks the person here, and the
   // call goes again with the confirmation when they say yes.
   client.confirm = confirmHook;

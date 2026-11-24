@@ -380,7 +380,7 @@
         },
         {
           "command": "help.signin",
-          "title": "Address and token…"
+          "title": "Address and sign in…"
         },
         {
           "command": "help.agents",

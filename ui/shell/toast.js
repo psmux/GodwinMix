@@ -76,7 +76,12 @@ export function errorText(err, what) {
   if (method) console.debug("refused:", method, err);
   const head = what || (err && err.title) || "That did not work";
   let body = (err && err.message) || "";
-  if (err && err.code === CODES.NO_SCOPE) {
+  const account = globalThis.gmxAccount;
+  if (err && err.code === CODES.NO_SCOPE && data.signed_out) {
+    body = err.message;
+  } else if (err && err.code === CODES.NO_SCOPE && account && account.via === "session") {
+    body = `you are signed in as ${account.user}, whose role does not allow that. An admin of this mixer can change your role in Mixer settings > Users.`;
+  } else if (err && err.code === CODES.NO_SCOPE) {
     body = `this browser's token is not allowed to do that. It needs the '${data.needed}' permission, which whoever runs the mixer can add to the token.`;
   } else if (err && err.code === CODES.NO_METHOD) {
     body = "this mixer does not have that command. It may be older than this page.";
