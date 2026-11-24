@@ -114,8 +114,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The image's toolchain is whatever was stable when it was built.
+      # Into a rustup home of its own on the runner's disk. Updating the
+      # image's toolchain in place renames directories that live in a lower
+      # image layer, and overlayfs refuses that with "Invalid cross-device
+      # link", which stopped every Linux build on 2026-11-24.
       - name: Rust stable
-        run: rustup update --no-self-update stable && rustup default stable
+        run: |
+          echo "RUSTUP_HOME=$RUNNER_TEMP/rustup" >> "$GITHUB_ENV"
+          export RUSTUP_HOME="$RUNNER_TEMP/rustup"
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo --version
       - uses: Swatinem/rust-cache@v2
         with:
           key: baseline-${{ needs.tag.outputs.tag }}
