@@ -34,6 +34,8 @@ Keys accepted on every method, handled before a method runs.
 
 | Method | REST | Scope | Destructive | Since | What it does |
 |---|---|---|---|---|---|
+| `account.change_password` | `POST /api/v1/account/change_password` | read |  | 1 | Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused. |
+| `account.get` | `GET /api/v1/account` | read |  | 1 | Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all. |
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
@@ -327,10 +329,49 @@ Keys accepted on every method, handled before a method runs.
 | `token.list` | `GET /api/v1/token/list` | admin |  | 1 | Every device token: its id, label, scope and when it was made. Never a secret. |
 | `token.revoke` | `POST /api/v1/token/revoke` | admin | yes | 1 | Take a device token back. The device's next call is refused, including on a connection it already has open. |
 | `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
+| `user.add` | `POST /api/v1/user/add` | admin |  | 1 | Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token. |
+| `user.list` | `GET /api/v1/user/list` | admin |  | 1 | Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password. |
+| `user.remove` | `POST /api/v1/user/remove` | admin | yes | 1 | Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain. |
+| `user.reset_password` | `POST /api/v1/user/reset_password` | admin |  | 1 | Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out. |
+| `user.sessions` | `POST /api/v1/user/sessions` | admin |  | 1 | The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen. |
+| `user.sign_out` | `POST /api/v1/user/sign_out` | admin |  | 1 | End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call. |
+| `user.update` | `POST /api/v1/user/update` | admin |  | 1 | Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role. |
 | `vitals.get` | `GET /api/v1/vitals` | read |  | 1 | This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. |
 | `vitals.set` | `POST /api/v1/vitals/set` | operate |  | 1 | Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second. |
 
 ### Params and results
+
+#### `account.change_password`
+
+Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AccountPasswordRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedOut"
+  }
+}
+```
+
+#### `account.get`
+
+Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AccountInfo"
+  }
+}
+```
 
 #### `adbreak.end`
 
@@ -5217,6 +5258,127 @@ Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or 
 }
 ```
 
+#### `user.add`
+
+Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.
+
+MCP tool `user_add` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
+#### `user.list`
+
+Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.
+
+MCP tool `user_list` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/UserList"
+  }
+}
+```
+
+#### `user.remove`
+
+Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.
+
+MCP tool `user_remove` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserNameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
+#### `user.reset_password`
+
+Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.
+
+MCP tool `user_reset_password` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserPasswordRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
+#### `user.sessions`
+
+The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.
+
+MCP tool `user_sessions` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserSessionsRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SessionList"
+  }
+}
+```
+
+#### `user.sign_out`
+
+End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.
+
+MCP tool `user_sign_out` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserSignOutRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedOut"
+  }
+}
+```
+
+#### `user.update`
+
+Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.
+
+MCP tool `user_update` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserUpdateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
 #### `vitals.get`
 
 This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.
@@ -5331,6 +5493,9 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `GET /` | the reference web UI, served from the binary |
 | `GET /rpc` | the JSON-RPC WebSocket. Everything in `methods` is reachable here. |
 | `GET /api/v1/status` | an alias for GET /api/v1/core/status, because it is what people type |
+| `GET /api/v1/auth/status` | whether this mixer has accounts and who the request is signed in as, answered as account.get answers. Needs no credential |
+| `POST /api/v1/auth/login` | {"username", "password"} from the mixer's own page: answers with an HttpOnly, SameSite=Strict session cookie that every route then accepts as it accepts a token. 401 on a wrong pair, 429 with Retry-After after too many |
+| `POST /api/v1/auth/logout` | ends the session the request carries and clears its cookie |
 | `ANY /api/v1/{*rest}` | every method's REST route, generated by the transform rule |
 | `GET /api/v1/fx/{name}/preview.jpg` | an fx item's preview strip: twelve frames side by side in one JPEG, as fx.preview describes; the token may be ?token= |
 | `POST /api/v1/fx/upload` | ?name=pack.zip with the file as the body: kept under the fx library and imported, answering what fx.import answers |

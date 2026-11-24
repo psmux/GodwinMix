@@ -24,6 +24,32 @@ use crate::{Client, Result};
 pub const API_LEVEL: u32 = 1;
 pub const API_COMPATIBLE: u32 = 1;
 
+/// `account.get`: who this call is, in a person's terms.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccountInfo {
+    /// True when the mixer has at least one account, so the page signs people
+    /// in with a username rather than a token.
+    pub accounts: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+    /// The account this call signed in as. Absent for a token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    /// `session` for a sign in, `token` for a bearer token, `open` for a
+    /// mixer that asks for nothing.
+    pub via: String,
+}
+
+/// `account.change_password`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccountPasswordRequest {
+    pub current: String,
+    /// At least 8 characters.
+    pub password: String,
+}
+
 /// What a write does to a file.
 pub type Action = String;
 /// The values api_level 1 knows for [`Action`].
@@ -1476,6 +1502,11 @@ pub struct ConfigSetResult {
     /// Secrets sent back as the sentinel, so left as they were.
     pub unchanged: Vec<String>,
 }
+
+/// Whether destructive calls need a confirm round trip first.
+pub type ConfirmPolicy = String;
+/// The values api_level 1 knows for [`ConfirmPolicy`].
+pub const CONFIRM_POLICY_VALUES: &[&str] = &["none", "required"];
 
 /// How the bytes leave. Decides which codecs are allowed: FLV carries H.264
 /// (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
@@ -6323,6 +6354,12 @@ pub type ReturnMode = String;
 /// The values api_level 1 knows for [`ReturnMode`].
 pub const RETURN_MODE_VALUES: &[&str] = &["auto", "manual"];
 
+/// What an account may do. The same ladder as a token's scopes, in the words
+/// a person picking one for a colleague would use.
+pub type Role = String;
+/// The values api_level 1 knows for [`Role`].
+pub const ROLE_VALUES: &[&str] = &["view", "operate", "admin"];
+
 /// One row of a script.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -6711,6 +6748,40 @@ pub struct SendSetRequest {
     /// 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
     pub level: f64,
     pub source: String,
+}
+
+/// One signed in browser or device.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionInfo {
+    /// The address it signed in from, as the mixer saw it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// When it signed in, RFC 3339 in UTC.
+    pub created: String,
+    /// True for the session that made this call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<bool>,
+    /// The browser's own description of itself, shortened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// When it stops working unless the person signs in again.
+    pub expires: String,
+    /// A short id for this session, to end it with `user.sign_out`. Never the
+    /// secret.
+    pub id: String,
+    /// When this mixer last saw it, since the mixer started. Absent when it
+    /// has not been seen since then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<String>,
+    pub user: String,
+}
+
+/// `user.sessions`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionList {
+    pub sessions: Vec<SessionInfo>,
 }
 
 /// `core.session_log`.
@@ -7443,6 +7514,13 @@ pub struct SignedLink {
     pub master_url_path: String,
 }
 
+/// `user.sign_out`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignedOut {
+    pub sessions_ended: i64,
+}
+
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8138,6 +8216,23 @@ pub struct TokenRevoked {
     pub revoked: DeviceToken,
 }
 
+/// A token's own safety numbers, `[[tokens]] safety = { .. }`.
+///
+/// The core's `[safety]` table is the default. A human token may move any of
+/// these in either direction; a token marked `agent` may only make them
+/// harder, which is enforced in `godwinmix_core::safety`. Held here rather
+/// than in the engine because the dispatcher has the token and not the config.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenSafety {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flash_guard: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_takes_per_minute: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_hold_ms: Option<u64>,
+}
+
 /// `tool.call`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -8321,6 +8416,110 @@ pub struct UpdatePluginRequest {
     /// installed from last time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+}
+
+/// `user.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserAddRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmPolicy>,
+    /// Lower case letters, digits, `.`, `-` and `_`, up to 32 characters.
+    pub name: String,
+    /// At least 8 characters.
+    pub password: String,
+    /// `view`, `operate` (the default) or `admin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+}
+
+/// What `user.add`, `user.update`, `user.reset_password` and `user.remove`
+/// answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserChanged {
+    /// How many sessions the change ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions_ended: Option<i64>,
+    pub user: UserInfo,
+}
+
+/// One account, without its password.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserInfo {
+    /// `required` asks for a confirmation before a destructive call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmPolicy>,
+    /// When it was made, RFC 3339 in UTC.
+    pub created: String,
+    /// A disabled account cannot sign in, and its sessions are ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    /// The username. Also the id every take is recorded against in
+    /// `program.history`.
+    pub name: String,
+    pub role: Role,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety: Option<TokenSafety>,
+    /// How many sessions are signed in now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<i64>,
+}
+
+/// `user.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserList {
+    pub users: Vec<UserInfo>,
+}
+
+/// `user.remove` and `user.sessions`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserNameRequest {
+    pub name: String,
+}
+
+/// `user.reset_password`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserPasswordRequest {
+    pub name: String,
+    /// The new password, at least 8 characters.
+    pub password: String,
+}
+
+/// `user.sessions` with no name lists everybody's.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserSessionsRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// `user.sign_out`: one session by its id, or every session of one user.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserSignOutRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+}
+
+/// `user.update`: whatever is given changes, the rest stays.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserUpdateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmPolicy>,
+    /// True ends every session of the account at once and refuses its sign in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -8748,7 +8947,9 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 295] = [
+pub const METHODS: [MethodInfo; 304] = [
+    MethodInfo { name: "account.change_password", summary: "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/account/change_password")) },
+    MethodInfo { name: "account.get", summary: "Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/account")) },
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -9042,6 +9243,13 @@ pub const METHODS: [MethodInfo; 295] = [
     MethodInfo { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/token/list")) },
     MethodInfo { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/token/revoke")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
+    MethodInfo { name: "user.add", summary: "Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/add")) },
+    MethodInfo { name: "user.list", summary: "Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/user/list")) },
+    MethodInfo { name: "user.remove", summary: "Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/user/remove")) },
+    MethodInfo { name: "user.reset_password", summary: "Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/reset_password")) },
+    MethodInfo { name: "user.sessions", summary: "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/user/sessions")) },
+    MethodInfo { name: "user.sign_out", summary: "End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/sign_out")) },
+    MethodInfo { name: "user.update", summary: "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/update")) },
     MethodInfo { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/vitals")) },
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
@@ -9416,6 +9624,16 @@ impl Event {
 /// One method per protocol method. Thin wrappers over [`Client::call`], so a
 /// method the core gains is one regenerated line here.
 impl Client {
+    /// Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.
+    pub async fn account_change_password(&self, params: &AccountPasswordRequest) -> Result<SignedOut> {
+        self.call("account.change_password", params).await
+    }
+
+    /// Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.
+    pub async fn account_get(&self) -> Result<AccountInfo> {
+        self.call("account.get", &serde_json::json!({})).await
+    }
+
     /// Cut a running ad short, or disarm one that is scheduled.
     pub async fn adbreak_end(&self) -> Result<BTreeMap<String, Value>> {
         self.call("adbreak.end", &serde_json::json!({})).await
@@ -10879,6 +11097,41 @@ impl Client {
     /// Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
     pub async fn tool_call(&self, params: &ToolCallRequest) -> Result<BTreeMap<String, Value>> {
         self.call("tool.call", params).await
+    }
+
+    /// Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.
+    pub async fn user_add(&self, params: &UserAddRequest) -> Result<UserChanged> {
+        self.call("user.add", params).await
+    }
+
+    /// Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.
+    pub async fn user_list(&self) -> Result<UserList> {
+        self.call("user.list", &serde_json::json!({})).await
+    }
+
+    /// Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.
+    pub async fn user_remove(&self, params: &UserNameRequest) -> Result<UserChanged> {
+        self.call("user.remove", params).await
+    }
+
+    /// Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.
+    pub async fn user_reset_password(&self, params: &UserPasswordRequest) -> Result<UserChanged> {
+        self.call("user.reset_password", params).await
+    }
+
+    /// The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.
+    pub async fn user_sessions(&self, params: &UserSessionsRequest) -> Result<SessionList> {
+        self.call("user.sessions", params).await
+    }
+
+    /// End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.
+    pub async fn user_sign_out(&self, params: &UserSignOutRequest) -> Result<SignedOut> {
+        self.call("user.sign_out", params).await
+    }
+
+    /// Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.
+    pub async fn user_update(&self, params: &UserUpdateRequest) -> Result<UserChanged> {
+        self.call("user.update", params).await
     }
 
     /// This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.

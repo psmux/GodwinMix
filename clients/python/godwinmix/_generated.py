@@ -21,6 +21,24 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 API_LEVEL = 1
 API_COMPATIBLE = 1
 
+class AccountInfo(TypedDict, total=False):
+    """`account.get`: who this call is, in a person's terms."""
+
+    accounts: bool
+    # True when the mixer has at least one account, so the page signs people in with a username rather than a token.
+    role: Union[Role, None]
+    user: Optional[str]
+    # The account this call signed in as. Absent for a token.
+    via: str
+    # `session` for a sign in, `token` for a bearer token, `open` for a mixer that asks for nothing.
+
+class AccountPasswordRequest(TypedDict, total=False):
+    """`account.change_password`."""
+
+    current: str
+    password: str
+    # At least 8 characters.
+
 class AdBreakRequest(TypedDict, total=False):
     """`adbreak.start`."""
 
@@ -4248,6 +4266,30 @@ class SendSetRequest(TypedDict, total=False):
     # 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
     source: str
 
+class SessionInfo(TypedDict, total=False):
+    """One signed in browser or device."""
+
+    address: str
+    # The address it signed in from, as the mixer saw it.
+    created: str
+    # When it signed in, RFC 3339 in UTC.
+    current: bool
+    # True for the session that made this call.
+    device: str
+    # The browser's own description of itself, shortened.
+    expires: str
+    # When it stops working unless the person signs in again.
+    id: str
+    # A short id for this session, to end it with `user.sign_out`. Never the secret.
+    last_seen: Optional[str]
+    # When this mixer last saw it, since the mixer started. Absent when it has not been seen since then.
+    user: str
+
+class SessionList(TypedDict, total=False):
+    """`user.sessions`."""
+
+    sessions: List[SessionInfo]
+
 class SessionLogRequest(TypedDict, total=False):
     """`core.session_log`."""
 
@@ -4681,6 +4723,11 @@ class SignedLink(TypedDict, total=False):
     master_url_path: str
     # The multivariant playlist's path with the signed query on it. Put the page's origin in front of it for a link.
 
+class SignedOut(TypedDict, total=False):
+    """`user.sign_out`."""
+
+    sessions_ended: int
+
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
 
@@ -5110,6 +5157,13 @@ class TokenRevoked(TypedDict, total=False):
 
     revoked: DeviceToken
 
+class TokenSafety(TypedDict, total=False):
+    """A token's own safety numbers, `[[tokens]] safety = { .. }`. The core's `[safety]` table is the default. A human token may move any of these in either direction; a token marked `agent` may only make them harder, which is enforced in `godwinmix_core::safety`. Held here rather than in the engine because the dispatcher has the token and not the config."""
+
+    flash_guard: Optional[bool]
+    max_takes_per_minute: Optional[int]
+    min_hold_ms: Optional[int]
+
 class ToolCallRequest(TypedDict, total=False):
     """`tool.call`."""
 
@@ -5222,6 +5276,77 @@ class UpdatePluginRequest(TypedDict, total=False):
     id: str
     source: Optional[str]
     # Where the new build comes from. Defaults to wherever this plugin was installed from last time.
+
+class UserAddRequest(TypedDict, total=False):
+    """`user.add`."""
+
+    confirm: ConfirmPolicy
+    name: str
+    # Lower case letters, digits, `.`, `-` and `_`, up to 32 characters.
+    password: str
+    # At least 8 characters.
+    role: Role
+    # `view`, `operate` (the default) or `admin`.
+
+class UserChanged(TypedDict, total=False):
+    """What `user.add`, `user.update`, `user.reset_password` and `user.remove` answer with."""
+
+    sessions_ended: int
+    # How many sessions the change ended.
+    user: UserInfo
+
+class UserInfo(TypedDict, total=False):
+    """One account, without its password."""
+
+    confirm: ConfirmPolicy
+    # `required` asks for a confirmation before a destructive call.
+    created: str
+    # When it was made, RFC 3339 in UTC.
+    disabled: bool
+    # A disabled account cannot sign in, and its sessions are ended.
+    name: str
+    # The username. Also the id every take is recorded against in `program.history`.
+    role: Role
+    safety: Union[TokenSafety, None]
+    sessions: int
+    # How many sessions are signed in now.
+
+class UserList(TypedDict, total=False):
+    """`user.list`."""
+
+    users: List[UserInfo]
+
+class UserNameRequest(TypedDict, total=False):
+    """`user.remove` and `user.sessions`."""
+
+    name: str
+
+class UserPasswordRequest(TypedDict, total=False):
+    """`user.reset_password`."""
+
+    name: str
+    password: str
+    # The new password, at least 8 characters.
+
+class UserSessionsRequest(TypedDict, total=False):
+    """`user.sessions` with no name lists everybody's."""
+
+    name: Optional[str]
+
+class UserSignOutRequest(TypedDict, total=False):
+    """`user.sign_out`: one session by its id, or every session of one user."""
+
+    name: Optional[str]
+    session: Optional[str]
+
+class UserUpdateRequest(TypedDict, total=False):
+    """`user.update`: whatever is given changes, the rest stays."""
+
+    confirm: Union[ConfirmPolicy, None]
+    disabled: Optional[bool]
+    # True ends every session of the account at once and refuses its sign in.
+    name: str
+    role: Union[Role, None]
 
 class ValidateRequest(TypedDict, total=False):
     scene: Optional[str]
@@ -5522,6 +5647,9 @@ BridgeTransport = Literal['rtp', 'srt', 'whip']
 # A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart because it has a port of its own.
 ChannelProtocol = Literal['rtmp', 'srt', 'whip']
 
+# Whether destructive calls need a confirm round trip first.
+ConfirmPolicy = Literal['none', 'required']
+
 # Whether an interlaced picture is made progressive.
 Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
 
@@ -5631,6 +5759,9 @@ RestartHow = Literal['supervised', 'none']
 # How the programme goes back to a source that came back.
 ReturnMode = Literal['auto', 'manual']
 
+# What an account may do. The same ladder as a token's scopes, in the words a person picking one for a colleague would use.
+Role = Literal['view', 'operate', 'admin']
+
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
 
@@ -5671,6 +5802,8 @@ VideoCodec = Union[Literal['h264', 'h265', 'av1', 'vp8', 'vp9', 'mpeg2', 'prores
 Zone = Literal['full', 'lower-third', 'bug', 'top', 'bottom', 'center', 'overlay']
 
 METHODS = (
+    {"name": "account.change_password", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/account/change_password"), "summary": "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused."},
+    {"name": "account.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/account"), "summary": 'Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.'},
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
@@ -5964,6 +6097,13 @@ METHODS = (
     {"name": "token.list", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/token/list"), "summary": 'Every device token: its id, label, scope and when it was made. Never a secret.'},
     {"name": "token.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/token/revoke"), "summary": "Take a device token back. The device's next call is refused, including on a connection it already has open."},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
+    {"name": "user.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/add"), "summary": 'Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.'},
+    {"name": "user.list", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/user/list"), "summary": 'Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.'},
+    {"name": "user.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/user/remove"), "summary": 'Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.'},
+    {"name": "user.reset_password", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/reset_password"), "summary": 'Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.'},
+    {"name": "user.sessions", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/user/sessions"), "summary": "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen."},
+    {"name": "user.sign_out", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/sign_out"), "summary": 'End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.'},
+    {"name": "user.update", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/update"), "summary": "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role."},
     {"name": "vitals.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/vitals"), "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."},
     {"name": "vitals.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/vitals/set"), "summary": 'Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.'},
 )
@@ -6037,6 +6177,24 @@ class GeneratedMethods:
         raise NotImplementedError(
             "this object has no transport: build it with godwinmix.connect()"
         )
+
+    async def account_change_password(
+        self,
+        current: str,
+        password: str,
+    ) -> SignedOut:
+        """Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused."""
+        params: Dict[str, Any] = {}
+        params["current"] = current
+        params["password"] = password
+        return await self._call("account.change_password", params)
+
+    async def account_get(
+        self,
+    ) -> AccountInfo:
+        """Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all."""
+        params: Dict[str, Any] = {}
+        return await self._call("account.get", params)
 
     async def adbreak_end(
         self,
@@ -10213,6 +10371,95 @@ class GeneratedMethods:
         if source is not None:
             params["source"] = source
         return await self._call("tool.call", params)
+
+    async def user_add(
+        self,
+        name: str,
+        password: str,
+        *,
+        confirm: Optional[ConfirmPolicy] = None,
+        role: Optional[Role] = None,
+    ) -> UserChanged:
+        """Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        params["password"] = password
+        if confirm is not None:
+            params["confirm"] = confirm
+        if role is not None:
+            params["role"] = role
+        return await self._call("user.add", params)
+
+    async def user_list(
+        self,
+    ) -> UserList:
+        """Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password."""
+        params: Dict[str, Any] = {}
+        return await self._call("user.list", params)
+
+    async def user_remove(
+        self,
+        name: str,
+    ) -> UserChanged:
+        """Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("user.remove", params)
+
+    async def user_reset_password(
+        self,
+        name: str,
+        password: str,
+    ) -> UserChanged:
+        """Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        params["password"] = password
+        return await self._call("user.reset_password", params)
+
+    async def user_sessions(
+        self,
+        *,
+        name: Optional[str] = None,
+    ) -> SessionList:
+        """The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen."""
+        params: Dict[str, Any] = {}
+        if name is not None:
+            params["name"] = name
+        return await self._call("user.sessions", params)
+
+    async def user_sign_out(
+        self,
+        *,
+        name: Optional[str] = None,
+        session: Optional[str] = None,
+    ) -> SignedOut:
+        """End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call."""
+        params: Dict[str, Any] = {}
+        if name is not None:
+            params["name"] = name
+        if session is not None:
+            params["session"] = session
+        return await self._call("user.sign_out", params)
+
+    async def user_update(
+        self,
+        name: str,
+        *,
+        confirm: Optional[Union[ConfirmPolicy, None]] = None,
+        disabled: Optional[bool] = None,
+        role: Optional[Union[Role, None]] = None,
+    ) -> UserChanged:
+        """Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if confirm is not None:
+            params["confirm"] = confirm
+        if disabled is not None:
+            params["disabled"] = disabled
+        if role is not None:
+            params["role"] = role
+        return await self._call("user.update", params)
 
     async def vitals_get(
         self,

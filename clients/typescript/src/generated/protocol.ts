@@ -12,6 +12,20 @@
 export const API_LEVEL = 1;
 export const API_COMPATIBLE = 1;
 
+/** `account.get`: who this call is, in a person's terms. */
+export interface AccountInfo {
+  accounts: boolean;
+  role?: Role | null;
+  user?: string | null;
+  via: string;
+}
+
+/** `account.change_password`. */
+export interface AccountPasswordRequest {
+  current: string;
+  password: string;
+}
+
 /** What a write does to a file. */
 export type Action = "create" | "merge" | "update" | "unchanged";
 
@@ -783,6 +797,9 @@ export interface ConfigSetResult {
   path: string;
   unchanged: string[];
 }
+
+/** Whether destructive calls need a confirm round trip first. */
+export type ConfirmPolicy = "none" | "required";
 
 /**
  * How the bytes leave. Decides which codecs are allowed: FLV carries H.264
@@ -3497,6 +3514,12 @@ export interface Resync {
 /** How the programme goes back to a source that came back. */
 export type ReturnMode = "auto" | "manual";
 
+/**
+ * What an account may do. The same ladder as a token's scopes, in the words
+ * a person picking one for a colleague would use.
+ */
+export type Role = "view" | "operate" | "admin";
+
 /** One row of a script. */
 export interface Row {
   line: number;
@@ -3727,6 +3750,23 @@ export interface SendSetRequest {
   bus: string;
   level: number;
   source: string;
+}
+
+/** One signed in browser or device. */
+export interface SessionInfo {
+  address?: string;
+  created: string;
+  current?: boolean;
+  device?: string;
+  expires: string;
+  id: string;
+  last_seen?: string | null;
+  user: string;
+}
+
+/** `user.sessions`. */
+export interface SessionList {
+  sessions: SessionInfo[];
 }
 
 /** `core.session_log`. */
@@ -4109,6 +4149,11 @@ export interface SignRequest {
 export interface SignedLink {
   expires: number;
   master_url_path: string;
+}
+
+/** `user.sign_out`. */
+export interface SignedOut {
+  sessions_ended: number;
 }
 
 /** `event/snapshot`: the full state, and where in the stream it sits. */
@@ -4498,6 +4543,20 @@ export interface TokenRevoked {
   revoked: DeviceToken;
 }
 
+/**
+ * A token's own safety numbers, `[[tokens]] safety = { .. }`.
+ *
+ * The core's `[safety]` table is the default. A human token may move any of
+ * these in either direction; a token marked `agent` may only make them
+ * harder, which is enforced in `godwinmix_core::safety`. Held here rather
+ * than in the engine because the dispatcher has the token and not the config.
+ */
+export interface TokenSafety {
+  flash_guard?: boolean | null;
+  max_takes_per_minute?: number | null;
+  min_hold_ms?: number | null;
+}
+
 /** `tool.call`. */
 export interface ToolCallRequest {
   arguments?: unknown;
@@ -4598,6 +4657,69 @@ export interface Update {
 export interface UpdatePluginRequest {
   id: string;
   source?: string | null;
+}
+
+/** `user.add`. */
+export interface UserAddRequest {
+  confirm?: ConfirmPolicy;
+  name: string;
+  password: string;
+  role?: Role;
+}
+
+/**
+ * What `user.add`, `user.update`, `user.reset_password` and `user.remove`
+ * answer with.
+ */
+export interface UserChanged {
+  sessions_ended?: number;
+  user: UserInfo;
+}
+
+/** One account, without its password. */
+export interface UserInfo {
+  confirm?: ConfirmPolicy;
+  created: string;
+  disabled?: boolean;
+  name: string;
+  role: Role;
+  safety?: TokenSafety | null;
+  sessions?: number;
+}
+
+/** `user.list`. */
+export interface UserList {
+  users: UserInfo[];
+}
+
+/** `user.remove` and `user.sessions`. */
+export interface UserNameRequest {
+  name: string;
+}
+
+/** `user.reset_password`. */
+export interface UserPasswordRequest {
+  name: string;
+  password: string;
+}
+
+/** `user.sessions` with no name lists everybody's. */
+export interface UserSessionsRequest {
+  name?: string | null;
+}
+
+/** `user.sign_out`: one session by its id, or every session of one user. */
+export interface UserSignOutRequest {
+  name?: string | null;
+  session?: string | null;
+}
+
+/** `user.update`: whatever is given changes, the rest stays. */
+export interface UserUpdateRequest {
+  confirm?: ConfirmPolicy | null;
+  disabled?: boolean | null;
+  name: string;
+  role?: Role | null;
 }
 
 export interface ValidateRequest {
@@ -4809,6 +4931,8 @@ export interface FxAssignedEvent {
 
 /** The params each method takes, by method name. */
 export interface MethodParams {
+  "account.change_password": AccountPasswordRequest;
+  "account.get": Record<string, never>;
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
   "agent.setup": SetupRequest;
@@ -5102,12 +5226,21 @@ export interface MethodParams {
   "token.list": Record<string, never>;
   "token.revoke": TokenRevokeRequest;
   "tool.call": ToolCallRequest;
+  "user.add": UserAddRequest;
+  "user.list": Record<string, never>;
+  "user.remove": UserNameRequest;
+  "user.reset_password": UserPasswordRequest;
+  "user.sessions": UserSessionsRequest;
+  "user.sign_out": UserSignOutRequest;
+  "user.update": UserUpdateRequest;
   "vitals.get": Record<string, never>;
   "vitals.set": VitalsConfig;
 }
 
 /** What each method answers with, by method name. */
 export interface MethodResults {
+  "account.change_password": SignedOut;
+  "account.get": AccountInfo;
   "adbreak.end": Record<string, unknown>;
   "adbreak.start": Record<string, unknown>;
   "agent.setup": Setup;
@@ -5401,6 +5534,13 @@ export interface MethodResults {
   "token.list": TokenList;
   "token.revoke": TokenRevoked;
   "tool.call": Record<string, unknown>;
+  "user.add": UserChanged;
+  "user.list": UserList;
+  "user.remove": UserChanged;
+  "user.reset_password": UserChanged;
+  "user.sessions": SessionList;
+  "user.sign_out": SignedOut;
+  "user.update": UserChanged;
   "vitals.get": Record<string, unknown>;
   "vitals.set": Record<string, unknown>;
 }
@@ -5466,6 +5606,8 @@ export interface MethodInfo {
 }
 
 export const METHODS: readonly MethodInfo[] = [
+  { name: "account.change_password", summary: "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/account/change_password" } },
+  { name: "account.get", summary: "Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/account" } },
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
@@ -5759,6 +5901,13 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/token/list" } },
   { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/token/revoke" } },
   { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
+  { name: "user.add", summary: "Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/add" } },
+  { name: "user.list", summary: "Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/user/list" } },
+  { name: "user.remove", summary: "Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/user/remove" } },
+  { name: "user.reset_password", summary: "Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/reset_password" } },
+  { name: "user.sessions", summary: "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/user/sessions" } },
+  { name: "user.sign_out", summary: "End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/sign_out" } },
+  { name: "user.update", summary: "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/update" } },
   { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/vitals" } },
   { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/vitals/set" } },
 ] as const;
@@ -5832,6 +5981,16 @@ export class GeneratedMethods {
   /** Replaced by Client. Sends one call and answers its result. */
   _call(method: string, params: Record<string, unknown>): Promise<unknown> {
     return Promise.reject(new Error(`no transport for ${method}: build this object with connect()`));
+  }
+
+  /** Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused. */
+  accountChangePassword(params: AccountPasswordRequest): Promise<SignedOut> {
+    return this._call("account.change_password", params as unknown as Record<string, unknown>) as Promise<SignedOut>;
+  }
+
+  /** Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all. */
+  accountGet(): Promise<AccountInfo> {
+    return this._call("account.get", {}) as Promise<AccountInfo>;
   }
 
   /** Cut a running ad short, or disarm one that is scheduled. */
@@ -7297,6 +7456,41 @@ export class GeneratedMethods {
   /** Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. */
   toolCall(params: ToolCallRequest): Promise<Record<string, unknown>> {
     return this._call("tool.call", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token. */
+  userAdd(params: UserAddRequest): Promise<UserChanged> {
+    return this._call("user.add", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
+  }
+
+  /** Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password. */
+  userList(): Promise<UserList> {
+    return this._call("user.list", {}) as Promise<UserList>;
+  }
+
+  /** Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain. */
+  userRemove(params: UserNameRequest): Promise<UserChanged> {
+    return this._call("user.remove", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
+  }
+
+  /** Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out. */
+  userResetPassword(params: UserPasswordRequest): Promise<UserChanged> {
+    return this._call("user.reset_password", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
+  }
+
+  /** The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen. */
+  userSessions(params: UserSessionsRequest = {}): Promise<SessionList> {
+    return this._call("user.sessions", params as unknown as Record<string, unknown>) as Promise<SessionList>;
+  }
+
+  /** End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call. */
+  userSignOut(params: UserSignOutRequest = {}): Promise<SignedOut> {
+    return this._call("user.sign_out", params as unknown as Record<string, unknown>) as Promise<SignedOut>;
+  }
+
+  /** Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role. */
+  userUpdate(params: UserUpdateRequest): Promise<UserChanged> {
+    return this._call("user.update", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
   }
 
   /** This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. */
