@@ -11,7 +11,7 @@ export const ROLES = [
 
 /** A role picker, with `role` chosen. */
 export function roleSelect(role, onchange) {
-  const select = el("select", { "aria-label": "Role", onchange: onchange ? () => onchange(select.value) : null },
+  const select = el("select", { "aria-label": "Role", style: { width: "auto", flex: "0 0 auto" }, onchange: onchange ? () => onchange(select.value) : null },
     ROLES.map(([value, label]) => el("option", { value, text: label, selected: value === role })));
   return select;
 }
