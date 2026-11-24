@@ -130,6 +130,7 @@ Start here if you have never run it.
 * [The desktop app](how-to/desktop-app.md)
 * [Stop streaming, and quit without leaving anything running](how-to/stop-streaming-and-quit.md)
 * [Sign in from a browser](how-to/sign-in-from-a-browser.md): find the token the desktop app made, and open the mixer in a browser signed in
+* [Sign in with a username and password](how-to/sign-in-with-a-username-and-password.md): give each person an account and a role instead of a token, from the page or from a server's shell
 * [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)

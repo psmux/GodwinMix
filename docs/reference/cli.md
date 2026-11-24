@@ -250,6 +250,24 @@ because the caller is a machine and the saving is a CPU core. Pass `"off"`
 to render the whole page in the browser.
 
 
+## Accounts
+
+`godwinmix --config <file> users ...` manages the usernames and passwords
+people sign in with, on the file beside that config, whether or not the
+mixer is running. Passwords come from `--password-stdin` or
+`--password-file <path>`, never from the command line.
+
+```sh
+printf '%s\n' "$PASSWORD" | godwinmix --config /etc/godwinmix/godwinmix.toml users add sam --role admin --password-stdin
+godwinmix --config /etc/godwinmix/godwinmix.toml users list --json
+godwinmix --config /etc/godwinmix/godwinmix.toml users sessions revoke sam
+```
+
+`list`, `add`, `passwd`, `role`, `disable`, `enable`, `remove`, `sessions
+list` and `sessions revoke`. The full table, and `GODWINMIX_ADMIN_USER` for an
+unattended install, are in
+[Sign in with a username and password](../how-to/sign-in-with-a-username-and-password.md).
+
 ## Many shows
 
 `gmx shows` is for a machine running many shows at once, such as one per
