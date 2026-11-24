@@ -542,25 +542,7 @@ fn backdrop(
     comp: &gst::Element,
     shape: PreviewShape,
 ) -> Result<Vec<gst::Element>> {
-    let src = make("videotestsrc", "pv-bg")?;
-    src.set_property_from_str("pattern", "black");
-    crate::probe::set_bool(&src, "is-live", true);
-    let caps = gstutil::capsfilter(
-        "pv-bg-caps",
-        &CanvasCaps::video_at(16, 16, gst::Fraction::new(shape.fps, 1)),
-    )?;
-    pipeline.add_many([&src, &caps]).context("adding the preview backdrop")?;
-    src.link(&caps).context("linking the preview backdrop")?;
-    let pad = comp
-        .request_pad_simple("sink_%u")
-        .context("the preview compositor refused the backdrop a pad")?;
-    pad.set_property("alpha", 0.0f64);
-    pad.set_property("zorder", 0u32);
-    caps.static_pad("src")
-        .context("the preview backdrop has no src pad")?
-        .link(&pad)
-        .context("linking the preview backdrop into the compositor")?;
-    Ok(vec![src, caps])
+    gstutil::live_backdrop(pipeline.upcast_ref(), comp, "pv-bg", gst::Fraction::new(shape.fps, 1))
 }
 
 fn set_i32(pad: &gst::Pad, name: &str, v: i32) {

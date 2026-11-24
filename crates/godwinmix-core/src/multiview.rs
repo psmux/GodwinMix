@@ -819,6 +819,12 @@ impl Multiview {
             .context("adding multiview elements")?;
         gst::Element::link_many([&compositor, &vcaps, &vqueue, &vconv, &enc, &sink_el])
             .context("linking mosaic")?;
+        // On GStreamer 1.20 there is no force-live, and a mosaic whose tiles
+        // have not delivered would wait for them. A live backdrop keeps it on
+        // its own schedule there. It goes when the pipeline does.
+        if !gstutil::is_force_live(&compositor) {
+            gstutil::live_backdrop(pipeline.upcast_ref(), &compositor, "mv-bg", fps)?;
+        }
 
         let mut mv = Self {
             cfg,

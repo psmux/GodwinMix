@@ -59,6 +59,8 @@ pub struct SubCompositor {
     comp: gst::Element,
     /// comp, capsfilter. The filter chain the slot carries sits below this.
     chain: Vec<gst::Element>,
+    /// A live source and its caps, on GStreamer 1.20 only. See `build`.
+    backdrop: Vec<gst::Element>,
     legs: Vec<Leg>,
     /// A name that is unique in the pipeline, from the slot it feeds.
     tag: String,
@@ -85,7 +87,14 @@ impl SubCompositor {
         program.add_many(&chain).context("adding a sub compositor")?;
         gst::Element::link_many(chain.iter().collect::<Vec<_>>())
             .context("linking a sub compositor")?;
-        for el in &chain {
+        // GStreamer 1.20 has no force-live, so a group whose children have
+        // all stopped would stop with them. A live backdrop keeps it going.
+        let backdrop = if gstutil::is_force_live(&comp) {
+            Vec::new()
+        } else {
+            gstutil::live_backdrop(program.upcast_ref(), &comp, &format!("sub-bg-{tag}"), canvas.fps)?
+        };
+        for el in chain.iter().chain(backdrop.iter().rev()) {
             el.sync_state_with_parent().ok();
         }
         debug!(%tag, "a group is being composited on its own so a filter can see it whole");
@@ -94,6 +103,7 @@ impl SubCompositor {
             canvas: canvas.clone(),
             comp,
             chain,
+            backdrop,
             legs: Vec::new(),
             tag: tag.to_string(),
         })
@@ -224,6 +234,12 @@ impl SubCompositor {
     /// Take the whole thing out of the pipeline.
     pub fn teardown(&mut self) {
         self.clear();
+        // The backdrop first, so it never pushes into a compositor that is gone.
+        for el in self.backdrop.drain(..) {
+            el.set_locked_state(true);
+            let _ = el.set_state(gst::State::Null);
+            let _ = self.program.remove(&el);
+        }
         for el in &self.chain {
             let _ = el.set_state(gst::State::Null);
             let _ = self.program.remove(el);
