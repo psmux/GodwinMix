@@ -81,11 +81,17 @@ fn places_from(exe_dir: &Path, name: &str) -> Vec<PathBuf> {
 }
 
 /// The source checkout this executable was built in, if it was.
+///
+/// Six levels up at most. A binary is in `target/debug`, a test in
+/// `target/debug/deps`, and since Cargo's new build directory layout a test
+/// is in `target/debug/build/<package>/<hash>`, five below the checkout. With
+/// four, every first party plugin test failed on that layout with the plugin
+/// "not part of this copy of the mixer".
 pub fn checkout_of(exe_dir: &Path) -> Option<PathBuf> {
     exe_dir
         .ancestors()
         .skip(1)
-        .take(4)
+        .take(6)
         .find(|d| d.join("Cargo.toml").is_file() && d.join("plugins").is_dir())
         .map(Path::to_path_buf)
 }
