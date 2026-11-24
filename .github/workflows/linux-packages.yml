@@ -238,7 +238,7 @@ jobs:
   # The server archive on Ubuntu 22.04's own GStreamer, 1.20, which is the
   # oldest the docs promise. The .deb above carries its own 1.28 and never
   # touches the system's, which is how 0.3.33 shipped an archive that crash
-  # looped on 1.20. A test source goes on air and the programme is streamed
+  # looped on 1.20. A test source goes on air and the programme is recorded
   # for a minute.
   server-on-1-20:
     name: server archive on Ubuntu 22.04's GStreamer (${{ matrix.arch }})
@@ -258,7 +258,7 @@ jobs:
         with:
           name: core-${{ matrix.triple }}
           path: pkg
-      - name: The distribution's GStreamer, and ffmpeg to receive the stream
+      - name: The distribution's GStreamer, and ffprobe to read the recording
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |

@@ -7,12 +7,12 @@
 # the system's. The server archive uses the system's, which is 1.20 on Ubuntu
 # 22.04, and 0.3.33 crash looped there at startup on a property 1.20 does not
 # have. This unpacks the archive, starts the mixer headless, puts a test
-# source on air, streams the programme over RTMP to an ffmpeg listening on
-# this machine for `seconds` (60 by default), and fails unless /api/status
+# source on air, records the programme to a Matroska file through the
+# built in recorder for `seconds` (60 by default), and fails unless /api/status
 # answered, the mosaic drew a picture, the mixer is still the same process at
 # the end, and the recording holds that much H.264 video and AAC audio.
 #
-# Needs curl, jq and ffmpeg. Run inside a throwaway container, for example
+# Needs curl, jq and ffprobe (from ffmpeg). Run inside a throwaway container, for example
 # ubuntu:22.04 with the packages in docs/how-to/install-on-linux.md.
 set -euo pipefail
 ARCHIVE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -66,11 +66,6 @@ done
 api GET /api/status > status.json || fail "/api/status never answered"
 echo "/api/status answered, up $(jq -r '.uptime_secs' status.json) s"
 
-ffmpeg -nostdin -loglevel error -listen 1 -i "rtmp://127.0.0.1:19350/live/program" \
-    -c copy -f flv out.flv > ffmpeg.log 2>&1 &
-pids+=("$!")
-sleep 2
-
 api POST /api/sources '{"id":"bars","uri":"test://smpte","name":"Bars"}' > /dev/null || fail "adding a test source"
 for _ in $(seq 1 30); do
     state=$(api GET /api/status | jq -r '.sources[]? | select(.id=="bars") | .state')
@@ -79,9 +74,10 @@ for _ in $(seq 1 30); do
 done
 [ "$state" = "live" ] || fail "the test source never went live (last state: $state)"
 api POST /api/take '{"source":"bars"}' > /dev/null || fail "take"
-api POST /api/outputs '{"id":"check","uri":"rtmp://127.0.0.1:19350/live/program","policy":"own"}' > /dev/null \
-    || fail "adding the RTMP output"
-echo "on air, streaming for $SECS s"
+mkdir -p rec
+api POST /api/outputs "{\"id\":\"check\",\"uri\":\"record://programme\",\"type\":\"record/output\",\"params\":{\"format\":\"mkv\",\"directory\":\"$WORK/rec\"}}" > /dev/null \
+    || fail "adding the recording"
+echo "on air, recording for $SECS s"
 
 # The multiview mosaic and its cut outs, which are aggregators of their own.
 for id in program bars; do
@@ -103,9 +99,11 @@ while [ "$(date +%s)" -lt "$end" ]; do
 done
 kill -0 "$mixer" 2>/dev/null || fail "the mixer exited"
 api DELETE /api/outputs/check > /dev/null || true
-sleep 3
-
-ffprobe -v error -show_entries stream=codec_name,codec_type:format=duration -of json out.flv > probe.json \
+# The recorder finishes the file on a worker, in up to five seconds.
+sleep 6
+file=$(find rec -type f -name '*.mkv' | head -1)
+[ -n "$file" ] || fail "no recording in $WORK/rec"
+ffprobe -v error -show_entries stream=codec_name,codec_type:format=duration -of json "$file" > probe.json \
     || fail "ffprobe could not read the recording"
 duration=$(jq -r '.format.duration | tonumber | floor' probe.json)
 codecs=$(jq -r '[.streams[].codec_name] | sort | join(",")' probe.json)
