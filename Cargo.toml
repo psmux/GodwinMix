@@ -152,6 +152,20 @@ opt-level = 3
 [profile.release.package.godwinmix-framebus]
 opt-level = 3
 
+# A password check is argon2 doing a few megabytes of blake2 on purpose. Size
+# optimised, or unoptimised in a debug build, one sign in takes seconds.
+[profile.release.package.argon2]
+opt-level = 3
+
+[profile.release.package.blake2]
+opt-level = 3
+
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
 # Optimized tests without repeating the shipping binary's whole-program link.
 [profile.ci]
 inherits = "release"

@@ -41,7 +41,10 @@ pub async fn run(opts: Options) -> Result<()> {
     crate::control::methods::network::configure(&bind, opts.bind.as_ref().is_some_and(|b| *b != cfg.control.bind), &opts.config);
     // The station keeps the machine's device tokens and answers `token.*`;
     // every show reads the same file (see `child::command`).
-    let tokens = Arc::new(cfg.tokens(opts.rehearsal).with_devices(crate::devices::for_station(&opts.config)));
+    // The accounts the same way, and the station signs people in itself.
+    let accounts = crate::accounts::for_station(&opts.config);
+    crate::accounts::seed::from_env(&accounts);
+    let tokens = Arc::new(cfg.tokens(opts.rehearsal).with_accounts(accounts).with_devices(crate::devices::for_station(&opts.config)));
     crate::ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
     // When this process started, for machine.status.
     crate::control::methods::lifecycle::started_ms();

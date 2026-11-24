@@ -37,6 +37,7 @@ export class RpcTransport {
         if (this.lastSubscribe) this.socket.call("core.subscribe", this.lastSubscribe).catch(() => {});
       },
       onClose: () => this.hooks.onClose(),
+      onSignedOut: () => this.hooks.onSignedOut && this.hooks.onSignedOut(),
       onNotify: (method, params) => {
         if (!method.startsWith("event/")) return;
         this.hooks.onEvent(method.slice(6), params);

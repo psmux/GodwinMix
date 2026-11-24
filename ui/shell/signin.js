@@ -1,5 +1,8 @@
-// Help > Address and token: where this mixer is and the token this page signed
-// in with, to copy or to open in a browser already signed in.
+// Help > Address and sign in: where this mixer is and how this page signed
+// in. On a mixer with accounts that is the person's own account, with Sign
+// out and Change password, and the token sits under Advanced for agents and
+// Companion. On one without, it is the token this page signed in with, to
+// copy or to open in a browser already signed in.
 //
 // The desktop app makes its mixer's token itself on first start, so nobody
 // chose it and nobody had seen it; a browser pointed at the mixer then asked
@@ -76,9 +79,57 @@ export function signInParts(origin, token, desktop) {
   return parts;
 }
 
+/**
+ * The same for a mixer with accounts: the address, who this page is, and the
+ * token only under Advanced. `actions` holds signOut and changePassword.
+ */
+export function accountParts(origin, token, account, actions) {
+  const base = origin.replace(/\/?$/, "/");
+  const parts = [
+    el("p", { text: "Open the address in a browser on any device that reaches this mixer and sign in with a username and password. An admin adds people in Mixer settings > Users." }),
+    line("Address", el("code.grow", { text: base }), [el("button.btn.sm", { text: "Copy", onclick: () => copy(base) })]),
+  ];
+  if (account.via === "session") {
+    parts.push(
+      el("p", { text: `Signed in as ${account.user}, ${ROLE_WORDS[account.role] || account.role}.` }),
+      el("div.row", {}, [
+        el("button.btn.sm", { text: "Change password", onclick: () => actions.changePassword() }),
+        el("button.btn.sm", { text: "Sign out", onclick: () => actions.signOut() }),
+      ]),
+    );
+  } else {
+    parts.push(el("p.sm.dim", { text: "This page is signed in with a token rather than an account." }));
+  }
+  if (token) {
+    parts.push(el("details.sm", {}, [
+      el("summary.dim", { text: "Advanced: the token, for agents and Companion" }),
+      el("p.sm.dim", { text: "Agents, Bitfocus Companion and scripts still use a token. Whoever has it runs the mixer with the same rights as this page." }),
+      tokenLine(token),
+    ]));
+  }
+  parts.push(el("a", { href: HOW_TO_ACCOUNTS, target: "_blank", rel: "noopener", text: "More: signing in with a username and password" }));
+  return parts;
+}
+
+const ROLE_WORDS = { view: "who can watch", operate: "who can run the show", admin: "an admin" };
+const HOW_TO_ACCOUNTS = "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/sign-in-with-a-username-and-password.md";
+
 /** The dialog. */
-export function openSignIn() {
+export async function openSignIn() {
   const desktop = /GodwinMix-Desktop/.test(navigator.userAgent);
-  const body = el("div.col", {}, signInParts(location.origin, storedToken(), desktop));
-  return modal({ title: "Address and token", body });
+  const { authStatus, signOut } = await import("../client/auth.js");
+  const account = await authStatus(location.origin, storedToken());
+  if (!account.accounts) {
+    const body = el("div.col", {}, signInParts(location.origin, storedToken(), desktop));
+    return modal({ title: "Address and token", body });
+  }
+  const actions = {
+    signOut: async () => {
+      await signOut(location.origin);
+      location.reload();
+    },
+    changePassword: () => import("./password.js").then((p) => p.openChangePassword(window.gmxClient)),
+  };
+  const body = el("div.col", {}, accountParts(location.origin, storedToken(), account, actions));
+  return modal({ title: "Address and sign in", body });
 }

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+People can sign in to a mixer with a username and a password instead of a token. It is optional, and a mixer with no accounts works as before.
+
+* Mixer settings has a Users card at the top: add a person with a role (Watch only, Run the show, Admin), set a new password, disable, remove, see every browser that is signed in and sign any of them out. Once the first account exists, which has to be an admin, the page shows a sign in page instead of the token box, and Help > Address and sign in shows who you are, with Sign out and Change password. The token is still there, under Advanced, for agents and Companion.
+* A sign in is a token underneath. The session carries the account's role as its scope, its confirm policy and its safety numbers, and is recorded in the programme history under the username, so every scope check, rate limit and history line works as it did. It rides in an HttpOnly, SameSite=Strict cookie that REST, `/rpc`, uploads, snapshots, HLS and WHEP accept wherever they accept a token, and is refused when the browser says the request came from another origin.
+* Disabling, removing or changing the role of an account ends or refreshes its sessions at once, including a page that is only watching: a connection whose sign in or device token is taken back is now closed with code 4401 and the page goes back to signing in.
+* Passwords are argon2id hashes in `<config>.users.toml` beside the config; sessions survive a restart. Wrong passwords are held to 10 an address and 5 an account in 15 minutes, and a refusal never says whether the username exists.
+* On a server: `godwinmix --config <file> users add|list|passwd|role|disable|enable|remove|sessions`, with the password on stdin or in a file, and `GODWINMIX_ADMIN_USER` with `GODWINMIX_ADMIN_PASSWORD_FILE` to make the first admin on an unattended install. See docs/how-to/sign-in-with-a-username-and-password.md.
+* Agents get `user_list`, `user_add`, `user_update`, `user_reset_password`, `user_remove`, `user_sessions` and `user_sign_out`, admin only, and never a password or its hash.
+
 ## 0.3.33 (2026-11-12)
 
 PTZ cameras that follow the speaker, Blackmagic ATEM switchers driven from GodwinMix, run from the source tiles, Preview and the Programme header, with a layout for a volunteer.

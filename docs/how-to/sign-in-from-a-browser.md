@@ -5,9 +5,12 @@ none. The desktop app makes that token itself the first time it starts, so
 you never chose it and may never have seen it. This page says where to find
 it and how to open the mixer in a browser already signed in.
 
+A mixer can also give each person a username and password instead of a
+token. See [Sign in with a username and password](sign-in-with-a-username-and-password.md).
+
 ## On the computer that runs the mixer
 
-In the mixer's page, choose **Help > Address and token**. The dialog shows:
+In the mixer's page, choose **Help > Address and sign in**. The dialog shows:
 
 * the address the page is on, with **Copy**
 * the token this page signed in with, hidden until you press **Show**, with
@@ -28,7 +31,7 @@ named `core-token` in the app's data folder (see
 ## When a browser asks for the token
 
 A browser that opens the address without the token asks for it. Paste the
-token from **Help > Address and token** on the mixer's computer, or open the
+token from **Help > Address and sign in** on the mixer's computer, or open the
 mixer from that dialog in the first place. If you set the token yourself in
 **Mixer settings** under **Control token**, it is that one.
 

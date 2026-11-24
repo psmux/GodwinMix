@@ -162,6 +162,49 @@ Several credentials, each with its own scopes, beside the single
 | `agent` | false | this credential belongs to an unattended agent, so its `safety` override may only tighten |
 | `safety` | none | `{ min_hold_ms, max_takes_per_minute, flash_guard }`, overriding `[safety]` for this token |
 
+## Accounts
+
+Usernames and passwords for people, optional, kept outside the config in
+`<config stem>.users.toml` beside it (`godwinmix.users.toml` for
+`godwinmix.toml`). There is nothing to set in the config itself. With no
+accounts the mixer works on tokens as before. Once one exists:
+
+* the page shows a sign in page instead of the token box;
+* a port with no token is no longer open: it asks everybody to sign in;
+* a sign in makes a session that authenticates exactly like a token whose
+  scope is the account's role (`view` is `read`, `operate` is `operate`,
+  `admin` is `admin`), with the account's `confirm` policy and `safety`
+  numbers, and is recorded in `program.history` under the username;
+* every token keeps working: `[control] token`, `[[tokens]]`, device tokens
+  and plugin tokens.
+
+The file holds argon2id password hashes and SHA-256 digests of session
+secrets, mode 0600. It is rewritten whole when somebody signs in or an admin
+changes something; manage it with Mixer settings > Users, the `user.*`
+methods or `godwinmix users`, not by hand. A file that does not parse is left
+alone and the mixer keeps the accounts it last read.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v1/auth/status` | `{"accounts", "user", "role", "via"}`: whether the mixer has accounts and who the request is. `via` is `session`, `token`, `open` or `none`. Needs no credential |
+| `POST /api/v1/auth/login` | `{"username", "password"}`. 200 with the session cookie, 401 on a wrong pair, 429 with `Retry-After` after too many, 403 from another origin, 409 when the mixer has no accounts |
+| `POST /api/v1/auth/logout` | ends the session the request carries and clears the cookie |
+
+The cookie is `gmx_session_<port>`: HttpOnly, SameSite=Strict, Path=/, 30
+days, Secure when the page is on HTTPS. Every route that takes a bearer token
+takes it: REST, `/rpc`, uploads, snapshots, HLS and WHEP. A request is refused
+the cookie when `Sec-Fetch-Site` is anything but `same-origin` or `none`, or
+when `Origin` names another host than `Host`.
+
+Sign in is held after 10 failures from one address or 5 against one username
+in 15 minutes. Sessions last 30 days. Disabling, removing or changing the role
+of an account ends or refreshes its sessions at once.
+
+The methods are `user.list`, `user.add`, `user.update`,
+`user.reset_password`, `user.remove`, `user.sessions` and `user.sign_out`
+(admin), and `account.get` and `account.change_password` (anyone signed in).
+See [Sign in with a username and password](../how-to/sign-in-with-a-username-and-password.md).
+
 ## `[[hooks]]`
 
 Your code, called when something happens. One block each. A plugin declares its
@@ -398,6 +441,9 @@ harder version. See [run a marketplace](../how-to/run-a-marketplace.md).
 | Variable | What it does |
 |---|---|
 | `GODWINMIX_TOKEN` | the control token; overrides `[control] token` |
+| `GODWINMIX_ADMIN_USER` | with `GODWINMIX_ADMIN_PASSWORD_FILE`, the first admin account, made when the mixer starts with no account at all. Ignored once any account exists |
+| `GODWINMIX_ADMIN_PASSWORD_FILE` | a file whose first line is that admin's password. Deleted once read, when the mixer may delete it |
+| `GODWINMIX_ACCOUNTS_FILE` | set by a station for each show it starts, so every show reads the station's accounts. Not for a person to set |
 | `GODWINMIX_URL` | where `gmx ctl` and `godwinmix mcp` look for a mixer |
 | `GST_DEBUG` | GStreamer's own logging, 1 to 9. Start at 3 |
 | `GMX_BROWSER_SWITCHES` | extra Chromium switches for the sidecar |

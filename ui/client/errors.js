@@ -28,7 +28,7 @@ const TITLES = {
   [CODES.NO_METHOD]: "This core does not have that command",
   [CODES.BAD_PARAMS]: "The command was not filled in correctly",
   [CODES.WRONG_STATE]: "Not ready for that yet",
-  [CODES.NO_SCOPE]: "This token is not allowed to do that",
+  [CODES.NO_SCOPE]: "This sign in is not allowed to do that",
   [CODES.SAFETY]: "Held back by the safety settings",
   [CODES.NOT_FOUND]: "Not found",
   [CODES.NO_PLACEMENT]: "That plugin cannot run there",

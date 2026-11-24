@@ -556,7 +556,11 @@ mod tests {
         // `force-live` on the aggregators is construct-only. Writing it after
         // the fact panics inside GLib, so the setter must decline instead.
         let el = gst::ElementFactory::make("compositor").build().unwrap();
-        assert!(el.find_property("force-live").is_some());
+        if el.find_property("force-live").is_none() {
+            // GStreamer 1.20, which has no force-live at all. See
+            // `gstutil::make_live_aggregator`.
+            return;
+        }
         assert!(writable_property(&el, "force-live").is_none());
         set_bool(&el, "force-live", true);
         assert!(!el.property::<bool>("force-live"), "value should not have changed");

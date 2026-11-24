@@ -41,6 +41,7 @@ import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
 import { agentsTests } from "./agents.js";
 import { signInTests } from "./signin.js";
+import { usersTests } from "./users.js";
 import { tileLevelTests } from "./tile-levels.js";
 import { recordingStopTests } from "./recording-stop.js";
 import { runningTests } from "./running.js";
@@ -3118,6 +3119,7 @@ tileLevelTests(test, eq, ok)
   })
   .then(() => agentsTests(test, eq, ok))
   .then(() => signInTests(test, eq, ok))
+  .then(() => usersTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the connect an AI agent suite threw: " + e.message);

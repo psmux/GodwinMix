@@ -25,6 +25,7 @@ pub mod channels;
 pub mod cli;
 pub mod control;
 pub mod ctl;
+pub mod accounts;
 pub mod devices;
 pub mod feeds;
 pub mod prompter;
@@ -272,6 +273,10 @@ enum Command {
     /// `godwinmix-develop` and `godwinmix-design` where that tool reads them.
     /// `--print` shows what it would write and writes nothing.
     Skill(cli::skill::SkillArgs),
+    /// Manage the accounts people sign in with: `godwinmix --config <file>
+    /// users add sam --role operate --password-stdin`. Works on the file
+    /// beside the config, with or without the mixer running.
+    Users(cli::users::UsersArgs),
     /// Run one MCP tool from a shell: `gmx tool list`, or
     /// `gmx tool add_source '{"name": "news", "uri": "template:breaking-news"}'`.
     ///
@@ -651,6 +656,7 @@ pub async fn run() -> Result<()> {
     // clap reads the new environment variable names on its own; the old ones
     // are picked up here, with the warning, for one release. See `config::env_var`.
     let mut headend = None;
+    let args_config = args.config.clone();
     match args.command.take() {
         Some(Command::Headend(h)) => headend = Some(h),
         Some(Command::Ctl { url, token, cmd }) => {
@@ -713,6 +719,14 @@ pub async fn run() -> Result<()> {
         },
         Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
         Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
+        Some(Command::Users(args)) => {
+            // The command says what it did in one line; the store's own log
+            // lines repeating it are noise to a person or an installer.
+            if std::env::var_os("RUST_LOG").is_none() {
+                logs::set_default_level(logs::LevelCode::WARN);
+            }
+            return cli::users::run(&config::path_in_force(&args_config), args.cmd);
+        }
         Some(Command::Tool { url, token, name, args }) => {
             let (url, token) = address::resolve(url, token);
             return cli::tool::run(&url, token, &name, args.as_deref()).await;

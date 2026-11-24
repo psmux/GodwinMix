@@ -93,6 +93,7 @@ sha1 = "0.10"
 # SHA-256 of a device token, so the file that keeps them holds no secret.
 # Already compiled for rustls and the engine; this adds nothing to a build.
 ring = { workspace = true }
+argon2 = "0.6"
 
 [features]
 default = ["matte", "denoise"]

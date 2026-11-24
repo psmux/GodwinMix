@@ -24,6 +24,7 @@ mod replay;
 mod agent_setup;
 pub mod channel_destinations;
 mod channels;
+mod accounts;
 mod devices;
 mod feeds;
 mod shows;
@@ -125,6 +126,7 @@ pub fn registry() -> Registry<Call> {
     shows::register(&mut reg);
     config::register(&mut reg);
     devices::register(&mut reg);
+    accounts::register(&mut reg);
     vitals::register(&mut reg);
     crate::machine::methods::register(&mut reg);
     crate::headend::methods::register(&mut reg);

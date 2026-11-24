@@ -511,6 +511,7 @@ export async function connect(opts = {}) {
       store.flush(true);
       client.emit("close");
     },
+    onSignedOut: () => client.emit("signed-out"),
     onEvent: (name, params) => client.handleEvent(name, params),
     onFrame: (frame) => client.handleFrame(frame),
   };

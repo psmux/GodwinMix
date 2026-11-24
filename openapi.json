@@ -58,6 +58,58 @@
       }
     },
     "schemas": {
+      "AccountInfo": {
+        "description": "`account.get`: who this call is, in a person's terms.",
+        "properties": {
+          "accounts": {
+            "description": "True when the mixer has at least one account, so the page signs people\nin with a username rather than a token.",
+            "type": "boolean"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "description": "The account this call signed in as. Absent for a token.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "via": {
+            "description": "`session` for a sign in, `token` for a bearer token, `open` for a\nmixer that asks for nothing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accounts",
+          "via"
+        ],
+        "type": "object"
+      },
+      "AccountPasswordRequest": {
+        "description": "`account.change_password`.",
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "password": {
+            "description": "At least 8 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "password"
+        ],
+        "type": "object"
+      },
       "Action": {
         "description": "What a write does to a file.",
         "oneOf": [
@@ -3246,6 +3298,21 @@
           "needs_restart"
         ],
         "type": "object"
+      },
+      "ConfirmPolicy": {
+        "description": "Whether destructive calls need a confirm round trip first.",
+        "oneOf": [
+          {
+            "const": "none",
+            "description": "Destructive calls go straight through. The default, and what the single\nbearer token has always done.",
+            "type": "string"
+          },
+          {
+            "const": "required",
+            "description": "A destructive call is refused once with `-32020` and a token valid for\n30 seconds; the repeat carrying `confirm` proceeds.",
+            "type": "string"
+          }
+        ]
       },
       "Container": {
         "description": "How the bytes leave. Decides which codecs are allowed: FLV carries H.264\n(and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.",
@@ -14032,6 +14099,26 @@
           }
         ]
       },
+      "Role": {
+        "description": "What an account may do. The same ladder as a token's scopes, in the words\na person picking one for a colleague would use.",
+        "oneOf": [
+          {
+            "const": "view",
+            "description": "Watches: the multiview, the programme, the state. Takes nothing.",
+            "type": "string"
+          },
+          {
+            "const": "operate",
+            "description": "Runs the show: takes, transitions, graphics, sources and outputs.",
+            "type": "string"
+          },
+          {
+            "const": "admin",
+            "description": "Everything, including Mixer settings and the users themselves.",
+            "type": "string"
+          }
+        ]
+      },
       "Row": {
         "description": "One row of a script.",
         "properties": {
@@ -14881,6 +14968,70 @@
           "bus",
           "source",
           "level"
+        ],
+        "type": "object"
+      },
+      "SessionInfo": {
+        "description": "One signed in browser or device.",
+        "properties": {
+          "address": {
+            "default": "",
+            "description": "The address it signed in from, as the mixer saw it.",
+            "type": "string"
+          },
+          "created": {
+            "description": "When it signed in, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "current": {
+            "default": false,
+            "description": "True for the session that made this call.",
+            "type": "boolean"
+          },
+          "device": {
+            "default": "",
+            "description": "The browser's own description of itself, shortened.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "When it stops working unless the person signs in again.",
+            "type": "string"
+          },
+          "id": {
+            "description": "A short id for this session, to end it with `user.sign_out`. Never the\nsecret.",
+            "type": "string"
+          },
+          "last_seen": {
+            "description": "When this mixer last saw it, since the mixer started. Absent when it\nhas not been seen since then.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user",
+          "created",
+          "expires"
+        ],
+        "type": "object"
+      },
+      "SessionList": {
+        "description": "`user.sessions`.",
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
         ],
         "type": "object"
       },
@@ -16434,6 +16585,20 @@
         ],
         "type": "object"
       },
+      "SignedOut": {
+        "description": "`user.sign_out`.",
+        "properties": {
+          "sessions_ended": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions_ended"
+        ],
+        "type": "object"
+      },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
         "properties": {
@@ -17798,6 +17963,34 @@
         ],
         "type": "object"
       },
+      "TokenSafety": {
+        "description": "A token's own safety numbers, `[[tokens]] safety = { .. }`.\n\nThe core's `[safety]` table is the default. A human token may move any of\nthese in either direction; a token marked `agent` may only make them\nharder, which is enforced in `godwinmix_core::safety`. Held here rather\nthan in the engine because the dispatcher has the token and not the config.",
+        "properties": {
+          "flash_guard": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "max_takes_per_minute": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "min_hold_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "ToolCallRequest": {
         "description": "`tool.call`.",
         "properties": {
@@ -18165,6 +18358,214 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "UserAddRequest": {
+        "description": "`user.add`.",
+        "properties": {
+          "confirm": {
+            "$ref": "#/components/schemas/ConfirmPolicy",
+            "default": "none"
+          },
+          "name": {
+            "description": "Lower case letters, digits, `.`, `-` and `_`, up to 32 characters.",
+            "type": "string"
+          },
+          "password": {
+            "description": "At least 8 characters.",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "default": "operate",
+            "description": "`view`, `operate` (the default) or `admin`."
+          }
+        },
+        "required": [
+          "name",
+          "password"
+        ],
+        "type": "object"
+      },
+      "UserChanged": {
+        "description": "What `user.add`, `user.update`, `user.reset_password` and `user.remove`\nanswer with.",
+        "properties": {
+          "sessions_ended": {
+            "default": 0,
+            "description": "How many sessions the change ended.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserInfo"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "type": "object"
+      },
+      "UserInfo": {
+        "description": "One account, without its password.",
+        "properties": {
+          "confirm": {
+            "$ref": "#/components/schemas/ConfirmPolicy",
+            "default": "none",
+            "description": "`required` asks for a confirmation before a destructive call."
+          },
+          "created": {
+            "description": "When it was made, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "disabled": {
+            "default": false,
+            "description": "A disabled account cannot sign in, and its sessions are ended.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The username. Also the id every take is recorded against in\n`program.history`.",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "safety": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenSafety"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessions": {
+            "default": 0,
+            "description": "How many sessions are signed in now.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "created"
+        ],
+        "type": "object"
+      },
+      "UserList": {
+        "description": "`user.list`.",
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/UserInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "type": "object"
+      },
+      "UserNameRequest": {
+        "description": "`user.remove` and `user.sessions`.",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "UserPasswordRequest": {
+        "description": "`user.reset_password`.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "description": "The new password, at least 8 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "password"
+        ],
+        "type": "object"
+      },
+      "UserSessionsRequest": {
+        "description": "`user.sessions` with no name lists everybody's.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "UserSignOutRequest": {
+        "description": "`user.sign_out`: one session by its id, or every session of one user.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "UserUpdateRequest": {
+        "description": "`user.update`: whatever is given changes, the rest stays.",
+        "properties": {
+          "confirm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disabled": {
+            "description": "True ends every session of the account at once and refuses its sign in.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },
@@ -18598,6 +18999,72 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/account": {
+      "get": {
+        "description": "JSON-RPC method `account.get`. Needs the `read` scope.",
+        "operationId": "account.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountInfo"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.",
+        "tags": [
+          "account"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/account/change_password": {
+      "post": {
+        "description": "JSON-RPC method `account.change_password`. Needs the `read` scope.",
+        "operationId": "account.change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountPasswordRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.",
+        "tags": [
+          "account"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/adbreak/end": {
       "post": {
         "description": "JSON-RPC method `adbreak.end`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -29775,6 +30242,262 @@
         "x-destructive": false,
         "x-idempotent": false,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/user/add": {
+      "post": {
+        "description": "JSON-RPC method `user.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAddRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/list": {
+      "get": {
+        "description": "JSON-RPC method `user.list`. Needs the `admin` scope.",
+        "operationId": "user.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/remove": {
+      "post": {
+        "description": "JSON-RPC method `user.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserNameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/reset_password": {
+      "post": {
+        "description": "JSON-RPC method `user.reset_password`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.reset_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPasswordRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/sessions": {
+      "post": {
+        "description": "JSON-RPC method `user.sessions`. Needs the `admin` scope.",
+        "operationId": "user.sessions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSessionsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/sign_out": {
+      "post": {
+        "description": "JSON-RPC method `user.sign_out`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.sign_out",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSignOutRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/update": {
+      "post": {
+        "description": "JSON-RPC method `user.update`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/vitals": {

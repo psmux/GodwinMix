@@ -32,6 +32,7 @@ Start here if you have never run it.
 * [Install on Windows](how-to/install-on-windows.md),
   [macOS](how-to/install-on-macos.md),
   [Linux](how-to/install-on-linux.md)
+* [Check a download](how-to/verify-a-download.md): its hash, and who built it
 * [Start the mixer for the first time](how-to/first-run.md)
 * [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
 * [Use a web page source by hand](how-to/use-a-web-page-by-hand.md): click, type, scroll and change its address from the desk
@@ -130,6 +131,7 @@ Start here if you have never run it.
 * [The desktop app](how-to/desktop-app.md)
 * [Stop streaming, and quit without leaving anything running](how-to/stop-streaming-and-quit.md)
 * [Sign in from a browser](how-to/sign-in-from-a-browser.md): find the token the desktop app made, and open the mixer in a browser signed in
+* [Sign in with a username and password](how-to/sign-in-with-a-username-and-password.md): give each person an account and a role instead of a token, from the page or from a server's shell
 * [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)

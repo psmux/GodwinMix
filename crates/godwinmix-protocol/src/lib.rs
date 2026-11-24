@@ -42,6 +42,7 @@
 //!
 //! See `README.md` beside this file for how another module adds a method.
 
+pub mod accounts;
 pub mod action;
 pub mod backup;
 pub mod buses;

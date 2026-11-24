@@ -238,6 +238,12 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     for name in ["token.create", "token.list", "token.revoke"] {
         assert_eq!(scope(name), Scope::Admin, "{name}");
     }
+    // So do accounts. Who you are and your own password are anybody's.
+    for name in ["user.list", "user.add", "user.update", "user.reset_password", "user.remove", "user.sessions", "user.sign_out"] {
+        assert_eq!(scope(name), Scope::Admin, "{name}");
+    }
+    assert_eq!(scope("account.get"), Scope::Read);
+    assert_eq!(scope("account.change_password"), Scope::Read);
 
     let destructive: Vec<&str> =
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
@@ -307,6 +313,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             // A device signed out cannot be signed in again with the same
             // secret: the next code is a different token.
             "token.revoke",
+            // An account removed is signed out everywhere and its password is
+            // gone: making it again needs a new one.
+            "user.remove",
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
