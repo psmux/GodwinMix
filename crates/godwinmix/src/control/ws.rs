@@ -112,6 +112,21 @@ struct Connection {
     presence_told: u64,
 }
 
+/// The close code a socket gets when its sign in or device token is taken
+/// back. The page reads it as "sign in again" rather than "reconnect".
+pub const SIGNED_OUT: u16 = 4401;
+
+/// A timer for a credential that can be taken back, None for one that can
+/// not.
+fn takeback_watch(token: &Token) -> Option<tokio::time::Interval> {
+    let can = token.secret.starts_with(crate::accounts::SECRET_PREFIX) || token.secret.starts_with(crate::devices::SECRET_PREFIX);
+    can.then(|| {
+        let mut every = tokio::time::interval(Duration::from_secs(3));
+        every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        every
+    })
+}
+
 pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     let (tx, mut rx) = socket.split();
     let mut events = ctx.app.mixer.subscribe();
@@ -169,6 +184,11 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // subscribes to `presence.changed`: holding a receiver is what makes the
     // core announce a change at all, so nobody asking costs nothing.
     let mut presence: Option<broadcast::Receiver<()>> = None;
+    // A sign in or a device token can be taken back while this socket is
+    // open. Each call checks, but a viewer who only watches makes none, so a
+    // connection on one of those looks every few seconds as well. A
+    // configured token cannot be taken back and gets no timer.
+    let mut takeback = takeback_watch(&conn.token);
 
     // Why this socket ended, said once at the bottom. Three testers watched
     // the page's "Disconnected from the mixer" dialog sit there while the
@@ -285,6 +305,18 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
                     }
                 }
                 Err(broadcast::error::RecvError::Closed) => break 'client "the scene document's channel closed",
+            },
+            _ = async {
+                match takeback.as_mut() {
+                    Some(t) => { t.tick().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {
+                if conn.ctx.app.tokens.revoked(&conn.token) {
+                    let close = axum::extract::ws::CloseFrame { code: SIGNED_OUT, reason: "signed out".into() };
+                    let _ = conn.tx.send(Message::Close(Some(close))).await;
+                    break 'client "its sign in or device token was taken back";
+                }
             },
             // Somebody came, went, or said what they are editing. A lag only
             // means several changes at once, and the list sent is the whole

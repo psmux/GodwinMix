@@ -35,7 +35,7 @@ pub const RECHECK: Duration = Duration::from_secs(1);
 
 /// A device token's `secret` is this and the digest, never the secret itself,
 /// which this core does not keep.
-pub(super) const SECRET_PREFIX: &str = "device-sha256:";
+pub(crate) const SECRET_PREFIX: &str = "device-sha256:";
 
 #[derive(Debug)]
 pub struct Devices {
