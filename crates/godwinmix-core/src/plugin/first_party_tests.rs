@@ -79,3 +79,18 @@ fn every_desktop_app_has_its_plugins_looked_for_where_it_puts_them() {
     let win = at(r"C:\Program Files\GodwinMix");
     assert!(win.contains(&Path::new(r"C:\Program Files\GodwinMix").join("plugins").join("srt")));
 }
+
+/// Cargo's new build directory layout puts a test five levels below the
+/// checkout, and the checkout has to be found from there too.
+#[test]
+fn the_checkout_is_found_from_every_place_cargo_puts_a_binary() {
+    let repo = root("layouts");
+    std::fs::write(repo.join("Cargo.toml"), "[workspace]\n").unwrap();
+    std::fs::create_dir_all(repo.join("plugins")).unwrap();
+    for below in ["target/debug", "target/debug/deps", "target/debug/build/godwinmix/0123abcd"] {
+        let exe_dir = repo.join(below);
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        assert_eq!(checkout_of(&exe_dir).as_deref(), Some(repo.as_path()), "from {below}");
+    }
+    let _ = std::fs::remove_dir_all(&repo);
+}

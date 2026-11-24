@@ -226,6 +226,43 @@ jobs:
       - name: --headless-check passes
         run: xvfb-run -a godwinmix-desktop --headless-check
 
+  # The server archive on Ubuntu 22.04's own GStreamer, 1.20, which is the
+  # oldest the docs promise. The .deb above carries its own 1.28 and never
+  # touches the system's, which is how 0.3.33 shipped an archive that crash
+  # looped on 1.20. A test source goes on air and the programme is streamed
+  # for a minute.
+  server-on-1-20:
+    name: server archive on Ubuntu 22.04's GStreamer (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    container: ubuntu:22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, triple: x86_64-unknown-linux-gnu }
+          - { arch: arm64, triple: aarch64-unknown-linux-gnu }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: core-${{ matrix.triple }}
+          path: pkg
+      - name: The distribution's GStreamer, and ffmpeg to receive the stream
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          # Exactly what docs/how-to/install-on-linux.md tells a server to
+          # install, so the docs are tested too.
+          apt-get install -y --no-install-recommends curl jq ffmpeg ca-certificates \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools \
+            gstreamer1.0-plugins-ugly
+      - name: A minute on air
+        run: bash dev/server-on-system-gstreamer.sh pkg/*.tar.gz 60
+
   # A 2008 CPU: no AVX, no BMI, no MOVBE. qemu-user runs each program with the
   # host's kernel, so this is the instruction set and nothing else.
   old-cpu:

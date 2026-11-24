@@ -32,6 +32,7 @@ Start here if you have never run it.
 * [Install on Windows](how-to/install-on-windows.md),
   [macOS](how-to/install-on-macos.md),
   [Linux](how-to/install-on-linux.md)
+* [Check a download](how-to/verify-a-download.md): its hash, and who built it
 * [Start the mixer for the first time](how-to/first-run.md)
 * [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
 * [Use a web page source by hand](how-to/use-a-web-page-by-hand.md): click, type, scroll and change its address from the desk

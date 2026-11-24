@@ -52,10 +52,12 @@ PY="$(command -v python3 || command -v python)"
 # A Windows python3 can be the Store's stand in, which fails when run.
 "$PY" -c '' 2>/dev/null || PY="$(command -v python)"
 
-ORT=https://github.com/microsoft/onnxruntime/releases/download/v1.30.0
+# ONNX Runtime from Microsoft's NuGet packages. The release archives on
+# GitHub answer 404 since November 2026, and the package carries the same
+# libraries for Linux x64 and arm64 and for Apple silicon.
+ORT=https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime
 # 1.23.2 was the last release built for Intel Macs. The cutout needs 1.20 or
 # later, so an Intel Mac carries that one and every other platform 1.30.
-ORT_INTEL=https://github.com/microsoft/onnxruntime/releases/download/v1.23.2
 HF=https://huggingface.co
 
 # name | url | sha256
@@ -64,10 +66,8 @@ selfie.onnx|$HF/onnx-community/mediapipe_selfie_segmentation/resolve/be49485c8e0
 modnet.onnx|$HF/Xenova/modnet/resolve/fa2fa546052fba4c08921230a26cc69a333fca12/onnx/model_fp16.onnx|25f165da9bfd30830a575f1f0490f1acd995975cb349bc02f3d79332e1fe5cf6
 ort-dml.nupkg|https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.24.4|57e9f11b73437bef7a309496135d4c1f96b1a8e9ddba60013fa27bfc1d788681
 directml.nupkg|https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/1.15.4|4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9
-ort-osx-arm64.tgz|$ORT/onnxruntime-osx-arm64-1.30.0.tgz|6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
-ort-osx-x86_64.tgz|$ORT_INTEL/onnxruntime-osx-x86_64-1.23.2.tgz|d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6
-ort-linux-x64.tgz|$ORT/onnxruntime-linux-x64-1.30.0.tgz|a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd
-ort-linux-aarch64.tgz|$ORT/onnxruntime-linux-aarch64-1.30.0.tgz|e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da
+ort.nupkg|$ORT/1.30.0|30df119bd9164eaa187666d93147448fdd4a9a1a3caf83f1505daf7af2d1c5d2
+ort-intel.nupkg|$ORT/1.23.2|25fe172f7fcdf34f2b5b02c8b997f6b88abc282956849d4af4335af23d0c4e4a
 "
 
 sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
@@ -145,21 +145,21 @@ case "$PLATFORM" in
             ThirdPartyNotices.txt DIRECTML-ThirdPartyNotices.txt
         ;;
     macos)
-        extract "$(fetch ort-osx-arm64.tgz)" "$RUNTIME" \
-            lib/libonnxruntime.1.30.0.dylib libonnxruntime.dylib \
-            1.30.0/LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
+        extract "$(fetch ort.nupkg)" "$RUNTIME" \
+            runtimes/osx-arm64/native/libonnxruntime.dylib libonnxruntime.dylib \
+            LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
         ;;
     macos-x86_64)
-        extract "$(fetch ort-osx-x86_64.tgz)" "$RUNTIME" \
-            lib/libonnxruntime.1.23.2.dylib libonnxruntime.dylib \
-            1.23.2/LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
+        extract "$(fetch ort-intel.nupkg)" "$RUNTIME" \
+            runtimes/osx-x64/native/libonnxruntime.dylib libonnxruntime.dylib \
+            LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
         ;;
     linux-x86_64|linux-aarch64)
-        arch="${PLATFORM#linux-}"; [[ "$arch" == x86_64 ]] && arch=x64
-        extract "$(fetch "ort-linux-$arch.tgz")" "$RUNTIME" \
-            lib/libonnxruntime.so.1.30.0 libonnxruntime.so \
-            lib/libonnxruntime_providers_shared.so libonnxruntime_providers_shared.so \
-            1.30.0/LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
+        arch="${PLATFORM#linux-}"; [[ "$arch" == x86_64 ]] && arch=x64 || arch=arm64
+        extract "$(fetch ort.nupkg)" "$RUNTIME" \
+            "runtimes/linux-$arch/native/libonnxruntime.so" libonnxruntime.so \
+            "runtimes/linux-$arch/native/libonnxruntime_providers_shared.so" libonnxruntime_providers_shared.so \
+            LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
         ;;
     *) echo "unknown platform $PLATFORM" >&2; exit 2 ;;
 esac

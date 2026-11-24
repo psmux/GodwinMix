@@ -699,6 +699,12 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The two extra ones let the job sign its provenance through GitHub's
+    # Sigstore identity, with no key of ours to keep.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -724,6 +730,38 @@ jobs:
           # `sha256sum -c SHA256SUMS` after fetching the ones you want.
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+
+      # A signed statement that this workflow, at this tag, in this
+      # repository, made these files. Anyone can check one with
+      # `gh attestation verify <file> --repo psmux/GodwinMix`, and checking
+      # SHA256SUMS that way vouches for every hash in it. Keyless: the
+      # signature comes from the job's own GitHub identity.
+      - name: Provenance for every file and SHA256SUMS
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: assets/*
+
+      # A minisign signature over SHA256SUMS, for a checker that wants a plain
+      # Ed25519 key it pins itself. Made only once the repository has the
+      # secret key; docs/how-to/verify-a-download.md says how to make one.
+      # The public half is committed at deploy/keys/godwinmix.pub, and the
+      # signature is checked against it before it is published.
+      - name: Sign SHA256SUMS with minisign
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "::notice::No MINISIGN_SECRET_KEY secret, so SHA256SUMS goes out with its provenance and no minisign signature"
+            exit 0
+          fi
+          sudo apt-get update -q && sudo apt-get install -y -q minisign
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          minisign -S -s "$RUNNER_TEMP/minisign.key" -m assets/SHA256SUMS \
+            -t "GodwinMix ${GITHUB_REF_NAME} SHA256SUMS"
+          rm -f "$RUNNER_TEMP/minisign.key"
+          minisign -V -p deploy/keys/godwinmix.pub -m assets/SHA256SUMS
+          cp deploy/keys/godwinmix.pub assets/godwinmix-minisign.pub
 
       # The image is pushed under the repository's name in lower case, which
       # is the only case a registry takes; `docker run` with the name as
@@ -763,4 +801,7 @@ jobs:
             distribution's GStreamer packages, 1.20 or later, are the only
             dependency.
 
-            Check what you downloaded against `SHA256SUMS`.
+            Check what you downloaded against `SHA256SUMS`, and check
+            `SHA256SUMS` itself with
+            `gh attestation verify SHA256SUMS --repo psmux/GodwinMix`
+            (see docs/how-to/verify-a-download.md).
