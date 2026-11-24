@@ -25,6 +25,7 @@ pub mod channels;
 pub mod cli;
 pub mod control;
 pub mod ctl;
+pub mod accounts;
 pub mod devices;
 pub mod feeds;
 pub mod prompter;

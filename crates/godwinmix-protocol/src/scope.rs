@@ -224,6 +224,9 @@ pub struct Tokens {
     entries: Vec<Token>,
     minted: Arc<parking_lot::Mutex<Vec<Token>>>,
     devices: Option<Arc<dyn crate::devices::DeviceRegistry>>,
+    /// The accounts, when the binary attaches them: a signed in session is
+    /// one more token, with its account's scopes. See `accounts`.
+    accounts: Option<Arc<dyn crate::accounts::AccountRegistry>>,
     /// True when the core was started with `--rehearsal`.
     pub rehearsal_core: bool,
 }
@@ -250,7 +253,32 @@ impl AuthFailure {
 
 impl Tokens {
     pub fn new(entries: Vec<Token>, rehearsal_core: bool) -> Self {
-        Self { entries, minted: Arc::default(), devices: None, rehearsal_core }
+        Self { entries, minted: Arc::default(), devices: None, accounts: None, rehearsal_core }
+    }
+
+    /// One more configured entry, keeping everything else attached: the
+    /// minted list, the devices and the accounts.
+    pub fn with_entry(mut self, token: Token) -> Self {
+        self.entries.push(token);
+        self
+    }
+
+    /// Accept account sessions from `registry` as well. Once it holds an
+    /// account the port is no longer open, token or no token.
+    pub fn with_accounts(mut self, registry: Arc<dyn crate::accounts::AccountRegistry>) -> Self {
+        self.accounts = Some(registry);
+        self
+    }
+
+    /// The account store, for `user.*`, `account.*` and the sign in page.
+    pub fn accounts(&self) -> Option<&Arc<dyn crate::accounts::AccountRegistry>> {
+        self.accounts.as_ref()
+    }
+
+    /// True when at least one account exists, so the page asks for a
+    /// username and a password rather than a token.
+    pub fn has_accounts(&self) -> bool {
+        self.accounts.as_ref().is_some_and(|a| a.any())
     }
 
     /// Accept device tokens from `registry` as well.
@@ -270,6 +298,7 @@ impl Tokens {
     /// reach the moment the token goes.
     pub fn revoked(&self, token: &Token) -> bool {
         self.devices.as_ref().is_some_and(|d| d.revoked(token))
+            || self.accounts.as_ref().is_some_and(|a| a.revoked(token))
     }
 
     /// Whether `id` names a configured or minted token, so a device token is
@@ -359,9 +388,11 @@ impl Tokens {
     ///
     /// Minted plugin tokens do not close an open port. A core with no token is
     /// open by the operator's choice, and a plugin starting must not silently
-    /// turn that into a core nobody can reach.
+    /// turn that into a core nobody can reach. An account does close it: a
+    /// sign in page in front of a port anyone can use without one would
+    /// protect nothing.
     pub fn is_open(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.is_empty() && !self.has_accounts()
     }
 
     pub fn entries(&self) -> &[Token] {
@@ -388,6 +419,12 @@ impl Tokens {
         let found = found.or_else(|| {
             let device = self.devices.as_ref()?.find(presented)?;
             Some(Token { rehearsal: self.rehearsal_core, ..device })
+        });
+        // So does a session, and it is checked last: a sign in never shadows
+        // a token somebody configured.
+        let found = found.or_else(|| {
+            let session = self.accounts.as_ref()?.find(presented)?;
+            Some(Token { rehearsal: self.rehearsal_core, ..session })
         });
         let Some(token) = found else { return Err(AuthFailure::Wrong) };
         // 09 section 5 item 14: an agent must not have to know which core it

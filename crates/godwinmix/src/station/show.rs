@@ -54,10 +54,10 @@ pub fn with_station_token(tokens: Tokens) -> Tokens {
     if tokens.is_open() {
         return tokens;
     }
-    let mut entries = tokens.entries().to_vec();
+    // Added to the list in hand rather than to a new one, so the accounts
+    // attached before this (which may be what closed the port) stay.
     let station = Token { id: "station".into(), rehearsal: tokens.rehearsal_core, ..Token::legacy(&mode.secret) };
-    entries.push(station);
-    Tokens::new(entries, tokens.rehearsal_core)
+    tokens.with_entry(station)
 }
 
 /// How long a show whose station went gets to stop in order before it is

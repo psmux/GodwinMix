@@ -60,6 +60,9 @@ pub async fn pass(http: &reqwest::Client, url: &str, req: Request) -> reqwest::R
     for (name, value) in parts.headers.iter().filter(|(n, _)| passed(n)) {
         out = out.header(name, value);
     }
+    if let Some(bearer) = crate::accounts::cookie::as_bearer(&parts.headers) {
+        out = out.header(axum::http::header::AUTHORIZATION, bearer);
+    }
     let answer = out.body(reqwest::Body::wrap_stream(body.into_data_stream())).send().await?;
     let mut headers = HeaderMap::new();
     for (name, value) in answer.headers().iter().filter(|(n, _)| passed(n)) {

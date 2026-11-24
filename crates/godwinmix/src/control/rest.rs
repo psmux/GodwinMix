@@ -326,7 +326,15 @@ pub(crate) fn unauthorised(reason: &str, trace_id: &str) -> Response {
         .into_response()
 }
 
+/// The credential in a request's headers: `Authorization: Bearer`, or else a
+/// signed in browser's session cookie, which is the same thing carried
+/// another way (see `accounts::cookie`).
 pub fn bearer(headers: &HeaderMap) -> Option<String> {
+    authorization(headers).or_else(|| crate::accounts::cookie::session(headers))
+}
+
+/// `Authorization: Bearer <token>` alone.
+pub fn authorization(headers: &HeaderMap) -> Option<String> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = value.trim().split_once(' ')?;
     if !scheme.eq_ignore_ascii_case("bearer") {

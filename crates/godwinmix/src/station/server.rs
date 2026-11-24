@@ -15,6 +15,7 @@ use std::sync::{Arc, OnceLock};
 use tower_http::cors::CorsLayer;
 
 pub fn router(st: Arc<Station>) -> Router {
+    let st_tokens = st.tokens.clone();
     let whip = st.channels.get().map(|c| crate::control::whip::router_for(c.clone()));
     let mut router = Router::new()
         .merge(crate::ui::router())
@@ -33,6 +34,9 @@ pub fn router(st: Arc<Station>) -> Router {
     if let Some(whip) = whip {
         router = router.merge(whip);
     }
+    // Before the fallback reaches them: a sign in is the station's, whose
+    // address the browser sees and whose cookie it keeps.
+    router = router.merge(crate::accounts::http::router(st_tokens));
     router.layer(CorsLayer::permissive())
 }
 

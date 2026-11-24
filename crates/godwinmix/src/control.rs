@@ -213,7 +213,13 @@ impl AppState {
         if !crate::station::show::under_station() {
             channels.run_programme_feeds(Arc::new(crate::channels::feed_loop::OwnMixer { mixer: mixer.clone() }));
         }
-        let tokens = plugin_access::accepting_plugins(crate::station::show::with_station_token(cfg.tokens(rehearsal)))
+        // Accounts first: one existing closes an open port, and the station's
+        // own credential is added only to a port that is closed.
+        let accounts = crate::accounts::for_config(&cfg.source_path);
+        if !crate::station::show::under_station() {
+            crate::accounts::seed::from_env(&accounts);
+        }
+        let tokens = plugin_access::accepting_plugins(crate::station::show::with_station_token(cfg.tokens(rehearsal).with_accounts(accounts)))
             .with_devices(crate::devices::for_config(&cfg.source_path));
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.rounded().max(1) as u32);
@@ -1693,7 +1699,8 @@ pub async fn serve_with(
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.
-    let app = router(state, snapshots).merge(observe);
+    let auth = crate::accounts::http::router(state.tokens.clone());
+    let app = router(state, snapshots).merge(observe).merge(auth);
     crate::tls::serve(listener, app, tls).await?;
     Ok(())
 }
