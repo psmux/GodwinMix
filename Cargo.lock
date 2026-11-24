@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-decklink"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "godwinmix-capture-common",
  "godwinmix-sdk",
@@ -1561,7 +1561,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-icecast"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "base64 0.22.1",
  "gmx-netkit",
@@ -1574,7 +1574,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-ingest"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "bytes",
  "glib",
@@ -1600,7 +1600,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-ipcam"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "base64 0.22.1",
  "gmx-netkit",
@@ -1613,7 +1613,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-ndi"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "gmx-netkit",
  "godwinmix-capture-common",
@@ -1625,7 +1625,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-netkit"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "glib",
  "godwinmix-sdk",
@@ -1667,7 +1667,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-rtsp"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "glib",
  "gmx-netkit",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-srt"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "gmx-netkit",
  "godwinmix-sdk",
@@ -1711,7 +1711,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-udp"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "gmx-netkit",
  "godwinmix-capture-common",
@@ -1723,7 +1723,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-whip"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "glib",
  "gmx-netkit",
@@ -1735,7 +1735,7 @@ dependencies = [
 
 [[package]]
 name = "gmx-wipe"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "godwinmix-sdk",
  "serde_json",
@@ -1754,7 +1754,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1793,7 +1793,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-atem"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "serde",
  "serde_json",
@@ -1823,7 +1823,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-core"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1870,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-flussonic"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "base64 0.22.1",
  "serde",
@@ -1879,7 +1879,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-framebus"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "glib",
  "gstreamer",
@@ -1891,7 +1891,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-govern"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "godwinmix-core",
  "godwinmix-protocol",
@@ -1906,7 +1906,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-host"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "anyhow",
  "godwinmix-protocol",
@@ -1918,7 +1918,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-protocol"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "getrandom 0.3.4",
  "parking_lot",
@@ -1932,7 +1932,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-ptz"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "base64 0.22.1",
  "ring",
@@ -1940,7 +1940,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-render"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "godwinmix-protocol",
  "serde",
@@ -1962,7 +1962,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-track"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "image",
  "ring",
@@ -1972,7 +1972,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-tui"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "crossterm",
  "futures-util",
@@ -1987,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "godwinmix-wasm"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "anyhow",
  "godwinmix-core",
