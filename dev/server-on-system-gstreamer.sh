@@ -9,8 +9,8 @@
 # have. This unpacks the archive, starts the mixer headless, puts a test
 # source on air, streams the programme over RTMP to an ffmpeg listening on
 # this machine for `seconds` (60 by default), and fails unless /api/status
-# answered, the mixer is still the same process at the end, and the
-# recording holds that much H.264 video and AAC audio.
+# answered, the mosaic drew a picture, the mixer is still the same process at
+# the end, and the recording holds that much H.264 video and AAC audio.
 #
 # Needs curl, jq and ffmpeg. Run inside a throwaway container, for example
 # ubuntu:22.04 with the packages in docs/how-to/install-on-linux.md.
@@ -64,7 +64,7 @@ for _ in $(seq 1 60); do
     sleep 1
 done
 api GET /api/status > status.json || fail "/api/status never answered"
-echo "/api/status answered: version $(jq -r '.version // .core.version // "?"' status.json)"
+echo "/api/status answered, up $(jq -r '.uptime_secs' status.json) s"
 
 ffmpeg -nostdin -loglevel error -listen 1 -i "rtmp://127.0.0.1:19350/live/program" \
     -c copy -f flv out.flv > ffmpeg.log 2>&1 &
@@ -82,6 +82,18 @@ api POST /api/take '{"source":"bars"}' > /dev/null || fail "take"
 api POST /api/outputs '{"id":"check","uri":"rtmp://127.0.0.1:19350/live/program","policy":"own"}' > /dev/null \
     || fail "adding the RTMP output"
 echo "on air, streaming for $SECS s"
+
+# The multiview mosaic and its cut outs, which are aggregators of their own.
+for id in program bars; do
+    for _ in $(seq 1 15); do
+        code=$(curl -s -o "snap-$id.jpg" -w '%{http_code} %{content_type}' \
+            -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/api/v1/snapshot/$id")
+        case "$code" in "200 image/jpeg"*) break ;; esac
+        sleep 1
+    done
+    [ "$(head -c 2 "snap-$id.jpg" | od -An -tx1 | tr -d ' ')" = ffd8 ] || fail "no picture of $id from the mosaic ($code)"
+    echo "the mosaic drew $id: $(wc -c < "snap-$id.jpg") bytes of JPEG"
+done
 
 end=$(( $(date +%s) + SECS ))
 while [ "$(date +%s)" -lt "$end" ]; do
