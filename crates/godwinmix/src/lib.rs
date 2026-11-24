@@ -719,7 +719,14 @@ pub async fn run() -> Result<()> {
         },
         Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
         Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
-        Some(Command::Users(args)) => return cli::users::run(&config::path_in_force(&args_config), args.cmd),
+        Some(Command::Users(args)) => {
+            // The command says what it did in one line; the store's own log
+            // lines repeating it are noise to a person or an installer.
+            if std::env::var_os("RUST_LOG").is_none() {
+                logs::set_default_level(logs::LevelCode::WARN);
+            }
+            return cli::users::run(&config::path_in_force(&args_config), args.cmd);
+        }
         Some(Command::Tool { url, token, name, args }) => {
             let (url, token) = address::resolve(url, token);
             return cli::tool::run(&url, token, &name, args.as_deref()).await;

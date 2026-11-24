@@ -6,7 +6,7 @@
 
 import { el, on } from "./dom.js";
 import { modal } from "./modal.js";
-import { signIn } from "../client/auth.js";
+import { signIn, authStatus } from "../client/auth.js";
 
 /**
  * The form on its own, for the page and for the tests.
@@ -93,4 +93,29 @@ export function askToSignIn(base, reason) {
     parts.user.focus();
   });
   return asking;
+}
+
+/**
+ * What boot asks on a 401: a sign in on a mixer with accounts, else the
+ * token box as before. Resolves to "session", a token, or null.
+ */
+export async function ask(base, refusedToken) {
+  if (!refusedToken && (await authStatus(base)).accounts) {
+    const how = await askToSignIn(base);
+    if (how !== "token") return how;
+  }
+  const { askForToken } = await import("./firstrun.js");
+  return askForToken(
+    refusedToken
+      ? "That token was refused. Check it with whoever runs this mixer. If you are an admin here and the token is lost, set a new one in Mixer settings under Control token from a page that is already connected."
+      : null
+  );
+}
+
+/** Who this page is, for the words of a refusal (toast.js). */
+export async function whoAmI(base) {
+  const me = await authStatus(base);
+  if (me.via === "session") {
+    globalThis.gmxRefusal = `you are signed in as ${me.user}, whose role does not allow that. An admin can change it in Mixer settings > Users.`;
+  }
 }

@@ -34,6 +34,7 @@ use std::sync::OnceLock;
 const ASSETS: &[(&str, &str)] = &[
     ("boot.js", include_str!("../../../ui/boot.js")),
     ("client/errors.js", include_str!("../../../ui/client/errors.js")),
+    ("client/auth.js", include_str!("../../../ui/client/auth.js")),
     ("client/destinations.js", include_str!("../../../ui/client/destinations.js")),
     ("client/devices.js", include_str!("../../../ui/client/devices.js")),
     ("client/frames.js", include_str!("../../../ui/client/frames.js")),
@@ -511,6 +512,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
     ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
     ("shell/signin.js", include_str!("../../../ui/shell/signin.js")),
+    ("shell/signin-page.js", include_str!("../../../ui/shell/signin-page.js")),
+    ("shell/password.js", include_str!("../../../ui/shell/password.js")),
+    ("shell/users-card.js", include_str!("../../../ui/shell/users-card.js")),
+    ("shell/users-rows.js", include_str!("../../../ui/shell/users-rows.js")),
     ("shell/agents-setup.js", include_str!("../../../ui/shell/agents-setup.js")),
     ("shell/agents-manual.js", include_str!("../../../ui/shell/agents-manual.js")),
     ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
@@ -721,6 +726,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // Help > Connect an AI agent against a fake client.
     ("test/agents.js", include_str!("../../../ui/test/agents.js")),
     ("test/signin.js", include_str!("../../../ui/test/signin.js")),
+    ("test/users.js", include_str!("../../../ui/test/users.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     ("test/phone-camera.js", include_str!("../../../ui/test/phone-camera.js")),
     ("test/publish-retry.js", include_str!("../../../ui/test/publish-retry.js")),
@@ -1284,7 +1290,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_402_kb() {
+    fn the_page_a_volunteer_opens_stays_under_403_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1371,9 +1377,13 @@ mod tests {
         // came to 409872 bytes. Both panels load when first shown. Raised to
         // 402 kB for Preview after a restart, the transition panel showing the
         // mixer's default and the cutout's preparing words: measured at 410680.
+        // Raised to 403 kB for signing in with a username: the page closing
+        // its socket on 4401 and the refusal naming the person's role. The
+        // sign in page, the Users card and the password dialogs load when
+        // first needed. Measured at 411986.
         assert!(
-            bytes < 402 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 402 kB budget",
+            bytes < 403 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 403 kB budget",
             eager.len()
         );
     }
@@ -1397,7 +1407,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_512_kb() {
+    fn the_page_with_the_composer_open_stays_under_513_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1427,8 +1437,10 @@ mod tests {
         // to 511 kB for the Programme row's FX button, the After Take choice
         // in Settings, and a filter added in the composer showing at once:
         // measured at 522924 bytes. Raised to 512 kB with the page's own
-        // budget, for the same three: measured at 523346 bytes.
-        assert!(bytes < 512 * 1024, "the page with the composer open is {bytes} bytes, over the 512 kB budget");
+        // budget, for the same three: measured at 523346 bytes. Raised to
+        // 513 kB with the page's own budget, for signing in with a username;
+        // the composer's files did not grow. Measured at 524652 bytes.
+        assert!(bytes < 513 * 1024, "the page with the composer open is {bytes} bytes, over the 513 kB budget");
     }
 
     #[test]
@@ -1480,8 +1492,15 @@ mod tests {
         reachable.extend(closure_of("shell/agents.js"));
         // Help > Open on another device, on its first press.
         reachable.extend(closure_of("shell/devices.js"));
-        // Help > Address and token, on its first press.
+        // Help > Address and sign in, on its first press.
         reachable.extend(closure_of("shell/signin.js"));
+        // The sign in page, fetched only by a mixer with accounts that
+        // answered 401, and Change password from the dialog above.
+        reachable.extend(closure_of("shell/signin-page.js"));
+        reachable.extend(closure_of("shell/password.js"));
+        reachable.extend(closure_of("client/auth.js"));
+        // Mixer settings > Users, fetched when the dialog opens.
+        reachable.extend(closure_of("shell/users-card.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         // The palette's Open Channels, Channels as rows and Paste several push addresses.

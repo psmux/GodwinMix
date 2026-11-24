@@ -73,17 +73,10 @@ export class RpcSocket {
           `${ev && ev.wasClean ? "clean" : "not clean"}, retry ${this.attempt + 1}`
       );
       this.ready = false;
-      // 4401: this page's sign in or device token was taken back. Retrying
-      // would be refused forever; the page signs in again instead.
-      if (ev && ev.code === 4401) {
-        this.closed = true;
-        this._failPending("this page was signed out of the mixer.");
-        this.hooks.onClose && this.hooks.onClose();
-        this.hooks.onSignedOut && this.hooks.onSignedOut();
-        return;
-      }
+      if (ev && ev.code === 4401) this.closed = true; // signed out
       this._failPending("the connection to the mixer closed. It will be retried.");
       this.hooks.onClose && this.hooks.onClose();
+      if (ev && ev.code === 4401) this.hooks.onSignedOut && this.hooks.onSignedOut();
       if (!this.closed) this._retry();
     };
 
