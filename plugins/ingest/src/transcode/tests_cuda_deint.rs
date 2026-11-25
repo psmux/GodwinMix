@@ -52,6 +52,16 @@ fn run(n: &NodeSpec, count: usize, fields: bool, luma: &dyn Fn(usize, usize, usi
     super::cuda::share(&pipeline);
     let src = AppSrc::builder().format(gst::Format::Time).caps(&MIXED.parse().unwrap()).build();
     let up = gst::ElementFactory::make("cudaupload").build().expect("cudaupload: is nvcodec installed and a card present?");
+    // cudaupload makes new buffers without the picture's field flags; a
+    // decoder sets them on the CUDA buffer itself, so put them back here.
+    if fields {
+        up.static_pad("src").unwrap().add_probe(gst::PadProbeType::BUFFER, |_, info| {
+            if let Some(gst::PadProbeData::Buffer(b)) = &mut info.data {
+                b.make_mut().set_flags(gst::BufferFlags::from_bits_retain(0x10_0000 | 0x20_0000));
+            }
+            gst::PadProbeReturn::Ok
+        });
+    }
     let down = gst::ElementFactory::make("cudadownload").build().unwrap();
     let sink = gst::ElementFactory::make("appsink").build().unwrap().downcast::<AppSink>().unwrap();
     sink.set_caps(Some(&"video/x-raw,format=NV12".parse().unwrap()));
