@@ -110,14 +110,6 @@ impl Plan for Srt {
         if let Some(ms) = self.params.get("latency_ms").and_then(Value::as_u64) {
             src.set_property("latency", ms.min(60_000) as i32);
         }
-        // A caller the far end refuses (a stream not on air yet) retried
-        // inside srtsrc with no pause at all: on the ISP box one backup
-        // input made about 80 refused handshakes a second, around the clock,
-        // and filled the log. Without the wait a refusal ends the session and
-        // the runner's own backoff (1 to 10 s) decides when to try again.
-        if !self.uri.contains("mode=listener") && src.has_property("wait-for-connection") {
-            src.set_property("wait-for-connection", false);
-        }
         pipeline.add(&src).map_err(|e| e.to_string())?;
         let stats = src.clone();
         let loss = Loss::probe(&src, self.program)?.with_poll(move || srt_lost(&stats));
