@@ -23,7 +23,8 @@
 //! `top`). A progressive picture passes untouched, and so does one in a
 //! format other than NV12, with one warning. When CUDA or NVRTC cannot be
 //! loaded, [`available`] says so and the caller builds the CPU path instead.
-//! `GMX_DEINTERLACE_CPU=1` in the environment forces the CPU path.
+//! `GMX_DEINTERLACE_CPU=1` in the environment, or a file
+//! `/etc/godwinmix/deinterlace-on-cpu`, forces the CPU path.
 
 use std::ffi::{c_char, c_int, c_uint, c_void, CString};
 use std::sync::{Mutex, OnceLock};
@@ -75,6 +76,9 @@ extern "C" __global__ void gmx_deint(const unsigned char* cur, const unsigned ch
 }
 "#;
 
+/// Its presence forces the CPU path for stages built after it appears.
+const CPU_FILE: &str = "/etc/godwinmix/deinterlace-on-cpu";
+
 /// `GST_MAP_CUDA`: map for the device, `data` is a `CUdeviceptr`.
 const MAP_CUDA: u32 = 0x1_0000 << 1;
 /// GstVideoBufferFlags, the first four after GstBufferFlags' own.
@@ -121,6 +125,11 @@ fn api() -> Result<&'static Api, String> {
 pub fn available() -> Result<(), String> {
     if std::env::var("GMX_DEINTERLACE_CPU").is_ok_and(|v| v == "1") {
         return Err("GMX_DEINTERLACE_CPU=1".into());
+    }
+    // The same from the config folder, for a running station: stages built
+    // after the file appears use the CPU.
+    if std::path::Path::new(CPU_FILE).exists() {
+        return Err(format!("{CPU_FILE} is there"));
     }
     api().map(|_| ())
 }
