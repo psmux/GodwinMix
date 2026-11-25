@@ -7,6 +7,7 @@
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app::{AppSink, AppSrc};
+use gstreamer_video::VideoFrameExt;
 use serde_json::{json, Value};
 
 use super::build::build;
