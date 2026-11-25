@@ -364,6 +364,7 @@ fn pool(api: &Api, context: *mut c_void, caps: &gst::Caps) -> Result<gst::Buffer
 }
 
 /// Map, launch for the luma and the interleaved chroma, wait, unmap.
+#[allow(clippy::too_many_arguments)]
 unsafe fn run(api: &Api, context: *mut c_void, cur: *mut CudaMemory, prev: Option<*mut CudaMemory>, out: *mut CudaMemory, width: u32, height: u32, keep: i32) -> Result<(), String> {
     let mut mc: gst::ffi::GstMapInfo = std::mem::zeroed();
     let mut mp: gst::ffi::GstMapInfo = std::mem::zeroed();
