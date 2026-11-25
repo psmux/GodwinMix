@@ -45,15 +45,21 @@ function safeStorage() {
   }
 }
 
-/** Cameras and microphones, each `{id, label}`. Labels are empty until permission is given. */
+/**
+ * Cameras and microphones, each `{id, label, named}`. The browser gives no
+ * labels until it is allowed a device; `named` is false for the stand in.
+ */
 export async function listDevices(md = navigator.mediaDevices) {
   const all = await md.enumerateDevices();
   const pick = (kind, word) =>
     all
       .filter((d) => d.kind === kind && d.deviceId)
-      .map((d, i) => ({ id: d.deviceId, label: d.label || `${word} ${i + 1}` }));
+      .map((d, i) => ({ id: d.deviceId, label: d.label || `${word} ${i + 1}`, named: !!d.label }));
   return { cameras: pick("videoinput", "Camera"), mics: pick("audioinput", "Microphone") };
 }
+
+// Which camera a guest who has not picked one gets lives in cameras.js.
+export { isVirtualCamera, rankCameras, realCameraFor, camerasToTry } from "./cameras.js";
 
 /**
  * Is this a phone or a tablet held upright? A touch screen taller than it is

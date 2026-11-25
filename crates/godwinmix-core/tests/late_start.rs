@@ -122,7 +122,7 @@ async fn a_plugin_that_answers_start_late_at_boot_is_tried_again_and_goes_live()
     install(&root);
 
     let mut cfg: Config = toml::from_str("").unwrap();
-    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, 30);
+    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, godwinmix_core::config::FrameRate::whole(30));
     let source: SourceConfig = toml::from_str("id = \"late\"\ntype = \"latebars/source\"").unwrap();
     cfg.sources.push(source);
     let (mut mix, handle, cmd_rx, _bus) = Mixer::build(cfg).expect("a mixer");

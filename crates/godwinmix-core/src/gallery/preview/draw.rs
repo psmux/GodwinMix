@@ -142,6 +142,16 @@ fn flatten(layers: Vec<Layer>, at: (i32, i32), size: Size) -> Result<Layer> {
 fn set(_gallery: &Path, entry: &Entry, canvas: Size) -> Result<Vec<Layer>> {
     let spec = entry.manifest.set.as_ref().context("the set has no [set]")?;
     let dir = entry.dir().context("the set's folder")?;
+    // A set whose plate is a page is drawn by a browser, not decoded: its
+    // own preview picture shows it, with the desk and the presenter's place.
+    // Decoding the page as a picture waited ten seconds and failed, so a
+    // studio set had no picture in the gallery or the presenter dialog.
+    if let Some(poster) = entry.preview_file() {
+        return Ok(vec![picture(&poster, Zone::Full, canvas)?]);
+    }
+    if spec.background.to_ascii_lowercase().ends_with(".html") {
+        return Ok(card(entry, canvas).into_iter().collect());
+    }
     let mut out = vec![picture(&dir.join(&spec.background), Zone::Full, canvas)?];
     if let Some(front) = spec.foreground.as_ref().filter(|f| dir.join(f).is_file()) {
         out.push(picture(&dir.join(front), Zone::Overlay, canvas)?);

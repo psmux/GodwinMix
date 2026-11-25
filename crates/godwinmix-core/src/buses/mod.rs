@@ -1,0 +1,87 @@
+//! The audio desk beyond one fader per source: the programme master, buses,
+//! cue, a bus on a sound card, a bus as an output's sound.
+//!
+//! A bus is a mix of its own in the programme pipeline (`bus.rs`), fed from
+//! every source through one shared send point per source (`send.rs`), each
+//! source at a weight its kind decides (`weight.rs`). Nothing here exists until
+//! the first bus does: with no bus the programme pipeline is exactly what it
+//! was, and the last bus to go takes the send points with it.
+//!
+//! Everything in this module is called on the mixer thread. The only work on
+//! a streaming thread is the weight probe, which reads three values and writes
+//! one, and the only blocking work (finding a sound card) runs on a thread of
+//! its own and comes back as a command.
+
+pub mod bus;
+mod calls;
+pub mod check;
+pub mod device;
+mod desk;
+pub mod encode;
+mod outlets;
+pub mod send;
+mod status;
+mod talk;
+pub mod weight;
+
+pub use check::Refusal;
+pub use calls::Around;
+pub use desk::Desk;
+pub use talk::TalkCall;
+
+use godwinmix_protocol::buses::{BusConfig, BusSetRequest, CueSetRequest, MasterSetRequest, SendSetRequest};
+
+/// One call on the desk, as the mixer queue carries it.
+#[derive(Debug)]
+pub enum AudioCall {
+    Master(MasterSetRequest),
+    Add(BusConfig),
+    Set(BusSetRequest),
+    Remove(String),
+    List,
+    Send(SendSetRequest),
+    Cue(CueSetRequest),
+    /// A sound card was looked for off the mixer thread. Never from the API.
+    DeviceFound(DeviceFound),
+    /// A bus encoder would not come up on its thread. Never from the API: the
+    /// mixer takes the outputs on it off the air and tries them again.
+    EncoderFailed(encode::EncoderFailed),
+    /// A bus for a guest's return, built like `Add` and never saved. Never
+    /// from the API: the guests module adds and removes these.
+    AddGuest(BusConfig),
+    /// Hold a talkback source on some buses, or let it go. Never saved.
+    Talk(TalkCall),
+    /// Mark a source as a talkback source, kept muted on the programme, or
+    /// unmark it.
+    Talker { source: String, on: bool },
+}
+
+/// What looking for a sound card came back with.
+pub struct DeviceFound {
+    pub bus: String,
+    /// Which ask this answers. A bus whose device changed again since, or that
+    /// was removed and added, ignores an older answer.
+    pub ticket: u64,
+    pub sink: Result<gstreamer::Element, String>,
+}
+
+impl std::fmt::Debug for DeviceFound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceFound").field("bus", &self.bus).field("ticket", &self.ticket).finish()
+    }
+}
+
+/// How a desk hands work finished off the mixer thread back to its queue: a
+/// device search, or a bus encoder that would not come up.
+pub type Notify = std::sync::Arc<dyn Fn(AudioCall) + Send + Sync>;
+
+/// The audio monitoring target for a bus: `/pcm/bus:monitor`.
+pub fn listen_target(bus: &str) -> String {
+    format!("bus:{bus}")
+}
+
+/// The bus a monitoring target names, if it names one.
+pub fn bus_of_target(target: &str) -> Option<&str> {
+    target.strip_prefix("bus:")
+}
+

@@ -263,35 +263,24 @@ impl Server {
     /// search: the core tools are still worth finding.
     async fn plugin_tools(&self, query: &str, limit: usize) -> Vec<Value> {
         let Ok(listing) = self.get_json("/api/v1/plugins").await else { return Vec::new() };
-        let words: Vec<String> =
-            query.to_lowercase().split_whitespace().map(str::to_string).collect();
-        let mut found = Vec::new();
+        let mut plugins = Vec::new();
         for plugin in listing["plugins"].as_array().cloned().unwrap_or_default() {
-            if !plugin["enabled"].as_bool().unwrap_or(false) {
+            let has_tools = plugin["tools"].as_array().is_some_and(|t| !t.is_empty());
+            if !plugin["enabled"].as_bool().unwrap_or(false) || !has_tools {
                 continue;
             }
             let name = plugin["name"].as_str().unwrap_or("").to_string();
-            let description = plugin["description"].as_str().unwrap_or("").to_lowercase();
-            for tool in plugin["tools"].as_array().cloned().unwrap_or_default() {
-                let Some(tool) = tool.as_str() else { continue };
-                let haystack = format!("{tool} {name} {description}");
-                if words.iter().any(|w| haystack.contains(w.as_str())) {
-                    found.push(json!({
-                        "name": tool,
-                        "description": format!(
-                            "A tool from the `{name}` plugin. Call it by name with \
-                             tools/call; `describe_plugin {{name: \"{name}\"}}` says what \
-                             arguments it takes."
-                        ),
-                        "plugin": name,
-                    }));
-                }
-                if found.len() >= limit {
-                    return found;
-                }
-            }
+            let about = plugin["description"].as_str().unwrap_or("").to_string();
+            // What each tool does is in the manifest, which the listing leaves
+            // out; one describe per plugin that has tools.
+            let path = format!("/api/v1/plugins/{name}/describe");
+            let tools = match self.post_json(&path, &json!({})).await {
+                Ok(d) => d["manifest"]["tools"].as_array().cloned().unwrap_or_default(),
+                Err(_) => Vec::new(),
+            };
+            plugins.push((name, about, tools));
         }
-        found
+        crate::mcp_plugin_search::rank(query, &plugins, limit)
     }
 
     /// Call one plugin's tool through the mixer's `tool.call`.
@@ -320,7 +309,7 @@ impl Server {
                 Ok(v) if v.get("error").is_some() => error_result(
                     v["error"]["message"].as_str().unwrap_or("the mixer refused").to_string(),
                 ),
-                Ok(v) => v,
+                Ok(v) => mcp_shape(v),
                 Err(e) => error_result(format!("the mixer's answer was not JSON: {e}")),
             },
         }
@@ -351,6 +340,16 @@ impl Server {
     /// One GET against the mixer, as JSON.
     async fn get_json(&self, path: &str) -> Result<Value, String> {
         let mut request = self.client.get(format!("{}{path}", self.base));
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        response.json::<Value>().await.map_err(|e| e.to_string())
+    }
+
+    /// One POST against the mixer with a JSON body, as JSON.
+    async fn post_json(&self, path: &str, body: &Value) -> Result<Value, String> {
+        let mut request = self.client.post(format!("{}{path}", self.base)).json(body);
         if let Some(token) = &self.token {
             request = request.bearer_auth(token);
         }
@@ -692,6 +691,21 @@ mod schema_tests;
 #[path = "mcp_headend_tests.rs"]
 mod headend_tests;
 
+/// A plugin's answer as MCP spells it. Plugins answer with the protocol's
+/// `structured_content` and `is_error`; an MCP client reads
+/// `structuredContent` and `isError` and ignores the rest, so without this an
+/// agent got the sentence and lost every fact behind it.
+fn mcp_shape(mut v: Value) -> Value {
+    if let Some(o) = v.as_object_mut() {
+        for (from, to) in [("structured_content", "structuredContent"), ("is_error", "isError")] {
+            if let Some(x) = o.remove(from) {
+                o.entry(to).or_insert(x);
+            }
+        }
+    }
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -982,6 +996,14 @@ input = "input.json"
     }
 
     /// Plans go to `/api/v1`, at the paths the transform rule produces.
+    #[test]
+    fn a_plugins_facts_reach_an_mcp_client() {
+        let v = super::mcp_shape(json!({"content": [{"type": "text", "text": "ok"}], "structured_content": {"max_speed": 0.4}, "is_error": false}));
+        assert_eq!(v["structuredContent"]["max_speed"], 0.4);
+        assert_eq!(v["isError"], false);
+        assert!(v.get("structured_content").is_none());
+    }
+
     #[test]
     fn plans_match_the_versioned_api() {
         let s = server();

@@ -1,0 +1,19 @@
+# A pure Rust client for Blackmagic ATEM switchers, over their UDP protocol on
+# port 9910. No GStreamer and no media: it carries commands and state only.
+# `docs/reference/atem-protocol.md` describes the wire format it speaks.
+[package]
+name = "godwinmix-atem"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A client for Blackmagic ATEM switchers: the UDP session, the state they report and the commands they take"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["rt", "macros", "sync", "time", "net"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }

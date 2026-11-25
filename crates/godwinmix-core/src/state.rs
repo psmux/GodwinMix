@@ -335,6 +335,7 @@ mod tests {
         page.put_extra("audio", SourceAudio { page: 0.8, media: vec![1.0, 0.0] });
         let status = MixerStatus {
             program: Some("cam1".into()),
+            audio: None,
             scene: None,
             sources: vec![page],
             outputs: vec![],

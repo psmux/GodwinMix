@@ -16,6 +16,8 @@ A second machine (or four) sending NDI, a gigabit switch between them, and your 
 2. Put your stream key into the `[[outputs]]` block, and run `gmx ctl device list` to get the NDI names of the four player machines into the `[[sources]]` blocks.
 3. `gmx`, then http://localhost:8080. `Quad` shows all four, `Full` puts one player up, `Pip` puts the caster in the corner.
 
+Replay is built in: the last minute of each player and the programme stays in memory. In the Replay panel, I marks in, O marks out and P plays it again.
+
 ## When it does not work
 
 **Feeds stutter.** Usually the network is the first thing to check, not the mixer. Four 1080p60 NDI feeds are about 500 Mbit; put them on their own switch.

@@ -52,6 +52,9 @@ mod arrival;
 mod drawn;
 mod early;
 pub mod preview;
+pub mod preview_chain;
+mod preview_prebuilt;
+mod preview_drawn;
 mod transparent;
 
 use crate::caps::{CanvasCaps, Grid};
@@ -167,6 +170,10 @@ struct Shared {
     /// The programme's board, so the scene preview can draw a transparent
     /// source's real picture rather than its grey carrier. Set by the mixer.
     overlay: Mutex<Option<Arc<crate::overlay::Board>>>,
+    /// The preview's keyed filters once the armed scene is drawn with every
+    /// filter in place, `None` while it is not yet (a build off the loop, a
+    /// new preview). Read by a still that waits for the filters to draw.
+    preview_filters: Mutex<Option<preview::Drawn>>,
     /// Stable across rebuilds, so a client holding a receiver keeps it when
     /// the mosaic is torn down and built again at another size.
     frames: broadcast::Sender<Arc<[u8]>>,
@@ -337,6 +344,14 @@ impl MultiviewHandle {
         *self.shared.overlay.lock() = Some(board);
     }
 
+    /// True once the armed scene is drawn in the preview with all its
+    /// filters, every item has had a frame, and every filter drawn on the
+    /// board (a key, a cutout) has handed it a picture. A still of a
+    /// filtered scene waits for this.
+    pub fn preview_filters_drawn(&self) -> bool {
+        self.shared.preview_filters.lock().as_ref().is_some_and(preview::Drawn::now)
+    }
+
     pub fn detached(cfg: MultiviewConfig, rt: tokio::runtime::Handle) -> Self {
         Self::with_sink(cfg, rt, None)
     }
@@ -352,6 +367,7 @@ impl MultiviewHandle {
             shared: Arc::new(Shared {
                 cfg,
                 overlay: Mutex::new(None),
+                preview_filters: Mutex::new(None),
                 frames,
                 preview_frames,
                 preview_subs: Mutex::new(Vec::new()),
@@ -803,6 +819,12 @@ impl Multiview {
             .context("adding multiview elements")?;
         gst::Element::link_many([&compositor, &vcaps, &vqueue, &vconv, &enc, &sink_el])
             .context("linking mosaic")?;
+        // On GStreamer 1.20 there is no force-live, and a mosaic whose tiles
+        // have not delivered would wait for them. A live backdrop keeps it on
+        // its own schedule there. It goes when the pipeline does.
+        if !gstutil::is_force_live(&compositor) {
+            gstutil::live_backdrop(pipeline.upcast_ref(), &compositor, "mv-bg", fps)?;
+        }
 
         let mut mv = Self {
             cfg,
@@ -924,6 +946,7 @@ impl Multiview {
         let tee = make("tee", &format!("mv-tee-{tag}"))?;
         tee.set_property("allow-not-linked", true);
         let branch = vec![src, queue, scale, caps, tee.clone()];
+        crate::observe::laps::mark("tile made");
         self.pipeline.add_many(&branch).context("adding tile branch")?;
         gst::Element::link_many(&branch).context("linking tile branch")?;
 
@@ -936,6 +959,7 @@ impl Multiview {
         pad.set_property_from_str("sizing-policy", "keep-aspect-ratio");
         let tee_pad = tee.request_pad_simple("src_%u").context("a tile tee refused a pad")?;
         tee_pad.link(&pad).context("linking tile into the mosaic")?;
+        crate::observe::laps::mark("tile linked");
 
         // Say when this tile has actually put something on the canvas. The
         // probe removes itself on the first buffer, so it costs one closure
@@ -955,9 +979,11 @@ impl Multiview {
         for el in branch.iter().rev() {
             el.sync_state_with_parent().context("starting a multiview branch")?;
         }
+        crate::observe::laps::mark("tile started");
 
         self.tiles.push(Tile { source, pad, branch, tee, fed });
         self.relayout();
+        crate::observe::laps::mark("tile relaid out");
         debug!(%tag, "added multiview tile");
         Ok(entry)
     }
@@ -1029,8 +1055,11 @@ impl Multiview {
             return Ok(());
         }
         self.preview_off();
+        self.preview_filters_pending();
+        crate::observe::laps::mark("old preview off");
         let mut built =
             preview::ScenePreview::build(&self.pipeline, shape, publish, self.cfg.jpeg_quality as i32)?;
+        crate::observe::laps::mark("preview compositor built");
         built.borrow_layers(self.shared.overlay.lock().clone());
         // A tile of its own on the mosaic, so an operator watching the sheet
         // sees what is armed beside what is live without a second stream.
@@ -1038,8 +1067,10 @@ impl Multiview {
             Ok(pad) => built.set_tile_pad(Some(pad)),
             Err(e) => warn!(?e, "the preview has no tile on the mosaic; the stream still works"),
         }
+        crate::observe::laps::mark("preview tile attached");
         self.preview = Some(built);
         self.relayout();
+        crate::observe::laps::mark("relaid out");
         Ok(())
     }
 
@@ -1102,15 +1133,33 @@ impl Multiview {
     /// Draw the armed scene. Nothing to draw is a black preview, not an error:
     /// disarming a scene is a thing an operator does.
     pub fn apply_preview(&mut self, canvas: &CanvasCaps, cells: &[preview::Cell]) -> Result<()> {
+        self.apply_preview_built(canvas, cells, preview_chain::Prebuilt::default())
+    }
+
+    /// The cells an apply would build new filter chains for. See
+    /// `ScenePreview::needs`.
+    pub fn preview_needs(&self, cells: &[preview::Cell]) -> Vec<(String, Vec<crate::mixer::slots::ItemFilter>)> {
+        self.preview.as_ref().map(|p| p.needs(cells)).unwrap_or_default()
+    }
+
+    /// `apply_preview` with the chains built already, off the loop.
+    pub fn apply_preview_built(&mut self, canvas: &CanvasCaps, cells: &[preview::Cell], built: preview_chain::Prebuilt) -> Result<()> {
         let tiles: Vec<(SourceId, gst::Element)> = self
             .tiles
             .iter()
             .filter_map(|t| t.source.clone().map(|id| (id, t.tee.clone())))
             .collect();
         let Some(preview) = self.preview.as_mut() else { return Ok(()) };
-        preview.apply(canvas, cells, |source| {
+        let drawn = preview.apply(canvas, cells, built, |source| {
             tiles.iter().find(|(id, _)| id == source).map(|(_, tee)| tee.clone())
-        })
+        });
+        *self.shared.preview_filters.lock() = Some(preview.in_picture());
+        drawn
+    }
+
+    /// The preview is about to be drawn again, with filters still building.
+    pub fn preview_filters_pending(&self) {
+        *self.shared.preview_filters.lock() = None;
     }
 
     /// What the preview is composited at, or `None` when there is none.
@@ -1199,6 +1248,9 @@ impl Drop for Multiview {
 
 #[cfg(test)]
 mod latency_tests;
+
+#[cfg(test)]
+mod preview_filter_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1407,7 +1459,7 @@ mod tests {
             width: 960,
             height: 540,
             alpha: 1.0,
-            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
         };
         mv.apply_preview(&canvas, &[cell("cam1", 0), cell("cam2", 960)]).unwrap();
         assert_eq!(mv.preview_drawn(), 2);
@@ -1445,7 +1497,7 @@ mod tests {
                 width: 1920,
                 height: 1080,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             }],
         )
         .unwrap();
@@ -1600,7 +1652,7 @@ mod tests {
         cfg.canvas = crate::config::Canvas {
             width: 320,
             height: 180,
-            fps: 15,
+            fps: crate::config::FrameRate::whole(15),
             sample_rate: 48000,
             channels: 2,
         };
@@ -2282,7 +2334,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
-            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
         }]);
 
         for round in 0..40u64 {
@@ -2355,7 +2407,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
             preview::Cell {
                 source: "cam2".into(),
@@ -2364,7 +2416,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
         ]);
 
@@ -2460,7 +2512,7 @@ mod tests {
             width: canvas.width,
             height: canvas.height,
             alpha: 1.0,
-            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+            rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
         }]);
         let asked = Instant::now();
         let mut sub = mv.subscribe_preview(PreviewRequest { fps: 8, width: 320, full: false });

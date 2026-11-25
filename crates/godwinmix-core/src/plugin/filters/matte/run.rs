@@ -7,8 +7,10 @@
 //! it.
 
 use super::blocks;
+#[path = "picture.rs"]
+mod picture;
 use super::params::Settings;
-use super::worker::Worker;
+use super::worker::{share, Mask, Worker};
 use crate::overlay::keyed::Keyed;
 use crate::overlay::picture::{Area, Picture};
 use crate::plugin::filter::BoardHook;
@@ -18,11 +20,25 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_video as gst_video;
 use parking_lot::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 pub struct Cutter {
     pub hook: BoardHook,
-    worker: Worker,
+    /// Shared with every other cutout on the same picture asking the same
+    /// masks (`share`), and swapped for another when a change of settings
+    /// or of picture means this one no longer does.
+    worker: Mutex<Arc<Worker>>,
+    /// The last mask of the worker this cutout left, drawn until the new one
+    /// answers, so a cutout on air is never without a mask while a model
+    /// loads.
+    held: Mutex<Option<Arc<Mask>>>,
+    /// Whose picture, as `filter::share_key` says it, and whether this copy
+    /// leads. See `Filter::share_as`.
+    picture: Mutex<Option<String>>,
+    lead: bool,
+    /// Tells this cutout's offers from another lead's on the same worker.
+    me: u64,
     state: Mutex<State>,
 }
 
@@ -35,7 +51,7 @@ struct State {
 }
 
 impl Cutter {
-    pub fn new(settings: Settings, hook: BoardHook) -> Arc<Cutter> {
+    pub fn new(settings: Settings, hook: BoardHook, picture: Option<String>, lead: bool) -> Arc<Cutter> {
         let state = State {
             curve: settings.curve(),
             settings: settings.clone(),
@@ -43,14 +59,56 @@ impl Cutter {
             info: None,
             flat: Vec::new(),
         };
-        Arc::new(Cutter { hook, worker: Worker::start(settings), state: Mutex::new(state) })
+        static MADE: AtomicU64 = AtomicU64::new(0);
+        let worker = Mutex::new(share::worker_for(picture.as_deref(), &settings));
+        let me = MADE.fetch_add(1, Ordering::Relaxed);
+        let picture = Mutex::new(picture);
+        Arc::new(Cutter { hook, worker, held: Mutex::new(None), picture, lead, me, state: Mutex::new(state) })
     }
 
+    /// New settings. The edge and the feather are this cutout's own; a
+    /// change to what the model is asked moves this cutout to a worker that
+    /// answers it (`share::settle`), so two cutouts on one picture end on one
+    /// model whichever of them is told first.
     pub fn set(&self, settings: Settings) {
-        self.worker.set(settings.clone());
+        let key = self.picture.lock().clone();
+        let current = self.worker.lock().clone();
+        match share::settle(key.as_deref(), &current, &settings) {
+            Some(next) => self.move_to(next),
+            None => current.set(settings.clone()),
+        }
         let mut st = self.state.lock();
         st.curve = settings.curve();
         st.settings = settings;
+    }
+
+    /// The picture this cutout works on has changed (the item's crop or turn).
+    pub fn reshare(&self, key: &str) {
+        if self.picture.lock().as_deref() == Some(key) {
+            return;
+        }
+        *self.picture.lock() = Some(key.to_string());
+        let settings = self.state.lock().settings.clone();
+        // Found or started before the worker's lock is taken: the frame's
+        // thread takes that lock, and starting a thread is not quick.
+        self.move_to(share::worker_for(Some(key), &settings));
+    }
+
+    fn move_to(&self, next: Arc<Worker>) {
+        let old = std::mem::replace(&mut *self.worker.lock(), next);
+        let mut held = self.held.lock();
+        *held = old.latest().or_else(|| held.take());
+    }
+
+    fn mask(&self, frame: &gst::Buffer, vinfo: &gst_video::VideoInfo, wanted: bool) -> Option<Arc<Mask>> {
+        // Held, not cloned: a clone would count as another cutout sharing it.
+        let worker = self.worker.lock();
+        if wanted {
+            worker.offer_as(frame, vinfo, self.lead, self.me);
+        }
+        let latest = worker.latest();
+        drop(worker);
+        latest.or_else(|| self.held.lock().clone())
     }
 
     /// One frame on its way to the compositor pad.
@@ -59,10 +117,18 @@ impl Cutter {
             return gst::PadProbeReturn::Ok;
         };
         let mut st = self.state.lock();
-        let Some(vinfo) = st.video_info(pad) else { return gst::PadProbeReturn::Ok };
         let frame = buffer.clone();
-        self.worker.offer(&frame, &vinfo);
-        let mask = self.worker.latest();
+        // No I420 caps here yet: nothing to cut with, and the frame as it is
+        // would be the whole camera on air. A gap draws nothing.
+        let Some(vinfo) = st.video_info(pad) else {
+            *buffer = gap(&frame);
+            return gst::PadProbeReturn::Ok;
+        };
+        // A cutout drawn by the board on pads nobody can see (an item off
+        // air whose slot is kept, a scene armed but faded out) feeds the model
+        // nothing: it used to run flat out on a camera that was not on screen.
+        let wanted = !self.hook.layer.active() || self.hook.seen();
+        let mask = self.mask(&frame, &vinfo, wanted);
         if self.hook.layer.active() {
             *buffer = gap(&frame);
             if self.hook.seen() {
@@ -72,85 +138,14 @@ impl Cutter {
             }
             return gst::PadProbeReturn::Ok;
         }
-        if mask.is_some() {
-            st.flatten(buffer.make_mut(), &vinfo, mask.as_deref());
+        // Drawn by the compositor itself. Before the first mask that would be
+        // the whole camera, which went to air over the set for a second or
+        // two after a restart, before the board took the item; a gap draws
+        // nothing until the model answers.
+        match mask {
+            Some(m) => st.flatten(buffer.make_mut(), &vinfo, Some(&m)),
+            None => *buffer = gap(&frame),
         }
         gst::PadProbeReturn::Ok
-    }
-}
-
-impl State {
-    fn video_info(&mut self, pad: &gst::Pad) -> Option<gst_video::VideoInfo> {
-        let caps = pad.current_caps()?;
-        if let Some((have, info)) = &self.info {
-            if have == &caps {
-                return Some(info.clone());
-            }
-        }
-        let info = gst_video::VideoInfo::from_caps(&caps).ok()?;
-        if info.format() != gst_video::VideoFormat::I420 {
-            return None;
-        }
-        self.info = Some((caps, info.clone()));
-        Some(info)
-    }
-
-    fn alpha_into(&self, size: (usize, usize), r: Region, mask: Option<&super::worker::Mask>, out: &mut Vec<u8>) {
-        match mask {
-            Some(m) => blocks::alpha(&m.data, (m.width, m.height), size, r, &self.curve, out),
-            None => blocks::alpha(&[], (0, 0), size, r, &self.curve, out),
-        }
-        if self.settings.feather > 0 {
-            crate::plugin::filters::chroma::feather::soften(out, r.w / 2, r.h / 2, self.settings.feather.div_ceil(2) as usize);
-        }
-    }
-
-    fn picture(&mut self, frame: &gst::Buffer, info: &gst_video::VideoInfo, mask: Option<&super::worker::Mask>) -> Option<Picture> {
-        let f = gst_video::VideoFrameRef::from_buffer_ref_readable(frame.as_ref(), info).ok()?;
-        let s = info.stride();
-        let strides = [s[0] as usize, s[1] as usize, s[2] as usize];
-        let (w, h) = (info.width() as usize, info.height() as usize);
-        let r = Region::of(w, h, &self.settings.matte);
-        let (mut alpha, mut chroma) = self.reuse();
-        self.alpha_into((w, h), r, mask, &mut alpha);
-        blocks::chroma(f.plane_data(1).ok()?, f.plane_data(2).ok()?, strides, r, &mut chroma);
-        let keyed = Arc::new(Keyed { frame: frame.clone(), info: info.clone(), region: (r.x, r.y, r.w, r.h), alpha, chroma });
-        self.handed.push(keyed.clone());
-        let whole = r == Region { x: 0, y: 0, w, h };
-        let within = (!whole).then_some(Area { x: r.x as u32, y: r.y as u32, w: r.w as u32, h: r.h as u32 });
-        Some(Picture {
-            buffer: gst::Buffer::new(),
-            width: r.w as u32,
-            height: r.h as u32,
-            stride: 0,
-            natural: (w as u32, h as u32),
-            content: None,
-            within,
-            keyed: Some(keyed),
-        })
-    }
-
-    /// The block arrays of a picture the board has finished with.
-    fn reuse(&mut self) -> (Vec<u8>, Vec<[u8; 2]>) {
-        self.handed.truncate_front(3);
-        let free = self.handed.iter().position(|k| Arc::strong_count(k) == 1);
-        match free.map(|i| self.handed.remove(i)).and_then(|k| Arc::try_unwrap(k).ok()) {
-            Some(k) => (k.alpha, k.chroma),
-            None => (Vec::new(), Vec::new()),
-        }
-    }
-
-    fn flatten(&mut self, buffer: &mut gst::BufferRef, info: &gst_video::VideoInfo, mask: Option<&super::worker::Mask>) {
-        let (w, h) = (info.width() as usize, info.height() as usize);
-        let r = Region::of(w, h, &self.settings.matte);
-        let mut alpha = std::mem::take(&mut self.flat);
-        self.alpha_into((w, h), r, mask, &mut alpha);
-        if let Ok(mut f) = gst_video::VideoFrameRef::from_buffer_ref_writable(buffer, info) {
-            let s = info.stride();
-            let strides = [s[0] as usize, s[1] as usize, s[2] as usize];
-            let [y, u, v, _] = f.planes_data_mut();
-            blocks::flatten(y, u, v, strides, (w, h), &alpha, r);
-        }
-        self.flat = alpha;
     }
 }

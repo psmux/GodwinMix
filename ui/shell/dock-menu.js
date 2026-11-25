@@ -2,7 +2,7 @@ import { el } from './dom.js';
 import { modal } from './modal.js';
 import { list, get } from './registry.js';
 import { leaves } from './dock-model.js';
-import { savedLayouts } from './dock-presets.js';
+import { savedLayouts, readyLayouts } from './dock-presets.js';
 
 export function workspaceMenu(workspace) {
   const hidden = new Set(workspace.state.hidden);
@@ -11,6 +11,7 @@ export function workspaceMenu(workspace) {
       onclick: () => { if (hidden.has(spec.id)) workspace.show(spec.id); else workspace.hide(spec.id); dialog.close(); },
     })));
   body.append(el('button.btn', { text: 'Reset workspace', onclick: () => { workspace.reset(); dialog.close(); } }));
+  body.append(readyLayouts(workspace, () => dialog.close()));
   body.append(savedLayouts(workspace, () => dialog.close()));
   const dialog = modal({ title: 'Panels and layout', body });
 }

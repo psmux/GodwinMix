@@ -74,6 +74,7 @@ const ACTIONS = {
   },
   "view.studio": () => setSetting("producer", !settings().producer),
   "view.reset-layout": () => workspace()?.reset(),
+  "view.volunteer": () => import("./dock-presets.js").then((m) => m.useReady(workspace(), m.READY[0])),
   "view.theme": (client, id) => applyTheme(id),
   "source.add-kind": (client, category) => addOfKind(client, category),
   "data.open": (client) => import("../panels/data/dialog.js").then((m) => m.openLiveData(client)),
@@ -85,6 +86,7 @@ const ACTIONS = {
     document.querySelector("gmx-outputs")?.show("resources");
   },
   "help.devices": (client) => import("./devices.js").then((m) => m.openDevices(client)),
+  "help.signin": () => import("./signin.js").then((m) => m.openSignIn()),
   "help.agents": (client) => import("./agents.js").then((m) => m.openAgents(client)),
   "help.docs": () => window.open(DOCS, "_blank", "noopener"),
   "help.about": (client) => about(client),

@@ -224,6 +224,9 @@ pub struct Tokens {
     entries: Vec<Token>,
     minted: Arc<parking_lot::Mutex<Vec<Token>>>,
     devices: Option<Arc<dyn crate::devices::DeviceRegistry>>,
+    /// The accounts, when the binary attaches them: a signed in session is
+    /// one more token, with its account's scopes. See `accounts`.
+    accounts: Option<Arc<dyn crate::accounts::AccountRegistry>>,
     /// True when the core was started with `--rehearsal`.
     pub rehearsal_core: bool,
 }
@@ -250,7 +253,32 @@ impl AuthFailure {
 
 impl Tokens {
     pub fn new(entries: Vec<Token>, rehearsal_core: bool) -> Self {
-        Self { entries, minted: Arc::default(), devices: None, rehearsal_core }
+        Self { entries, minted: Arc::default(), devices: None, accounts: None, rehearsal_core }
+    }
+
+    /// One more configured entry, keeping everything else attached: the
+    /// minted list, the devices and the accounts.
+    pub fn with_entry(mut self, token: Token) -> Self {
+        self.entries.push(token);
+        self
+    }
+
+    /// Accept account sessions from `registry` as well. Once it holds an
+    /// account the port is no longer open, token or no token.
+    pub fn with_accounts(mut self, registry: Arc<dyn crate::accounts::AccountRegistry>) -> Self {
+        self.accounts = Some(registry);
+        self
+    }
+
+    /// The account store, for `user.*`, `account.*` and the sign in page.
+    pub fn accounts(&self) -> Option<&Arc<dyn crate::accounts::AccountRegistry>> {
+        self.accounts.as_ref()
+    }
+
+    /// True when at least one account exists, so the page asks for a
+    /// username and a password rather than a token.
+    pub fn has_accounts(&self) -> bool {
+        self.accounts.as_ref().is_some_and(|a| a.any())
     }
 
     /// Accept device tokens from `registry` as well.
@@ -270,6 +298,7 @@ impl Tokens {
     /// reach the moment the token goes.
     pub fn revoked(&self, token: &Token) -> bool {
         self.devices.as_ref().is_some_and(|d| d.revoked(token))
+            || self.accounts.as_ref().is_some_and(|a| a.revoked(token))
     }
 
     /// Whether `id` names a configured or minted token, so a device token is
@@ -286,6 +315,13 @@ impl Tokens {
     /// are for. A token per instance rather than per plugin, so revoking one
     /// source does not silence the other three.
     pub fn mint_for_plugin(&self, plugin: &str, instance: &str, node: Option<&str>) -> String {
+        self.mint_for_plugin_with(plugin, instance, node, &[])
+    }
+
+    /// The same, carrying `grants` on top of `plugin`: the core scopes the
+    /// plugin's manifest asked for. Anything above `operate` is dropped, so a
+    /// manifest can never give a plugin `admin`.
+    pub fn mint_for_plugin_with(&self, plugin: &str, instance: &str, node: Option<&str>, grants: &[Scope]) -> String {
         let mut secret = [0u8; 32];
         if getrandom::fill(&mut secret).is_err() {
             tracing::warn!(
@@ -296,7 +332,12 @@ impl Tokens {
             return String::new();
         }
         let secret: String = secret.iter().map(|b| format!("{b:02x}")).collect();
-        let token = Token::for_plugin(instance, &secret, plugin, node);
+        let mut token = Token::for_plugin(instance, &secret, plugin, node);
+        for g in grants {
+            if matches!(g, Scope::Read | Scope::Operate) && !token.scopes.contains(g) {
+                token.scopes.push(*g);
+            }
+        }
         let mut minted = self.minted.lock();
         minted.retain(|t| t.id != instance);
         minted.push(token);
@@ -347,9 +388,11 @@ impl Tokens {
     ///
     /// Minted plugin tokens do not close an open port. A core with no token is
     /// open by the operator's choice, and a plugin starting must not silently
-    /// turn that into a core nobody can reach.
+    /// turn that into a core nobody can reach. An account does close it: a
+    /// sign in page in front of a port anyone can use without one would
+    /// protect nothing.
     pub fn is_open(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.is_empty() && !self.has_accounts()
     }
 
     pub fn entries(&self) -> &[Token] {
@@ -376,6 +419,12 @@ impl Tokens {
         let found = found.or_else(|| {
             let device = self.devices.as_ref()?.find(presented)?;
             Some(Token { rehearsal: self.rehearsal_core, ..device })
+        });
+        // So does a session, and it is checked last: a sign in never shadows
+        // a token somebody configured.
+        let found = found.or_else(|| {
+            let session = self.accounts.as_ref()?.find(presented)?;
+            Some(Token { rehearsal: self.rehearsal_core, ..session })
         });
         let Some(token) = found else { return Err(AuthFailure::Wrong) };
         // 09 section 5 item 14: an agent must not have to know which core it
@@ -667,5 +716,18 @@ mod tests {
         assert!(!constant_time_eq(b"abc", b"ab"));
         assert!(!constant_time_eq(b"ab", b"abc"));
         assert!(!constant_time_eq(b"abc", b""));
+    }
+
+    #[test]
+    fn a_plugin_granted_read_and_operate_reaches_them_and_never_admin() {
+        let tokens = Tokens::default();
+        let secret = tokens.mint_for_plugin_with("atem", "atem-atem", None, &[Scope::Operate, Scope::Admin]);
+        let minted = tokens.minted.lock().iter().find(|t| t.secret == secret).cloned().expect("minted");
+        assert!(minted.has(Scope::Operate) && minted.has(Scope::Read), "operate is granted, and read with it");
+        assert!(!minted.has(Scope::Admin), "admin is never granted to a plugin");
+        assert_eq!(minted.plugin.as_deref(), Some("atem"), "tool.call stays narrowed to its own tools");
+        let plain = tokens.mint_for_plugin("ndi", "cam1", None);
+        let plain = tokens.minted.lock().iter().find(|t| t.secret == plain).cloned().expect("minted");
+        assert!(!plain.has(Scope::Read), "no grants, no read");
     }
 }

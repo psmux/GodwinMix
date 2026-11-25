@@ -117,7 +117,7 @@ async fn a_source_whose_frames_all_wait_is_moved_back_to_its_newest() {
     install(&root);
 
     let mut cfg: Config = toml::from_str("").unwrap();
-    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, 30);
+    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, godwinmix_core::config::FrameRate::whole(30));
     cfg.sources.push(toml::from_str::<SourceConfig>("id = \"ahead\"\ntype = \"aheadbars/source\"").unwrap());
     let (mut mix, handle, cmd_rx, _bus) = Mixer::build(cfg).expect("a mixer");
     mix.start().expect("the programme starts");

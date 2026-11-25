@@ -22,7 +22,7 @@ async fn serve(home: &std::path::Path) -> String {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
     cfg.canvas.width = 320;
     cfg.canvas.height = 180;
-    cfg.canvas.fps = 15;
+    cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(15);
     let (mut mix, handle, cmd_rx, _bus) = Mixer::build(cfg.clone()).expect("building the mixer");
     mix.start().expect("starting the mixer");
     let (multiview, preview, encoder) = (mix.multiview_handle(), mix.preview_handle(), mix.encoder_handle());

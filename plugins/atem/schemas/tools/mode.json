@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mode",
+  "description": "Set how a switcher moves with GodwinMix: own, follow or lead.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "own",
+        "follow",
+        "lead"
+      ]
+    }
+  },
+  "required": [
+    "mode"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "camera_remove",
+  "description": "Remove a camera added with camera_add. It is stopped on the way out. Cameras from the plugin's settings are removed there instead.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    }
+  },
+  "required": [
+    "camera"
+  ],
+  "additionalProperties": false
+}

@@ -93,19 +93,25 @@ Windows has none; the core refuses a sidecar output there. See
 
 ## What the core does not do with them yet
 
-Three gaps, none of them in the plugins. They are worth knowing before you
-build on the same contract.
+One gap, not in the plugins. It is worth knowing before you build on the
+same contract.
 
 | Gap | What it means | Where |
 |---|---|---|
-| Only `source` provides are registered | a `device` or `output` provide in a manifest registers nothing, so `camera/devices` and `file-record/output` cannot be reached through the core today | `crates/godwinmix-core/src/plugin/loader.rs`, `intern_all` |
-| `discover` has no caller | the `device` provides answer it correctly and nothing asks | `crates/godwinmix-core/src/plugin/host/service.rs` |
-| `tool.call` has no route | the MCP server resolves `gmx_<plugin>_<tool>` and posts to `/api/v1/tool/call`, which is not a registered method | `crates/godwinmix/src/mcp.rs` |
-| Only a `source` can be placed on a node | `place = "node:<name>"` builds a remote source; an output, a filter or a service on a node parses and is validated and has no host behind it yet | `crates/godwinmix-core/src/plugin/host/bridged.rs` |
+| Only a `source` can be placed on a node | `place = "node:<name>"` builds a remote source; an output, a filter or a service on a node parses and is validated and has no host behind it yet | `crates/godwinmix-core/src/plugin/host/mod.rs`, `make_source`, and `crates/godwinmix-core/src/plugin/host/bridged.rs` |
 
-Every plugin here implements its side of all three, so they work the day the
-core's side lands. `gmx plugin test --offline` exercises `tool.call` against
-each of them now.
+What the core does do with them now: `output` provides are registered
+beside sources (`crates/godwinmix-core/src/plugin/loader.rs`); `service`,
+`device` and `transition` provides are started and kept running by the
+supervisor (`crates/godwinmix-core/src/plugin/supervisor.rs`), and
+`device.discover` asks each running device; and `tool.call` is routed, as
+`<plugin>/<tool>`, by `crates/godwinmix/src/control/methods/plugins.rs`,
+which is also what the MCP server's `gmx_<plugin>_<tool>` posts to at
+`/api/v1/tool/call`. The core sends a plugin a call without waiting for the
+one before it to be answered, so a plugin may answer out of order; the SDK's
+`Service::tool_call_later` is how a Rust plugin does that (see `tool.call`
+in [the plugin protocol](plugin-protocol.md)). `gmx plugin test --offline`
+exercises `tool.call` against each plugin without a core.
 
 ## Running one on another machine
 

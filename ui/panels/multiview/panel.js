@@ -124,9 +124,11 @@ class ProgramPanel extends HTMLElement {
 
     this.applyMode();
     this.render(this.client.state);
+    import("../camera/atem-chip.js").then((m) => (this.atem = m.atemChips(this)));
   }
 
   disconnectedCallback() {
+    this.atem?.active(false);
     clearInterval(this.frameTimer);
     clearTimeout(this.resizeTimer);
     for (const off of this.offs || []) off();
@@ -145,6 +147,7 @@ class ProgramPanel extends HTMLElement {
 
   setWorkspaceActive(active) {
     this.workspaceActive = active;
+    this.atem?.active(active);
     if (active) this.render(this.client.state);
     else this.release();
   }

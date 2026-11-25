@@ -119,7 +119,7 @@ fn screen(still: &RgbImage, family: Family) -> Option<KeyColor> {
 /// A mosaic started by this very ask shows its tiles black for its first
 /// frames, so a black still is asked for again, a few times, before it is
 /// believed.
-async fn still_of(call: &Call, source: &str) -> Result<RgbImage, RpcError> {
+pub(crate) async fn still_of(call: &Call, source: &str) -> Result<RgbImage, RpcError> {
     let known = call.source_ids().await?;
     if !known.iter().any(|k| k == source) {
         return Err(RpcError::not_found("source", source, &known));

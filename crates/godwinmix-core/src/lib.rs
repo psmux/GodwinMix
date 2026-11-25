@@ -43,6 +43,7 @@
 //! it is built and run in CI.
 
 pub mod armed;
+pub mod buses;
 pub mod caps;
 pub mod catalogue;
 mod child_lines;
@@ -54,10 +55,12 @@ pub mod fx;
 pub mod gallery;
 pub mod graphics;
 pub mod gstutil;
+pub mod guest;
 pub mod hls;
 pub mod hooks;
 pub mod inherit;
 pub mod input;
+pub mod lut;
 pub mod media;
 pub mod media_org;
 pub mod mixer;
@@ -71,12 +74,14 @@ pub mod preview;
 pub mod preset;
 pub mod probe;
 pub mod render;
+pub mod replay;
 pub mod safety;
 pub mod scene;
 pub mod secrets;
 pub mod setup;
 pub mod snapshot;
 pub mod telemetry;
+pub mod webrtc_ice;
 pub mod whep;
 pub mod state;
 pub mod tasks;

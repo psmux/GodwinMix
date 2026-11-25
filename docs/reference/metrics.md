@@ -195,6 +195,38 @@ gmx_node_heartbeat_age_ms > 3000
 
 which fires about a second before anybody watching sees anything.
 
+## Every show on a station
+
+A station answers `GET /metrics/shows` itself, with a series per show and per
+output, read from what `show.stats` answers with: a headend of fifty channels
+is one scrape. It needs a token with the `read` scope, like the rest of the
+station's API. `/metrics` on a station still goes on to a show's own mixer.
+
+| Name | Type | Labels | What it is |
+|---|---|---|---|
+| `gmx_show_health` | gauge | `show` | 0 ok, 1 warning, 2 alarm |
+| `gmx_show_alarms` | gauge | `show` | alarms that hold now |
+| `gmx_show_cpu_millicores` | gauge | `show` | what the show costs the machine, thousandths of a core |
+| `gmx_show_input_kbps` | gauge | `show` | input bitrate |
+| `gmx_show_input_fps` | gauge | `show` | input frames a second |
+| `gmx_show_input_cc_errors_total` | counter | `show` | MPEG-TS continuity errors on the input |
+| `gmx_show_input_packets_lost_total` | counter | `show` | packets lost on the input |
+| `gmx_show_input_last_frame_ms` | gauge | `show` | milliseconds since the input's last frame |
+| `gmx_show_output_live` | gauge | `show`, `output` | 1 while the output is live |
+| `gmx_show_output_kbps` | gauge | `show`, `output` | output bitrate |
+| `gmx_show_output_reconnects_total` | counter | `show`, `output` | times the output has reconnected |
+
+A show that mixes reports its health and its CPU here; its inputs and outputs
+are in its own `/metrics`. A show without compositing, a headend channel, has
+every line.
+
+```yaml
+- job_name: godwinmix-station
+  metrics_path: /metrics/shows
+  authorization: { credentials: <a read token> }
+  static_configs: [{ targets: ["headend:8080"] }]
+```
+
 ## When each is sampled
 
 Nothing runs unless asked (principle two), so the numbers reach the registry by

@@ -7,9 +7,11 @@ name: sign test
 #   git tag v0.2.2-signtest.1 && git push origin v0.2.2-signtest.1
 #   git push --delete origin v0.2.2-signtest.1 && git tag -d v0.2.2-signtest.1
 #
-# The tag has to start with v because the windows-signing environment only
-# lets v* tags at its secrets. release.yml and the other tag workflows skip
-# v*-signtest* tags, so this is the only thing such a tag starts.
+# The tag has to start with v because the windows-signing and macos-signing
+# environments only let v* tags at their secrets. release.yml and the other
+# tag workflows skip v*-signtest* tags, so this is the only thing such a tag
+# starts. A tag with `mac` in its name (v0.3.32-signtest-mac.1) runs only the
+# macOS job, and one with `win` in it only the Windows ones.
 #
 # The job is a matrix in the same shape as release.yml's, with the same
 # environment expression, so the Linux leg shows that a leg the expression
@@ -25,6 +27,7 @@ permissions:
 jobs:
   sign:
     name: sign test (${{ matrix.os }})
+    if: ${{ !contains(github.ref_name, 'mac') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
@@ -117,6 +120,7 @@ jobs:
   # which is what the release's two Windows jobs may do.
   installers:
     name: sign test (installers)
+    if: ${{ !contains(github.ref_name, 'mac') }}
     runs-on: windows-latest
     timeout-minutes: 60
     environment: windows-signing
@@ -177,3 +181,88 @@ jobs:
           path: ${{ runner.temp }}/simplysign
           retention-days: 1
           if-no-files-found: ignore
+
+  # The macOS signing of a release, on a stand in app in the shape of the real
+  # one: a program in Contents/MacOS that loads a library from Resources, and
+  # a helper app inside it. The release's own script signs it inside out,
+  # notarises and staples it, makes the disk image, notarises that, and asks
+  # Gatekeeper about the app on the mounted image. Minutes, where the release
+  # takes an hour to reach the same steps.
+  macos:
+    name: sign test (macOS)
+    if: ${{ !contains(github.ref_name, 'win') }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    environment: macos-signing
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The secrets, the keychain and the notary key
+        run: |
+          ./dev/sign-macos.sh check
+          ./dev/sign-macos.sh keychain
+          ./dev/sign-macos.sh preflight
+
+      - name: A stand in app
+        run: |
+          mkdir -p signtest && cd signtest
+          app="GodwinMix Signtest.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/lib" "$app/Contents/Resources/helper"
+          echo 'int gmx_signtest(void) { return 7; }' > lib.c
+          printf '#include <stdio.h>\nint gmx_signtest(void);\nint main(void) { printf("signed by GodwinMix %%d\\n", gmx_signtest()); return 0; }\n' > main.c
+          clang -dynamiclib -install_name @rpath/libsigntest.dylib -o "$app/Contents/Resources/lib/libsigntest.dylib" lib.c
+          clang -o "$app/Contents/MacOS/signtest" main.c -L"$app/Contents/Resources/lib" -lsigntest \
+            -Wl,-rpath,@executable_path/../Resources/lib
+          plist() {
+            /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string $2" -c "Add :CFBundleIdentifier string $3" \
+              -c "Add :CFBundlePackageType string APPL" -c "Add :CFBundleShortVersionString string 0.0.1" "$1"
+          }
+          plist "$app/Contents/Info.plist" signtest mix.godwin.signtest
+          helper="$app/Contents/Resources/helper/Signtest Helper.app"
+          mkdir -p "$helper/Contents/MacOS"
+          clang -o "$helper/Contents/MacOS/helper" main.c -L"$app/Contents/Resources/lib" -lsigntest \
+            -Wl,-rpath,@executable_path/../../../../lib
+          plist "$helper/Contents/Info.plist" helper mix.godwin.signtest.helper
+          clang -o loose main.c -L"$app/Contents/Resources/lib" -lsigntest -Wl,-rpath,@executable_path/"$app"/Contents/Resources/lib
+
+      - name: Sign, notarise and staple the app
+        working-directory: signtest
+        run: |
+          ../dev/sign-macos.sh sign "GodwinMix Signtest.app"
+          ../dev/sign-macos.sh verify "GodwinMix Signtest.app"
+          ../dev/sign-macos.sh notarize "GodwinMix Signtest.app"
+          "GodwinMix Signtest.app/Contents/MacOS/signtest"
+
+      - name: The disk image, notarised, and Gatekeeper's verdict on the app on it
+        working-directory: signtest
+        run: |
+          ../dev/sign-macos.sh dmg "GodwinMix Signtest.app" signtest.dmg
+          ../dev/sign-macos.sh notarize signtest.dmg
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" signtest.dmg >/dev/null
+          verdict=$(spctl -a -vv -t exec "$mnt/GodwinMix Signtest.app" 2>&1 || true)
+          hdiutil detach "$mnt" >/dev/null
+          echo "$verdict"
+          grep -q 'source=Notarized Developer ID' <<<"$verdict" \
+            || { echo "::error::Gatekeeper does not accept the app on the disk image as notarised"; exit 1; }
+
+      - name: A loose program, the way the core archive is done
+        working-directory: signtest
+        run: |
+          ../dev/sign-macos.sh sign loose
+          ../dev/sign-macos.sh verify loose
+          zip -q loose.zip loose
+          ../dev/sign-macos.sh notarize loose.zip
+          ./loose
+
+      - name: Remove the signing keychain
+        if: always()
+        run: ./dev/sign-macos.sh cleanup

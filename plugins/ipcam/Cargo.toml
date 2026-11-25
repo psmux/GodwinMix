@@ -15,11 +15,11 @@ path = "src/main.rs"
 [dependencies]
 godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
 gmx-netkit = { path = "../netkit" }
+# The ONVIF envelope, login and HTTP call, shared with the PTZ drivers.
+godwinmix-ptz = { path = "../../crates/godwinmix-ptz" }
 
 gstreamer = { workspace = true }
 gstreamer-app = { workspace = true }
 serde_json = { workspace = true }
-# The ONVIF login: WS-Security's password digest is SHA-1 of a random nonce,
-# the time and the password, in base64. Both are already in the tree.
-ring = { workspace = true }
+# The tests' fake cameras read logins in base64.
 base64 = { workspace = true }

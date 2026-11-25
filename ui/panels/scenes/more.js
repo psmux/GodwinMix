@@ -17,9 +17,10 @@ import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
 import { byPointer } from "../../shell/pointer.js";
 
-export function menu(panel, id, e) {
+export async function menu(panel, id, e) {
   const ids = panel.selected();
   const many = ids.length > 1;
+  const keyed = id ? await keysOnAir(panel) : [];
   contextMenu(e.clientX, e.clientY, [
     id && { label: settings().producer ? "Arm" : "Put on air", key: "Click", run: () => panel.choose(id, true) },
     id && { label: "Open the composer", key: "Enter", disabled: many, run: () => panel.open(id) },
@@ -29,6 +30,12 @@ export function menu(panel, id, e) {
     id && { label: "Copy the layout", disabled: many, run: () => copyLayout(panel, id) },
     id && { label: "Paste the layout onto this", disabled: !panel.layoutClip, run: () => pasteLayout(panel, ids) },
     id && { label: many ? `Duplicate ${ids.length}` : "Duplicate", run: () => duplicate(panel, ids) },
+    id && { kind: "separator" },
+    id && {
+      label: keyed.includes(id) ? "Take the key down" : "Put up as a key, above every take",
+      disabled: many,
+      run: () => setKey(panel, id, !keyed.includes(id)),
+    },
     id && { kind: "separator" },
     id && { label: many ? `Remove ${ids.length}` : "Remove", key: "Delete", run: () => panel.remove(ids) },
     { kind: "separator" },
@@ -109,5 +116,29 @@ export async function moveItem(panel, info, toScene) {
     panel.scenes.undo.record(info.copy ? "Copied an item into another scene" : "Moved an item to another scene", { offer: true });
   } catch (e) {
     errorToast(e, info.copy ? "Copy" : "Move");
+  }
+}
+
+/** The scenes up as downstream keys, by id. Empty when the core has none or cannot say. */
+async function keysOnAir(panel) {
+  try {
+    const { keys = [] } = await panel.client.call("program.key.list", {});
+    return keys.map((k) => k.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A downstream key stays above whatever is taken until it is taken down: a
+ * lower third, a logo or a ticker that no longer has to be in every scene.
+ */
+export async function setKey(panel, id, on) {
+  const name = (panel.scenes.summary(id) || {}).name || id;
+  try {
+    await panel.client.call("program.key.set", { scene: id, on });
+    toast({ text: on ? `"${name}" is up as a key, above every take until you take it down.` : `"${name}" is down.` });
+  } catch (e) {
+    errorToast(e, "Key");
   }
 }

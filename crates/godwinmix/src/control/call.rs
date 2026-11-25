@@ -193,6 +193,19 @@ pub fn safety_error(method: &str, refusal: godwinmix_core::safety::Refusal) -> R
 
 /// A device token taken back while its connection stayed open.
 pub fn revoked(token: &Token) -> RpcError {
+    if token.secret.starts_with(crate::accounts::SECRET_PREFIX) {
+        return RpcError::new(
+            ErrorCode::Scope,
+            format!(
+                "{} was signed out of this mixer: the session was ended, or the account was \
+                 changed, disabled or removed. Reload the page and sign in again.",
+                token.id
+            ),
+        )
+        .with("token", token.id.as_str())
+        .with("revoked", true)
+        .with("signed_out", true);
+    }
     RpcError::new(
         ErrorCode::Scope,
         format!(

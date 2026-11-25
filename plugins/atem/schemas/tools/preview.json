@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "preview",
+  "description": "Put an input on preview.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "me": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "title": "M/E",
+      "description": "The mix effect bus, counted from 0."
+    },
+    "input": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Input",
+      "description": "An ATEM input number as state lists it (0 black, 1 and up the inputs, 1000 bars, 3010 media player 1), or a GodwinMix source id the switcher's map names.",
+      "examples": [
+        2,
+        "cam-pulpit"
+      ]
+    }
+  },
+  "required": [
+    "input"
+  ],
+  "additionalProperties": false
+}

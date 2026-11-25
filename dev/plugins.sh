@@ -32,6 +32,8 @@ PLUGINS=(
     "tally gmx-tally gmx-tally"
     "director gmx-director gmx-director"
     "ograf gmx-ograf gmx-ograf"
+    "ptz gmx-ptz gmx-ptz"
+    "atem gmx-atem gmx-atem"
 )
 
 FAILED=0

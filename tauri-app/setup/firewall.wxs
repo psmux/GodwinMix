@@ -14,6 +14,14 @@
 
   On a major upgrade the old product's removal skips its uninstall action, and
   the new install writes the rules again.
+
+  GmxCloseApp ends a running desktop app and everything under it (the mixer,
+  its shows, the page renderer) before the installer looks for files in use.
+  Without it Windows' Restart Manager closed the mixer, the app started it
+  again as it does after any crash, and the upgrade left the GStreamer DLLs
+  for a restart of the machine. The NSIS setup closes the app the same way.
+  It runs as the person installing, whose processes these are, and a machine
+  with nothing running answers with an error that is ignored.
 -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
@@ -26,7 +34,10 @@
       ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "[INSTALLDIR]setup\firewall.ps1" -Action Install -InstallDir "[INSTALLDIR]." -AppData "[AppDataFolder]."' />
     <CustomAction Id="GmxFirewallUninstall" Directory="INSTALLDIR" Execute="deferred" Impersonate="no" Return="ignore"
       ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "[INSTALLDIR]setup\firewall.ps1" -Action Uninstall' />
+    <CustomAction Id="GmxCloseApp" Directory="INSTALLDIR" Execute="immediate" Return="ignore"
+      ExeCommand='"[SystemFolder]taskkill.exe" /F /T /IM godwinmix-desktop.exe' />
     <InstallExecuteSequence>
+      <Custom Action="GmxCloseApp" Before="InstallValidate">1</Custom>
       <Custom Action="GmxFirewallUninstall" After="InstallInitialize">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="GmxFirewallInstall" Before="InstallFinalize">NOT REMOVE</Custom>
     </InstallExecuteSequence>

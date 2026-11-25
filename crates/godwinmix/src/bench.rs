@@ -550,7 +550,7 @@ fn bench_config_with(multiview: MultiviewConfig, encode: &str) -> Config {
     cfg.canvas = godwinmix_core::config::Canvas {
         width: BENCH_WIDTH,
         height: BENCH_HEIGHT,
-        fps: BENCH_FPS,
+        fps: godwinmix_core::config::FrameRate::whole(BENCH_FPS),
         sample_rate: 48000,
         channels: 2,
     };

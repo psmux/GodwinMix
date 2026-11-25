@@ -211,9 +211,15 @@ behind as artifacts. What differs by platform:
 
 | | GStreamer | hardware codecs | browser sidecar | desktop app |
 |---|---|---|---|---|
-| Linux | distro packages for the `.deb` and for a server; bundled in the AppImage | NVIDIA, VA | native, with H.264 from a prebuilt CEF ([codecs](reference/web-page-sources.md)) | `.deb`, AppImage |
+| Linux, x86_64 and arm64 | GStreamer 1.28 built on Ubuntu 22.04 and bundled in the `.deb` and the AppImage; the distribution's, 1.20 or later, for a server | NVIDIA, VA, V4L2 | native, with H.264 from a prebuilt CEF ([codecs](reference/web-page-sources.md)) | `.deb`, AppImage, for glibc 2.35 and any x86_64 or arm64 CPU |
 | macOS | bundled in the `.app`; `brew install gstreamer` to build from source | VideoToolbox | `.app` bundle from `browser/dev/mac-bundle.sh`, or the Linux one in a container | `.app` |
 | Windows | bundled in the installer; to build from source, the MSVC runtime and development MSIs from gstreamer.freedesktop.org, or `choco install gstreamer gstreamer-devel`, with `C:\gstreamer\1.0\msvc_x86_64\bin` on `PATH` | Media Foundation, NVIDIA | `godwinmix-browser.exe` next to the mixer, from `cd browser; cargo build --release` | `.msi`, NSIS |
+
+Every Linux file is built in `dev/linux-baseline/Dockerfile` (Ubuntu 22.04,
+glibc 2.35) by `.github/workflows/linux-packages.yml`, which fails the build if
+`dev/check-linux-baseline.py` finds a file that needs a newer glibc or a CPU
+newer than baseline x86-64, then installs the `.deb` on Ubuntu 22.04 and 24.04
+and Debian 12 and 13, and runs it on an emulated 2008 CPU.
 
 `dev/bundle-gstreamer.sh` and `dev/bundle-gstreamer.ps1` build the trimmed
 runtime; `.github/workflows/platforms.yml` runs the whole product on all three

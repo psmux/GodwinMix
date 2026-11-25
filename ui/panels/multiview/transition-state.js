@@ -53,6 +53,8 @@ export class TransitionState {
     this.option = saved.option || "";
     this.easing = saved.easing || "ease-in-out";
     this.length = Number(saved.ms) || 500;
+    /** False until the person picks one; until then the core's default shows (transition-default.js). */
+    this.picked = Boolean(saved.type);
     /** Names the core adds: the collection's, the plugins', the fx library's. */
     this.extra = new Map();
     this.listeners = new Set();
@@ -73,6 +75,8 @@ export class TransitionState {
 
   /** Change any of type, option, easing or length, and tell whoever listens. */
   set(fields) {
+    // A first pick starts from a fresh page's length, not the core default's.
+    if (!this.picked) Object.assign(this, { length: 500, easing: "ease-in-out" });
     if (fields.type !== undefined && fields.type !== this.type) {
       this.type = fields.type;
       const pairs = this.options();
@@ -81,6 +85,7 @@ export class TransitionState {
     if (fields.option !== undefined) this.option = fields.option;
     if (fields.easing !== undefined) this.easing = fields.easing;
     if (fields.ms !== undefined) this.length = Number(fields.ms) || 500;
+    this.picked = true;
     write(KEY, { type: this.type, option: this.option, easing: this.easing, ms: this.length });
     for (const fn of this.listeners) fn(this);
   }
@@ -108,6 +113,8 @@ export class TransitionState {
 
   /** `{type, duration_ms}`, with `params` only when there is something in it. */
   request(durationMs) {
+    // The core's default, unpicked: as a take naming none runs it, no params.
+    if (!this.picked) return { type: this.type, duration_ms: this.length };
     const k = this.kind();
     const out = { type: this.type, duration_ms: durationMs };
     const params = {};
@@ -137,7 +144,7 @@ export class TransitionState {
     for (const t of transitions || []) {
       if (t.origin === "built-in" || TYPES.some((b) => b.type === t.name)) continue;
       const clip = t.origin === "fx" && (t.type === "stinger" || t.type === "overlay");
-      this.extra.set(t.name, { type: t.name, label: t.title || t.name, origin: t.origin, ownMs: clip ? t.duration_ms : 0 });
+      this.extra.set(t.name, { type: t.name, label: t.title || t.name, origin: t.origin, ownMs: clip ? t.duration_ms : 0, ms: t.duration_ms || 0 });
     }
   }
 }

@@ -784,6 +784,7 @@ mod tests {
             extra: Default::default(),
         };
         MixerStatus {
+            audio: None,
             scene: None,
             program: Some("cam1".into()),
             sources: vec![source("cam1", Some(1)), source("cam2", Some(2))],
@@ -1008,7 +1009,7 @@ mod tests {
         cfg.canvas = crate::config::Canvas {
             width: 320,
             height: 180,
-            fps: 15,
+            fps: crate::config::FrameRate::whole(15),
             sample_rate: 48000,
             channels: 2,
         };
@@ -1062,7 +1063,7 @@ mod tests {
         cfg.canvas = crate::config::Canvas {
             width: 320,
             height: 180,
-            fps: 15,
+            fps: crate::config::FrameRate::whole(15),
             sample_rate: 48000,
             channels: 2,
         };

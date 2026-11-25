@@ -36,7 +36,10 @@ jobs:
     # down at half a gigabyte, a cold cargo cache builds the whole workspace
     # with MSVC, and the test step alone measured 31 minutes on the first
     # Windows run. `platforms.yml` has been at 90 for the same reason.
-    timeout-minutes: 90
+    # 120 since 2026-11-24: a new stable Rust left every cache cold, and the
+    # Windows leg was stopped at 90 minutes with its tests passed and the
+    # release example and check still to build.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:

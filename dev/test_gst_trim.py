@@ -71,5 +71,25 @@ class Stripping(unittest.TestCase):
         self.assertTrue(gst_symbols.pe_has_debug(pe(0, b"/4")))
 
 
+class HardwarePlugins(unittest.TestCase):
+    def test_a_gpu_plugin_is_kept_by_file_on_a_machine_with_no_gpu(self):
+        # nvcodec and va register no element without the GPU, so the build
+        # machine's registry never names them. Their files decide.
+        with tempfile.TemporaryDirectory() as folder:
+            plugins = Path(folder)
+            for leaf in ("libgstva.so", "libgstnvcodec.so", "libgstx264.so"):
+                (plugins / leaf).write_bytes(b"plugin")
+            self.assertEqual(gst_trim.hardware_plugins(plugins, "linux"), {"va", "nvcodec"})
+            self.assertEqual(gst_trim.hardware_plugins(plugins, "macos"), set())
+
+    def test_windows_finds_its_plugins_under_their_dll_names(self):
+        with tempfile.TemporaryDirectory() as folder:
+            plugins = Path(folder)
+            for leaf in ("gstnvcodec.dll", "gstqsv.dll", "gstamfcodec.dll"):
+                (plugins / leaf).write_bytes(b"plugin")
+            self.assertEqual(gst_trim.hardware_plugins(plugins, "windows"),
+                             {"nvcodec", "qsv", "amfcodec"})
+
+
 if __name__ == "__main__":
     unittest.main()

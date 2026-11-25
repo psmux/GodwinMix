@@ -9,6 +9,7 @@ export async function show(panel, view) {
   const tabs = [...panel.tabs.children];
   tabs.forEach((b, i) => b.setAttribute("aria-selected", String(i === (view === "resources" ? 1 : 0))));
   panel.list.hidden = view === "resources";
+  if (panel.switchers) panel.switchers.classList.toggle("away", view === "resources");
   if (view !== "resources") {
     if (panel.resources) {
       panel.resources.stop();

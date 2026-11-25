@@ -34,11 +34,21 @@ Keys accepted on every method, handled before a method runs.
 
 | Method | REST | Scope | Destructive | Since | What it does |
 |---|---|---|---|---|---|
+| `account.change_password` | `POST /api/v1/account/change_password` | read |  | 1 | Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused. |
+| `account.get` | `GET /api/v1/account` | read |  | 1 | Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all. |
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
 | `agent.tools` | `POST /api/v1/agent/tools` | admin |  | 1 | The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. |
+| `audio.bus.add` | `POST /api/v1/audio/bus/add` | operate |  | 1 | Add a bus beside the programme mix, live. Nothing is built for buses until the first one. |
+| `audio.bus.list` | `GET /api/v1/audio/bus/list` | read |  | 1 | The programme master, every bus with its sends, and the sources marked cue. |
+| `audio.bus.remove` | `POST /api/v1/audio/bus/remove` | operate | yes | 1 | Take a bus out, live. Refused while an output takes its sound from it. |
+| `audio.bus.set` | `POST /api/v1/audio/bus/set` | operate |  | 1 | Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card. |
+| `audio.cue.set` | `POST /api/v1/audio/cue/set` | operate |  | 1 | Mark or clear a source for the cue bus. `solo` clears every other mark first. |
+| `audio.device.list` | `GET /api/v1/audio/device/list` | read |  | 1 | The sound outputs on the mixer's machine that a bus can play on. |
+| `audio.master.set` | `POST /api/v1/audio/master/set` | operate |  | 1 | Move the programme's master fader or mute. Only what is named moves. |
+| `audio.send.set` | `POST /api/v1/audio/send/set` | operate |  | 1 | Set how much of one source goes to one bus. 0 takes it off the bus. |
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. |
 | `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
 | `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
@@ -81,6 +91,7 @@ Keys accepted on every method, handled before a method runs.
 | `feed.set` | `POST /api/v1/feed/set` | operate |  | 1 | Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one. |
 | `feed.test` | `POST /api/v1/feed/test` | operate |  | 1 | Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written. |
 | `filter.add` | `POST /api/v1/filters` | operate |  | 1 | Hang a filter on one source or on the programme, live. |
+| `filter.cutout` | `POST /api/v1/filters/{id}/cutout` | read |  | 1 | Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out. |
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
@@ -105,6 +116,11 @@ Keys accepted on every method, handled before a method runs.
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `gpu.rebalance` | `POST /api/v1/gpu/rebalance` | admin |  | 1 | Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it. |
 | `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `guest.invite.create` | `POST /api/v1/guest/invite/create` | admin |  | 1 | Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise. |
+| `guest.invite.link` | `POST /api/v1/guest/invite/link` | admin |  | 1 | An invite's link and QR code again, to copy or show. |
+| `guest.invite.list` | `GET /api/v1/guest/invite/list` | read |  | 1 | Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback. |
+| `guest.invite.revoke` | `POST /api/v1/guest/invite/revoke` | admin | yes | 1 | Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again. |
+| `guest.talkback.set` | `POST /api/v1/guest/talkback/set` | operate |  | 1 | Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with. |
 | `headend.channel.add` | `POST /api/v1/headend/channel/add` | admin |  | 1 | Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. |
 | `headend.channel.bulk` | `POST /api/v1/headend/channel/bulk` | admin |  | 1 | The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. |
 | `headend.channel.follow` | `POST /api/v1/headend/channel/follow` | admin |  | 1 | Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. |
@@ -117,9 +133,16 @@ Keys accepted on every method, handled before a method runs.
 | `headend.profile.save` | `POST /api/v1/headend/profile/save` | admin |  | 1 | Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change. |
 | `headend.scan` | `POST /api/v1/headend/scan` | admin |  | 1 | Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add. |
 | `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
+| `hls.sign` | `POST /api/v1/hls/sign` | operate |  | 1 | A viewer link to one HLS output that stops working after a time, and can be held to one address. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
+| `lut.import` | `POST /api/v1/lut/import` | operate |  | 1 | Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library. |
+| `lut.list` | `GET /api/v1/lut/list` | read |  | 1 | Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets. |
+| `lut.preset.remove` | `POST /api/v1/lut/preset/remove` | operate | yes | 1 | Delete a saved preset. |
+| `lut.preset.save` | `POST /api/v1/lut/preset/save` | operate |  | 1 | Save a look under a name: a LUT, how much of it, and a colour correction before it. |
+| `lut.preview` | `POST /api/v1/lut/preview` | read |  | 1 | Small JPEG pictures of looks on a source, or on a test card, for a picker. |
+| `lut.remove` | `POST /api/v1/lut/remove` | operate | yes | 1 | Delete an imported LUT. The built in ones cannot be deleted. |
 | `machine.status` | `GET /api/v1/machine/status` | read |  | 1 | The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. |
 | `media.convert` | `POST /api/v1/media/{id}/convert` | operate |  | 1 | Transcode a library file to a web safe copy, in the background. |
 | `media.folder.add` | `POST /api/v1/media/folder/add` | operate |  | 1 | Make a folder in the media library, inside another when the name has a / in it. |
@@ -175,14 +198,38 @@ Keys accepted on every method, handled before a method runs.
 | `program.get` | `GET /api/v1/program` | read |  | 1 | What is on air, the programme running time, and what revert would go back to. |
 | `program.golive` | `POST /api/v1/program/golive` | operate |  | 1 | One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders. |
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
+| `program.key.list` | `GET /api/v1/program/key/list` | read |  | 1 | The downstream keys on air, bottom first. |
+| `program.key.set` | `POST /api/v1/program/key/set` | operate |  | 1 | Put a scene on air as a downstream key, above whatever is taken, or take it off. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
 | `program.thumbnail` | `GET /api/v1/program/thumbnail` | read |  | 1 | What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks. |
 | `program.transitions` | `POST /api/v1/program/transitions` | read |  | 1 | Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be. |
 | `project.export` | `POST /api/v1/project/export` | admin |  | 1 | This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. |
 | `project.import` | `POST /api/v1/project/import` | admin | yes | 1 | Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. |
+| `prompter.get` | `GET /api/v1/prompter` | read |  | 1 | The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look. |
+| `prompter.load` | `POST /api/v1/prompter/load` | operate |  | 1 | Put a script on the prompter, at the top and paused unless play is true. |
+| `prompter.pause` | `POST /api/v1/prompter/pause` | operate |  | 1 | Stop the prompter where it is. |
+| `prompter.play` | `POST /api/v1/prompter/play` | operate |  | 1 | Start the prompter scrolling, at speed when given. From the end it starts again at the top. |
+| `prompter.rows` | `POST /api/v1/prompter/rows` | read |  | 1 | The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. |
+| `prompter.script.get` | `GET /api/v1/prompter/script/get` | read |  | 1 | One prompter script with its text. |
+| `prompter.script.list` | `GET /api/v1/prompter/script/list` | read |  | 1 | Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. |
+| `prompter.script.remove` | `POST /api/v1/prompter/script/remove` | operate |  | 1 | Forget a prompter script. When it is on the prompter the screens go empty. |
+| `prompter.script.save` | `POST /api/v1/prompter/script/save` | operate |  | 1 | Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. |
+| `prompter.seek` | `POST /api/v1/prompter/seek` | operate |  | 1 | Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). |
+| `prompter.set` | `POST /api/v1/prompter/set` | operate |  | 1 | Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. |
+| `prompter.speed` | `POST /api/v1/prompter/speed` | operate |  | 1 | Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
 | `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
+| `replay.event.delete` | `POST /api/v1/replay/event/delete` | operate |  | 1 | Forget a replay event. The recording it pointed at is not touched. |
+| `replay.event.list` | `GET /api/v1/replay/event/list` | read |  | 1 | Every replay event, oldest first. |
+| `replay.event.rename` | `POST /api/v1/replay/event/rename` | operate |  | 1 | Give a replay event a name. |
+| `replay.get` | `GET /api/v1/replay` | read |  | 1 | Whether replay is on, each angle's buffer depth and size, and every event. |
+| `replay.mark` | `POST /api/v1/replay/mark` | operate |  | 1 | Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`. |
+| `replay.play` | `POST /api/v1/replay/play` | operate |  | 1 | Play an event, or the last seconds of an angle, on a replay source, added if it is not there. |
+| `replay.save` | `POST /api/v1/replay/save` | operate |  | 1 | Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again. |
+| `replay.set` | `POST /api/v1/replay/set` | operate |  | 1 | Change a playing replay's angle or speed, from the frame it is on. |
+| `replay.start` | `POST /api/v1/replay/start` | operate |  | 1 | Record these angles, each the last `seconds`. Called again, it changes them in place. |
+| `replay.stop` | `POST /api/v1/replay/stop` | operate | yes | 1 | Stop recording, free every buffer and forget every event. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
 | `scene.apply_graphic` | `POST /api/v1/scenes/apply_graphic` | operate |  | 1 | Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. |
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
@@ -223,7 +270,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.params.get` | `GET /api/v1/scenes/params/get` | read |  | 1 | The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it. |
 | `scene.params.set` | `POST /api/v1/scenes/params/set` | operate |  | 1 | Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it. |
 | `scene.preview.frame` | `GET /api/v1/scenes/preview/frame` | read |  | 1 | A still of the armed scene as base64 JPEG, the floor every client has. |
-| `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. |
+| `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client. |
 | `scene.redo` | `POST /api/v1/scenes/redo` | operate |  | 1 | Put back what your undo took away. |
 | `scene.remove` | `DELETE /api/v1/scenes/{id}` | operate | yes | 1 | Delete a scene. What is on air is not touched. |
 | `scene.rename` | `POST /api/v1/scenes/{id}/rename` | operate |  | 1 | Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones. |
@@ -282,10 +329,49 @@ Keys accepted on every method, handled before a method runs.
 | `token.list` | `GET /api/v1/token/list` | admin |  | 1 | Every device token: its id, label, scope and when it was made. Never a secret. |
 | `token.revoke` | `POST /api/v1/token/revoke` | admin | yes | 1 | Take a device token back. The device's next call is refused, including on a connection it already has open. |
 | `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
+| `user.add` | `POST /api/v1/user/add` | admin |  | 1 | Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token. |
+| `user.list` | `GET /api/v1/user/list` | admin |  | 1 | Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password. |
+| `user.remove` | `POST /api/v1/user/remove` | admin | yes | 1 | Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain. |
+| `user.reset_password` | `POST /api/v1/user/reset_password` | admin |  | 1 | Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out. |
+| `user.sessions` | `POST /api/v1/user/sessions` | admin |  | 1 | The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen. |
+| `user.sign_out` | `POST /api/v1/user/sign_out` | admin |  | 1 | End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call. |
+| `user.update` | `POST /api/v1/user/update` | admin |  | 1 | Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role. |
 | `vitals.get` | `GET /api/v1/vitals` | read |  | 1 | This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. |
 | `vitals.set` | `POST /api/v1/vitals/set` | operate |  | 1 | Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second. |
 
 ### Params and results
+
+#### `account.change_password`
+
+Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/AccountPasswordRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedOut"
+  }
+}
+```
+
+#### `account.get`
+
+Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AccountInfo"
+  }
+}
+```
 
 #### `adbreak.end`
 
@@ -371,6 +457,142 @@ The AI agent tools this mixer can set up, the ones installed on its machine firs
       "$ref": "#/$defs/Detected"
     },
     "type": "array"
+  }
+}
+```
+
+#### `audio.bus.add`
+
+Add a bus beside the programme mix, live. Nothing is built for buses until the first one.
+
+MCP tool `add_audio_bus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusConfig"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
+  }
+}
+```
+
+#### `audio.bus.list`
+
+The programme master, every bus with its sends, and the sources marked cue.
+
+MCP tool `list_audio_buses` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioStatus"
+  }
+}
+```
+
+#### `audio.bus.remove`
+
+Take a bus out, live. Refused while an output takes its sound from it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusIdRequest"
+  }
+}
+```
+
+#### `audio.bus.set`
+
+Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.
+
+MCP tool `set_audio_bus` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BusSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
+  }
+}
+```
+
+#### `audio.cue.set`
+
+Mark or clear a source for the cue bus. `solo` clears every other mark first.
+
+MCP tool `set_audio_cue` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CueSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioStatus"
+  }
+}
+```
+
+#### `audio.device.list`
+
+The sound outputs on the mixer's machine that a bus can play on.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/AudioDeviceList"
+  }
+}
+```
+
+#### `audio.master.set`
+
+Move the programme's master fader or mute. Only what is named moves.
+
+MCP tool `set_master_audio` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MasterSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/MasterConfig"
+  }
+}
+```
+
+#### `audio.send.set`
+
+Set how much of one source goes to one bus. 0 takes it off the bus.
+
+MCP tool `set_audio_send` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SendSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BusStatus"
   }
 }
 ```
@@ -1077,6 +1299,23 @@ MCP tool `add_filter` in the `search` profile: readOnlyHint false, destructiveHi
 }
 ```
 
+#### `filter.cutout`
+
+Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/CutoutReadiness"
+  }
+}
+```
+
 #### `filter.list`
 
 Every filter in place, with what it is and where it sits.
@@ -1483,6 +1722,87 @@ MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHi
 }
 ```
 
+#### `guest.invite.create`
+
+Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.
+
+MCP tool `create_guest_invite` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteCreateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteCreated"
+  }
+}
+```
+
+#### `guest.invite.link`
+
+An invite's link and QR code again, to copy or show.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteLink"
+  }
+}
+```
+
+#### `guest.invite.list`
+
+Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.
+
+MCP tool `list_guests` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/GuestList"
+  }
+}
+```
+
+#### `guest.invite.revoke`
+
+Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/InviteIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/InviteRevoked"
+  }
+}
+```
+
+#### `guest.talkback.set`
+
+Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TalkbackRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GuestList"
+  }
+}
+```
+
 #### `headend.channel.add`
 
 Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
@@ -1693,6 +2013,23 @@ MCP tool `headend_status` in the `search` profile: readOnlyHint true, destructiv
 }
 ```
 
+#### `hls.sign`
+
+A viewer link to one HLS output that stops working after a time, and can be held to one address.
+
+MCP tool `sign_viewer_link` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SignRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedLink"
+  }
+}
+```
+
 #### `log.gst`
 
 Raise GStreamer's own debug categories for a while, then let them fall back on their own.
@@ -1733,6 +2070,108 @@ Change one instance's or one module's log level while the mixer runs.
 {
   "params": {
     "$ref": "#/$defs/LogSetRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `lut.import`
+
+Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.
+
+MCP tool `import_lut` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LutImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/LutImported"
+  }
+}
+```
+
+#### `lut.list`
+
+Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.
+
+MCP tool `list_luts` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LutListRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/LutList"
+  }
+}
+```
+
+#### `lut.preset.remove`
+
+Delete a saved preset.
+
+MCP tool `remove_lut_preset` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LutNameRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `lut.preset.save`
+
+Save a look under a name: a LUT, how much of it, and a colour correction before it.
+
+MCP tool `save_lut_preset` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LutPreset"
+  },
+  "result": {
+    "$ref": "#/$defs/LutPreset"
+  }
+}
+```
+
+#### `lut.preview`
+
+Small JPEG pictures of looks on a source, or on a test card, for a picker.
+
+MCP tool `preview_luts` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LutPreviewRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/LutPreviews"
+  }
+}
+```
+
+#### `lut.remove`
+
+Delete an imported LUT. The built in ones cannot be deleted.
+
+MCP tool `remove_lut` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LutNameRequest"
   },
   "result": {
     "type": "object"
@@ -2650,6 +3089,40 @@ MCP tool `program_history` in the `search` profile: readOnlyHint true, destructi
 }
 ```
 
+#### `program.key.list`
+
+The downstream keys on air, bottom first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyListing"
+  }
+}
+```
+
+#### `program.key.set`
+
+Put a scene on air as a downstream key, above whatever is taken, or take it off.
+
+MCP tool `set_downstream_key` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/KeySetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyListing"
+  }
+}
+```
+
 #### `program.revert`
 
 Take back to the shot before this one.
@@ -2754,6 +3227,210 @@ MCP tool `import_project` in the `search` profile: readOnlyHint false, destructi
 }
 ```
 
+#### `prompter.get`
+
+The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.
+
+MCP tool `prompter_state` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.load`
+
+Put a script on the prompter, at the top and paused unless play is true.
+
+MCP tool `load_prompter_script` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LoadRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.pause`
+
+Stop the prompter where it is.
+
+MCP tool `prompter_pause` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.play`
+
+Start the prompter scrolling, at speed when given. From the end it starts again at the top.
+
+MCP tool `prompter_play` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlayRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.rows`
+
+The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/RowsAnswer"
+  }
+}
+```
+
+#### `prompter.script.get`
+
+One prompter script with its text.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Script"
+  }
+}
+```
+
+#### `prompter.script.list`
+
+Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.
+
+MCP tool `list_prompter_scripts` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ScriptList"
+  }
+}
+```
+
+#### `prompter.script.remove`
+
+Forget a prompter script. When it is on the prompter the screens go empty.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ScriptChanged"
+  }
+}
+```
+
+#### `prompter.script.save`
+
+Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.
+
+MCP tool `save_prompter_script` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScriptSaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Script"
+  }
+}
+```
+
+#### `prompter.seek`
+
+Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).
+
+MCP tool `prompter_seek` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SeekRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.set`
+
+Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/LookRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
+#### `prompter.speed`
+
+Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.
+
+MCP tool `prompter_speed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SpeedRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PrompterState"
+  }
+}
+```
+
 #### `rendition.plan`
 
 What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
@@ -2786,6 +3463,174 @@ MCP tool `rendition_presets` in the `search` profile: readOnlyHint true, destruc
   },
   "result": {
     "$ref": "#/$defs/PresetsResult"
+  }
+}
+```
+
+#### `replay.event.delete`
+
+Forget a replay event. The recording it pointed at is not touched.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EventIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/EventIdRequest"
+  }
+}
+```
+
+#### `replay.event.list`
+
+Every replay event, oldest first.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/EventList"
+  }
+}
+```
+
+#### `replay.event.rename`
+
+Give a replay event a name.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/EventRenameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayEvent"
+  }
+}
+```
+
+#### `replay.get`
+
+Whether replay is on, each angle's buffer depth and size, and every event.
+
+MCP tool `get_replay` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
+#### `replay.mark`
+
+Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.
+
+MCP tool `mark_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MarkRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayEvent"
+  }
+}
+```
+
+#### `replay.play`
+
+Play an event, or the last seconds of an angle, on a replay source, added if it is not there.
+
+MCP tool `play_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PlayRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/PlayStatus"
+  }
+}
+```
+
+#### `replay.save`
+
+Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.
+
+MCP tool `save_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SaveRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/SaveStatus"
+  }
+}
+```
+
+#### `replay.set`
+
+Change a playing replay's angle or speed, from the frame it is on.
+
+MCP tool `set_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReplaySetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PlayStatus"
+  }
+}
+```
+
+#### `replay.start`
+
+Record these angles, each the last `seconds`. Called again, it changes them in place.
+
+MCP tool `start_replay` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ReplayConfig"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
+  }
+}
+```
+
+#### `replay.stop`
+
+Stop recording, free every buffer and forget every event.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ReplayStatus"
   }
 }
 ```
@@ -2976,7 +3821,7 @@ Group the changes that follow into one undo step, until the next mark. This is w
 ```json
 {
   "params": {
-    "$ref": "#/$defs/MarkRequest"
+    "$ref": "#/$defs/MarkRequest2"
   },
   "result": {
     "type": "object"
@@ -3430,7 +4275,7 @@ MCP tool `preview_frame` in the `search` profile: readOnlyHint true, destructive
 
 #### `scene.preview.set`
 
-Arm a scene. The armed scene is the preview, and program.take with no argument takes it.
+Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.
 
 MCP tool `arm_preview` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
@@ -4413,6 +5258,127 @@ Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or 
 }
 ```
 
+#### `user.add`
+
+Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.
+
+MCP tool `user_add` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
+#### `user.list`
+
+Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.
+
+MCP tool `user_list` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/UserList"
+  }
+}
+```
+
+#### `user.remove`
+
+Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.
+
+MCP tool `user_remove` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserNameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
+#### `user.reset_password`
+
+Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.
+
+MCP tool `user_reset_password` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserPasswordRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
+#### `user.sessions`
+
+The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.
+
+MCP tool `user_sessions` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserSessionsRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SessionList"
+  }
+}
+```
+
+#### `user.sign_out`
+
+End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.
+
+MCP tool `user_sign_out` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserSignOutRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SignedOut"
+  }
+}
+```
+
+#### `user.update`
+
+Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.
+
+MCP tool `user_update` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/UserUpdateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/UserChanged"
+  }
+}
+```
+
 #### `vitals.get`
 
 This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.
@@ -4468,7 +5434,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/channel.changed` |  |  | A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only. |
 | `event/channel.removed` |  |  | A channel was removed. Its publishers were turned away and its keys forgotten. |
 | `event/channel.refused` |  |  | A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it. |
-| `event/meters` | `meters` | `audio_level, source_audio_level` | Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws. |
+| `event/meters` | `meters` | `audio_level, source_audio_level, bus_audio_level` | Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws. |
 | `event/tally` | `tally` |  | Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to. |
 | `event/alert` |  | `alert` | Something an operator should see. Also written to the log and to the alert webhook. |
 | `event/telemetry` | `telemetry` |  | Numbers instead of a picture, up to ten times a second and under 200 bytes: the shot change score, the black ratio, a freeze flag, short term and integrated loudness, a silence flag and which sources are live. From cheap probes on the raw programme frames, which run only while a client is subscribed. |
@@ -4488,6 +5454,10 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/feed.failed` |  |  | A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air. |
 | `event/feed.recovered` |  |  | A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one. |
 | `event/presence.changed` |  |  | Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has. |
+| `event/prompter.changed` |  |  | The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed. |
+| `event/prompter.script.changed` |  |  | A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter. |
+| `event/guest.changed` |  |  | An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key. |
+| `event/fx.assigned` |  |  | fx.assign changed the transition a take uses when it names none, for one scene or for every take. Carries every assignment, as fx.list answers them in assigned, so an open page follows a choice made on another. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces
@@ -4523,9 +5493,13 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `GET /` | the reference web UI, served from the binary |
 | `GET /rpc` | the JSON-RPC WebSocket. Everything in `methods` is reachable here. |
 | `GET /api/v1/status` | an alias for GET /api/v1/core/status, because it is what people type |
+| `GET /api/v1/auth/status` | whether this mixer has accounts and who the request is signed in as, answered as account.get answers. Needs no credential |
+| `POST /api/v1/auth/login` | {"username", "password"} from the mixer's own page: answers with an HttpOnly, SameSite=Strict session cookie that every route then accepts as it accepts a token. 401 on a wrong pair, 429 with Retry-After after too many |
+| `POST /api/v1/auth/logout` | ends the session the request carries and clears its cookie |
 | `ANY /api/v1/{*rest}` | every method's REST route, generated by the transform rule |
 | `GET /api/v1/fx/{name}/preview.jpg` | an fx item's preview strip: twelve frames side by side in one JPEG, as fx.preview describes; the token may be ?token= |
 | `POST /api/v1/fx/upload` | ?name=pack.zip with the file as the body: kept under the fx library and imported, answering what fx.import answers |
+| `POST /api/v1/luts/upload` | ?name=look.cube with the file as the body: a .cube, .3dl or .png LUT imported into the LUT library, answering what lut.import answers |
 | `GET /api/v1/gallery/{id}/preview.jpg` | a gallery item's picture as a JPEG, for an <img>: ?width= (64 to 1920) and ?background= (checker, black, white, #rrggbb), as gallery.preview draws it |
 | `GET /api/v1/gallery/{id}/files/{*path}` | one of a gallery item's own files: an HTML graphic's page for the browser source, a clip for a moving preview. Open to a process on the mixer's machine; a token with read from anywhere else |
 | `GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg` | a live channel stream's picture as a JPEG, for an <img>: ?width= (16 to 640, 320 when left out), as channel.thumbnail makes it; the token may be ?token=. 409 with data.retry_after_ms while the first keyframe is on its way, 409 with data.state idle when nothing is publishing |

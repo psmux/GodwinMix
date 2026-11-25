@@ -4,7 +4,6 @@ use super::super::slots::Placement;
 use super::super::{Mixer, FREEZE_HOLD};
 use crate::state::SourceId;
 use std::time::Duration;
-use tracing::warn;
 
 impl Mixer {
     /// A placement as it is drawn, with its source and any group child
@@ -67,11 +66,6 @@ impl Mixer {
         if self.multiview.is_none() || self.preview_cells.is_empty() {
             return;
         }
-        let cells = self.preview_cells_now();
-        if let Some(mv) = self.multiview.as_mut() {
-            if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
-                warn!(?e, "the armed scene could not be drawn again with its backups");
-            }
-        }
+        self.draw_preview();
     }
 }

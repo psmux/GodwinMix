@@ -41,6 +41,8 @@ use tracing::{debug, warn};
 /// for the rows on screen, so a row scrolled away stops costing anything ten
 /// seconds later. The direct host keeps the same ten seconds.
 pub const ASKED_FOR: Duration = Duration::from_secs(10);
+/// How long a branch asked on may go without a frame before it is asked again.
+const RESEND_AFTER: Duration = Duration::from_secs(1);
 
 /// The width the branch scales the programme to. The wall asks for 160 in
 /// rows and 320 in tiles; a smaller ask is scaled down from this, a larger one
@@ -82,6 +84,8 @@ pub struct ProgrammeThumb {
     latest: Mutex<Option<Frame>>,
     encoded: Mutex<Option<Thumb>>,
     until: Mutex<Option<Instant>>,
+    /// When the branch was last asked onto the tee.
+    sent: Mutex<Option<Instant>>,
     running: AtomicBool,
     starts: AtomicU64,
     frames: AtomicU64,
@@ -129,10 +133,20 @@ impl ProgrammeThumb {
         let mut until = self.until.lock();
         *until = Some(Instant::now() + ASKED_FOR);
         if self.running.swap(true, Ordering::SeqCst) {
+            // A full mixer queue refuses the send, and nothing says so. Still
+            // no frame a second later asks again; attaching is idempotent.
+            // Behind a restart the queue was full for five to seven seconds
+            // and a client asking every second never got a picture.
+            let mut sent = self.sent.lock();
+            if self.latest.lock().is_none() && sent.is_some_and(|t| t.elapsed() >= RESEND_AFTER) {
+                *sent = Some(Instant::now());
+                switch(true);
+            }
             return;
         }
         self.starts.fetch_add(1, Ordering::Relaxed);
         *self.counted.lock() = Some(clients.open("thumbnail"));
+        *self.sent.lock() = Some(Instant::now());
         switch(true);
         drop(until);
         tokio::spawn(self.clone().watch(switch));
@@ -371,13 +385,17 @@ mod tests {
         tokio::time::sleep(ASKED_FOR / 2).await;
         thumb.want(switch.clone(), &clients);
         tokio::time::sleep(ASKED_FOR - Duration::from_secs(1)).await;
-        assert_eq!(*said.lock(), vec![true], "an ask inside the window keeps it on");
+        assert_eq!(
+            *said.lock(),
+            vec![true, true],
+            "an ask inside the window keeps it on, and a branch with no frame a second on is asked on again"
+        );
         tokio::time::sleep(Duration::from_secs(2)).await;
-        assert_eq!(*said.lock(), vec![true, false]);
+        assert_eq!(*said.lock(), vec![true, true, false]);
         assert!(!thumb.running());
         assert_eq!(clients.count("thumbnail"), 0, "the gauge falls with the branch");
         thumb.want(switch, &clients);
-        assert_eq!(*said.lock(), vec![true, false, true], "the next ask starts it again");
+        assert_eq!(*said.lock(), vec![true, true, false, true], "the next ask starts it again");
         assert_eq!(thumb.starts(), 2);
     }
 }

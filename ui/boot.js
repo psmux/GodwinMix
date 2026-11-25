@@ -25,10 +25,13 @@ const PANELS = [
   "./panels/media/entry.js",
   "./panels/graphics/entry.js",
   "./panels/alerts/panel.js",
+  "./panels/prompter/entry.js",
+  "./panels/guests/entry.js",
+  "./panels/replay/entry.js",
 ];
 
 /**
- * Does this mixer want a token, and do we have the right one?
+ * Does this mixer want a token or a sign in, and do we have the right one?
  *
  * One request, before the socket, because a 401 on a WebSocket is a silent
  * close and a 401 on a fetch is a number we can act on. The old page learned
@@ -36,7 +39,7 @@ const PANELS = [
  */
 async function authorise(base) {
   let token = storedToken();
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     let status;
     try {
       // A station answers core.info itself when no show runs.
@@ -52,16 +55,13 @@ async function authorise(base) {
     if (status !== 401) return token;
     // A saved token that is refused is worse than none: it fails silently on
     // every reload. Drop it and ask.
-    if (attempt > 0) storeToken(null);
-    // The prompt is fetched only by a mixer that asks for a token.
-    const { askForToken } = await import("./shell/firstrun.js");
-    const answer = await askForToken(
-      attempt === 0
-        ? null
-        : "That token was refused. Check it with whoever runs this mixer. If you are an admin here and the token is lost, set a new one in Mixer settings under Control token from a page that is already connected."
-    );
-    if (!answer) return null;
-    token = answer;
+    if (token) storeToken(null);
+    // A mixer with accounts asks for a username and password (signin-page.js).
+    const { ask } = await import("./shell/signin-page.js");
+    const answer = await ask(base, attempt > 0 && token);
+    if (answer === "session") token = null;
+    else if (!answer) return null;
+    else token = answer;
   }
   return token;
 }
@@ -80,8 +80,11 @@ async function main() {
   const proposed = proposeGalleryMode();
 
   const token = await authorise(location.origin);
+  if (!token) import("./shell/signin-page.js").then((m) => m.whoAmI(location.origin));
   const client = await connect({ token });
   window.gmxClient = client;
+  // Signed out while open: back to the sign in page.
+  client.on("signed-out", () => location.reload());
   // A token set to confirm destructive calls asks the person here, and the
   // call goes again with the confirmation when they say yes.
   client.confirm = confirmHook;

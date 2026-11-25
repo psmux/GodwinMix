@@ -29,7 +29,19 @@ board.
 
 ## Install
 
-64 bit Raspberry Pi OS (Debian based). Docker works and is the least trouble:
+64 bit Raspberry Pi OS (Debian based), bookworm or later.
+
+With a screen on the Pi, the desktop app is one package. Take
+`GodwinMix_<version>_arm64.deb` from the
+[latest release](https://github.com/psmux/GodwinMix/releases/latest):
+
+```sh
+sudo apt install ./GodwinMix_<version>_arm64.deb
+```
+
+It carries its own GStreamer, so nothing else needs installing.
+
+With no screen, run the mixer alone. Docker works and is the least trouble:
 
 ```sh
 curl -fsSL https://get.docker.com | sh

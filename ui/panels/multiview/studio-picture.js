@@ -7,6 +7,8 @@
 //   armed, and while somebody can see it;
 // * a single source: its own tile out of the mosaic the programme monitor
 //   already receives, which costs nothing more;
+// * what is on air, with nothing armed: the programme return out of that
+//   same mosaic, because that is the picture Take would put up;
 // * a suggested scene, which nobody armed: drawn on this page out of that
 //   same mosaic, cell by cell at the scene's boxes, as the Scenes panel draws
 //   its pictures. Nothing more is asked of the core for it.
@@ -29,6 +31,11 @@ export function retunePreview(panel, s) {
   const seen = settings().producer && panel.visible && panel.workspaceActive !== false && !document.hidden;
   const next = seen ? resolve(panel, s) : null;
   if (!next) return releasePreview(panel);
+  // With nothing armed, Preview holds what is on air, and Take would put up
+  // the same picture again: the programme return, with the scene's filters
+  // and keys. Drawn from the raw cells it showed Scene 2 in colour beside a
+  // black and white Programme.
+  if (next.why === "live") return showTile(panel, panel.programCell(s));
   if (next.kind === "source") return showTile(panel, cellOf(s, next.id));
   if (next.why !== "armed") return showDrawn(panel);
   showStream(panel);

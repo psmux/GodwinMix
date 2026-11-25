@@ -62,7 +62,12 @@ UI and the Companion button still goes red.
 
 **Actions**: take a source, cut to the slate, take a scene, revert, add a
 source, start an output, stop an output, reconnect an output, set a fader, mute
-or unmute.
+or unmute. For the teleprompter: play or pause, faster or slower, the next or
+previous marker, go to a marker by name, and load a script (see
+[Use the teleprompter](use-the-teleprompter.md)). For replay: mark in or out
+or the last seconds, play the last event or a named one at a speed and put
+it on air, change the angle or speed while it plays, and save the buffer
+(see [Instant replay](instant-replay.md)).
 
 There is no "start output" call in the protocol, and the action called that
 sends `output.add`. The encoder is already running, so adding a destination is

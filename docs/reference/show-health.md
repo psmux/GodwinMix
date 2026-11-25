@@ -185,12 +185,17 @@ Past it, three things happen. The log gets an error naming the five fullest
 queues in every pipeline, by bytes, with the pipeline each one is in; it is
 repeated once a minute while the show stays over. The show's health gets a
 `memory` alarm, which reaches the wall like any other. And if one of those
-queues holds 64 MB or more and belongs to a source, that source is restarted,
+queues holds 64 MB or more, filled by its byte or buffer limit with less than
+its time limit in it, and belongs to a source, that source is restarted,
 the same restart `source.restart` gives it, with its last frame held on
 programme. A queue belongs to a source when it is in that source's own
 pipeline (`input-<id>`) or hangs off that source's branch in the programme
 (`pgm-vq-<id>`, a slot fed by it). After a restart the guard waits 30 seconds
-before it restarts anything else. The programme, the encoder and the outputs
+before it restarts anything else, and leaves the source it restarted alone for
+five minutes. A queue full to its time limit is never blamed: every source has
+one like it when the programme falls behind, and restarting a healthy source
+for that only takes it off air. The error then says `behind=true` and nothing
+is restarted. The programme, the encoder and the outputs
 are never restarted by it.
 
 The alarm clears when the show falls under nine tenths of the threshold.

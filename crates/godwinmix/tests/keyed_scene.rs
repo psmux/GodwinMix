@@ -17,7 +17,7 @@ type Socket = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStre
 async fn serve(media: &std::path::Path) -> String {
     let _ = gstreamer::init();
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
-    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, 15);
+    (cfg.canvas.width, cfg.canvas.height, cfg.canvas.fps) = (320, 180, godwinmix_core::config::FrameRate::whole(15));
     cfg.sources = vec![toml::from_str("id = \"cam\"\ntype = \"test/source\"\nuri = \"test://smpte\"\n").unwrap()];
     cfg.media.dir = media.to_string_lossy().into_owned();
     cfg.safety.min_hold_ms = 0;

@@ -1,0 +1,24 @@
+# One recorded conversation with the core, replayed by `gmx plugin test
+# --offline .` and by tests/offline.rs. `core` lines are written to the
+# plugin's stdin; `plugin` lines must appear on its stderr, in this order, as
+# a subset of the real line. "*" matches any value.
+#
+# No core and no switcher: GMX_RPC is empty, so follow and lead are off, and
+# the one switcher points at a loopback port where nothing listens, so it is
+# down and every answer says why.
+{"plugin": {"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {"plugin": "atem", "api": 1}}}
+{"core": {"jsonrpc": "2.0", "id": 0, "result": {"core": "godwinmix", "version": "0.3.32", "api_level": 1, "api_compatible": 1, "canvas": {"width": 160, "height": 90, "fps": 30}, "transport": "container", "media": "", "instance": "atem", "provide": "atem", "params": {"switchers": [{"id": "atem-main", "address": "127.0.0.1:9", "name": "Main switcher", "mode": "follow", "map": {"cam-pulpit": 1}}]}}}}
+{"plugin": {"jsonrpc": "2.0", "method": "log", "params": {"level": "info", "message": "*"}}}
+{"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
+{"core": {"jsonrpc": "2.0", "id": 1, "method": "tool.call", "params": {"name": "list", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 1, "result": {"structured_content": {"switchers": [{"id": "atem-main", "name": "Main switcher", "connected": false, "mode": "follow"}]}}}}
+{"core": {"jsonrpc": "2.0", "id": 2, "method": "tool.call", "params": {"name": "cut", "arguments": {"switcher": "atem-main"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "error": {"code": -32001, "data": {"code": "switcher_down"}}}}
+{"core": {"jsonrpc": "2.0", "id": 3, "method": "tool.call", "params": {"name": "state", "arguments": {"switcher": "atem-nave"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 3, "error": {"code": -32004, "data": {"code": "unknown_switcher"}}}}
+{"core": {"jsonrpc": "2.0", "id": 4, "method": "tool.call", "params": {"name": "mode", "arguments": {"mode": "lead"}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 4, "result": {"structured_content": {"switcher": "atem-main", "mode": "lead", "mapped": 1}}}}
+{"core": {"jsonrpc": "2.0", "id": 5, "method": "configure", "params": {"params": {"switchers": [{"id": "atem-main", "address": "127.0.0.1:9", "mode": "own"}]}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 5, "result": {"applied": true}}}
+{"core": {"jsonrpc": "2.0", "id": 6, "method": "tool.call", "params": {"name": "no_such_tool", "arguments": {}}}}
+{"plugin": {"jsonrpc": "2.0", "id": 6, "error": {"code": -32601, "message": "*"}}}

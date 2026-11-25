@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "dsk",
+  "description": "A downstream keyer: on or off air at once, auto (its own transition), or tie (to the next transition; toggles unless tie is given).",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "keyer": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Counted from 0."
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off",
+        "auto",
+        "tie"
+      ]
+    },
+    "tie": {
+      "type": "boolean",
+      "description": "For action tie: on or off, rather than a toggle."
+    }
+  },
+  "required": [
+    "action"
+  ],
+  "additionalProperties": false
+}

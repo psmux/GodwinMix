@@ -120,7 +120,9 @@ with ws.connect("ws://localhost:8080/pcm/program?token=YOUR_TOKEN") as sock:
         out.write(np.frombuffer(frame[16:], dtype="<f4").reshape(-1, 2))
 ```
 
-That is the whole thing. Swap `program` for a source id to hear one camera.
+That is the whole thing. Swap `program` for a source id to hear one camera,
+or for `bus:<id>` to hear an audio bus (see
+[mix audio with buses](mix-audio-with-buses.md)).
 
 ### Asking for less
 

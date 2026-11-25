@@ -376,15 +376,7 @@ impl ObserveLayer {
             Format::Json => false,
             Format::Auto => stderr_is_terminal(),
         };
-        Self {
-            human,
-            node,
-            files: OnceLock::new(),
-            sink: Box::new(|line| {
-                let mut err = std::io::stderr().lock();
-                let _ = writeln!(err, "{line}");
-            }),
-        }
+        Self { human, node, files: OnceLock::new(), sink: stderr_sink(human) }
     }
 
     /// Send the terminal copy somewhere else. Used by the tests to capture.
@@ -434,6 +426,35 @@ impl ObserveLayer {
             }
         }
     }
+}
+
+/// The terminal copy: straight to stderr, except from the mixer thread,
+/// whose lines go through a queue so a pipe nobody is reading never holds
+/// it. See `stderr_queue`.
+fn stderr_sink(human: bool) -> Box<dyn Fn(&str) + Send + Sync> {
+    let write: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(|line: &str| {
+        let mut err = std::io::stderr().lock();
+        let _ = writeln!(err, "{line}");
+    });
+    let notice = if human { dropped_human } else { dropped_json };
+    match super::stderr_queue::Queued::start("mixer", write.clone(), notice) {
+        Ok(queued) => Box::new(move |line| queued.line(line)),
+        Err(_) => Box::new(move |line| write(line)),
+    }
+}
+
+fn dropped_human(n: u64) -> String {
+    format!("[{n} lines from the mixer thread were left out here while this output was not being read; godwinmix.log has them]")
+}
+
+fn dropped_json(n: u64) -> String {
+    serde_json::json!({
+        "level": "warn",
+        "target": "godwinmix_core::observe::stderr_queue",
+        "message": "lines from the mixer thread were left out here while this output was not being read; godwinmix.log has them",
+        "dropped": n,
+    })
+    .to_string()
 }
 
 /// An instance id becomes a file name, so a directory separator or a parent

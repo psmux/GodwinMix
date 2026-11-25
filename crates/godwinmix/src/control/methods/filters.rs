@@ -1,7 +1,7 @@
 //! `filter.add`, `filter.set`, `filter.remove` and `filter.list`.
 //!
-//! A filter is a piece of picture processing hung on one source or on the
-//! programme. The mixer owns the pads; everything here does is turn a call
+//! A filter is a piece of picture or sound processing hung on one source or
+//! on the programme. The mixer owns the pads; everything here does is turn a call
 //! into a `MixerHandle` request and turn the refusal back into an error that
 //! names the next step.
 
@@ -28,8 +28,9 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "add_filter",
             Tier::Search,
-            "Put a picture filter on one source or on the whole programme without \
-             stopping anything. `type` is a filter type id from `list_plugins`, `id` is \
+            "Put a picture or sound filter on one source or on the whole programme without \
+             stopping anything. Sound filters are gain, eq, gate, expander, compressor, \
+             limiter, delay and denoise, each `<name>/filter`. `type` is a filter type id from `list_plugins`, `id` is \
              the name you will use to change or remove it, `source` names the source it \
              belongs to (leave it out and set `programme: true` for the whole output), \
              and `params` is that filter's own settings.",
@@ -69,6 +70,44 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .result(schema_of::<FilterListing>),
     );
+
+    reg.register(
+        MethodDef::new(
+            "filter.cutout",
+            Scope::Read,
+            "Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out.",
+            handler(|_call: Call, _| async move { body(cutout_readiness()) }),
+        )
+        .result(schema_of::<CutoutReadiness>),
+    );
+}
+
+/// `filter.cutout`. A page asks while a cutout it can see is new, so it can
+/// say the cutout is on its way rather than show a camera that looks as if
+/// nothing happened.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CutoutReadiness {
+    /// Cutouts whose model is opening or has not answered a frame yet. Each
+    /// draws nothing of the camera until it has. Preview's copy of a scene counts
+    /// as well as the programme's.
+    pub preparing: usize,
+    /// Cutouts cutting the person out now.
+    pub running: usize,
+    /// Why the last cutout that failed could not start, until one starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[cfg(feature = "matte")]
+fn cutout_readiness() -> CutoutReadiness {
+    let now = godwinmix_core::plugin::filters::matte::readiness();
+    CutoutReadiness { preparing: now.preparing, running: now.running, error: now.error }
+}
+
+/// A build without the cutout has none, so none is preparing.
+#[cfg(not(feature = "matte"))]
+fn cutout_readiness() -> CutoutReadiness {
+    CutoutReadiness { preparing: 0, running: 0, error: None }
 }
 
 /// `filter.add`.
@@ -125,6 +164,9 @@ pub struct FilterRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     pub side: String,
+    /// The settings in force, as `filter.set` last left them.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub params: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -163,6 +205,10 @@ fn record(status: godwinmix_core::mixer::FilterStatus) -> FilterRecord {
         type_id: status.type_id,
         source: status.source,
         side: status.side,
+        params: match serde_json::to_value(&status.params) {
+            Ok(Value::Object(map)) => map,
+            _ => Map::new(),
+        },
     }
 }
 
@@ -177,7 +223,7 @@ async fn read_back(call: &Call, id: &str) -> Result<FilterRecord, RpcError> {
         .ok_or_else(|| RpcError::not_found("filter", id, &[]))
 }
 
-async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
+pub(crate) async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddFilterRequest = call.params(&params)?;
     if req.source.is_none() && !req.programme {
         return Err(RpcError::invalid_params(

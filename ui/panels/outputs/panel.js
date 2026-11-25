@@ -128,6 +128,7 @@ class OutputsPanel extends HTMLElement {
       ]),
       this.list
     );
+    import("../camera/atem-card.js").then((m) => (this.atem = m.switcherCards(this)));
     this.offs = [
       this.client.onRender((s) => this.render(s)),
       registerAll([
@@ -138,6 +139,7 @@ class OutputsPanel extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.atem?.active(false);
     for (const off of this.offs || []) off();
     this.offs = [];
     this.follow(false);
@@ -146,6 +148,7 @@ class OutputsPanel extends HTMLElement {
 
   setWorkspaceActive(active) {
     this.workspaceActive = active;
+    this.atem?.active(active);
     if (active) this.show(this.view || "outputs");
     else {
       this.follow(false);

@@ -12,6 +12,8 @@ use std::path::Path;
 pub mod first_run;
 pub mod edit;
 pub mod keys;
+mod rate;
+pub use rate::FrameRate;
 pub mod memory;
 pub mod recordings;
 pub mod schema;
@@ -73,6 +75,14 @@ pub struct Config {
     /// provided filter and where it goes.
     #[serde(default)]
     pub filters: Vec<FilterConfig>,
+    /// The programme master and the buses beside it. See `crate::buses` and
+    /// `docs/reference/audio-buses.md`.
+    #[serde(default)]
+    pub audio: godwinmix_protocol::buses::AudioConfig,
+    /// Instant replay: the angles kept in memory and for how long. Off until
+    /// it names an angle. See `crate::replay` and `docs/reference/replay.md`.
+    #[serde(default, skip_serializing_if = "godwinmix_protocol::replay::ReplayConfig::is_default")]
+    pub replay: godwinmix_protocol::replay::ReplayConfig,
     /// Settings belonging to a plugin, one table per plugin name, plus the
     /// handful of switches that are about installing plugins rather than about
     /// one plugin. The core never reads inside a plugin's own table; it hands
@@ -339,8 +349,8 @@ pub struct Canvas {
     pub width: i32,
     /// Height of the programme picture in pixels. Even, like the width.
     pub height: i32,
-    /// Frames per second of the programme.
-    pub fps: i32,
+    /// Frames per second of the programme: 30, 25, 29.97, 59.94 and so on.
+    pub fps: FrameRate,
     /// Audio samples per second. 48000 is what video uses everywhere.
     pub sample_rate: i32,
     /// 1 for mono, 2 for stereo.
@@ -349,7 +359,7 @@ pub struct Canvas {
 
 impl Default for Canvas {
     fn default() -> Self {
-        Self { width: 1920, height: 1080, fps: 30, sample_rate: 48000, channels: 2 }
+        Self { width: 1920, height: 1080, fps: FrameRate::whole(30), sample_rate: 48000, channels: 2 }
     }
 }
 
@@ -1430,6 +1440,10 @@ pub struct OutputConfig {
     /// as it has always been, at no extra cost. See `render/`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<godwinmix_protocol::rendition::RenditionChoice>,
+    /// The audio bus this output takes its sound from. Absent means the
+    /// programme mix, as it always was. See `crate::buses`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio: Option<String>,
     /// False once a person has stopped it with `output.stop`: nothing is
     /// built or sent, and the address and key wait here for `output.start`.
     /// Written to the runtime store only when false, so a restart keeps a
@@ -1462,6 +1476,7 @@ impl OutputConfig {
             queue_secs: default_queue_secs(),
             place: None,
             rendition: None,
+            audio: None,
             enabled: true,
             extra: Default::default(),
         }
@@ -1517,6 +1532,14 @@ struct StoredRuntime {
     sources: Option<Vec<SourceConfig>>,
     #[serde(default)]
     outputs: Option<Vec<OutputConfig>>,
+    #[serde(default)]
+    filters: Option<Vec<FilterConfig>>,
+    /// The master and the buses, as the desk last left them.
+    #[serde(default)]
+    audio: Option<godwinmix_protocol::buses::AudioConfig>,
+    /// Replay as it was last turned on or off.
+    #[serde(default)]
+    replay: Option<godwinmix_protocol::replay::ReplayConfig>,
     /// What `gmx preset apply` chose for the surface. Absent means the config
     /// file's own `[ui]` section stands.
     #[serde(default)]
@@ -1695,6 +1718,21 @@ impl Config {
                 );
                 cfg.outputs = recordings::at_boot(&cfg.outputs, outputs);
             }
+            if let Some(filters) = stored.filters {
+                tracing::info!(
+                    path = %store.display(), count = filters.len(),
+                    "using filters managed at runtime"
+                );
+                cfg.filters = filters;
+            }
+            if let Some(audio) = stored.audio {
+                tracing::info!(path = %store.display(), buses = audio.buses.len(), "using the audio desk managed at runtime");
+                cfg.audio = audio;
+            }
+            if let Some(replay) = stored.replay {
+                tracing::info!(path = %store.display(), angles = ?replay.angles, "using replay as it was last set at runtime");
+                cfg.replay = replay;
+            }
             if let Some(ui) = stored.ui {
                 if !ui.is_empty() {
                     cfg.ui = ui;
@@ -1757,7 +1795,7 @@ impl Config {
     fn validate(&self) -> Result<()> {
         anyhow::ensure!(self.canvas.width > 0 && self.canvas.height > 0, "canvas dimensions must be positive");
         anyhow::ensure!(self.canvas.width % 2 == 0 && self.canvas.height % 2 == 0, "canvas dimensions must be even for 4:2:0 chroma");
-        anyhow::ensure!(self.canvas.fps > 0, "canvas fps must be positive");
+        anyhow::ensure!(self.canvas.fps.numer() > 0, "canvas fps must be positive");
         anyhow::ensure!(matches!(self.canvas.channels, 1 | 2), "only mono and stereo are supported");
         anyhow::ensure!(
             (1..=100).contains(&self.multiview.jpeg_quality),
@@ -1819,6 +1857,16 @@ impl Config {
                 crate::plugin::filters::chroma::validate(&f.params)
                     .with_context(|| format!("filter {}", f.id))?;
             }
+            if f.type_id == crate::plugin::filters::colour::MANIFEST.provide_id() {
+                crate::plugin::filters::colour::validate(&f.params)
+                    .with_context(|| format!("filter {}", f.id))?;
+            }
+            if f.type_id == crate::plugin::filters::lut::MANIFEST.provide_id() {
+                crate::plugin::filters::lut::validate(&f.params)
+                    .with_context(|| format!("filter {}", f.id))?;
+            }
+            crate::plugin::filters::audio::validate(&f.type_id, &f.params)
+                .with_context(|| format!("filter {}", f.id))?;
             #[cfg(feature = "matte")]
             if f.type_id == crate::plugin::filters::matte::MANIFEST.provide_id() {
                 crate::plugin::filters::matte::validate(&f.params)
@@ -1835,6 +1883,7 @@ impl Config {
         for o in &self.outputs {
             anyhow::ensure!(seen.insert(&o.id), "duplicate output id {:?}", o.id);
         }
+        crate::buses::check::config(&self.audio, &self.outputs)?;
         Ok(())
     }
 }
@@ -2199,7 +2248,7 @@ sidecar = \"/opt/b\"\n").unwrap();
     fn odd_canvas_is_rejected() {
         let mut cfg = Config {
             nodes: Default::default(),
-            canvas: Canvas { width: 1921, height: 1080, fps: 30, sample_rate: 48000, channels: 2 },
+            canvas: Canvas { width: 1921, height: 1080, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 },
             program: Default::default(),
             multiview: Default::default(),
             snapshot: Default::default(),
@@ -2217,6 +2266,8 @@ sidecar = \"/opt/b\"\n").unwrap();
             sources: vec![],
             outputs: vec![],
             filters: vec![],
+            audio: Default::default(),
+            replay: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],

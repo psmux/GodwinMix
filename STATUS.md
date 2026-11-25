@@ -1,5 +1,42 @@
 # Where GodwinMix stands
 
+## An intermittent heap corruption on Windows, 2026-10-29
+
+**Found, 2026-10-30.** With Windows Error Reporting set to keep full dumps
+(`HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps`,
+`DumpType` 2), one run of the core suite left five dumps (the core library,
+`overlay`, `encoder_late`, `recording_live`, `virtual_set`). All five stop in
+the same place: `catalogue::preload::load` loads the qsv plugin,
+`gst_plugin_qsv_register` opens oneVPL (`libmfx64_gen`), and releasing a D3D11
+decode context frees memory inside the Intel driver (`igd11dxva64`,
+`igddxvacommon64`) that fails the heap check. No other thread was in
+GStreamer or in GodwinMix. The fix ranks `h264-qsv` under Media Foundation in
+`codecs.toml`, so nothing loads the qsv plugin unless the config asks for it.
+`late_start` crashed 9 times in 30 before and none in 20 after. The notes
+below are what was known before the dumps.
+
+Found while testing 0.3.21 on the Zenbook Duo (Core Ultra 9 285H, Arc 140T,
+Windows 11), and present in 0.3.20 as well: about one run in five, a process
+that starts the engine ends with `0xc0000374` (STATUS_HEAP_CORRUPTION).
+
+* `cargo test -p godwinmix-core --test embed` crashed 1 run in 5 at the 0.3.20
+  commit (fe1bd38a) and at every wave 2 merge point tried, so it is not from
+  wave 2. The whole core library and five integration targets that start a
+  mixer (`embed`, `no_libav`, `overlay_html`, `overlay_template`,
+  `virtual_set`) crashed the same way in one full run.
+* A station started on a fresh folder lost its show once, 1.6 s after start,
+  just after "selected codec backends from the catalogue" and while the
+  station was calibrating the encoders. The station started it again at once
+  and nothing else was lost.
+* The installed desktop app's log on the same machine, a week of use, has no
+  such exit. It calibrated once and keeps the result, which fits a guess that
+  two threads opening the Windows hardware encoders (Media Foundation, Quick
+  Sync, D3D11) at once is the trigger. The `embed` test does not calibrate, so
+  that guess does not explain everything.
+* Under full page heap (`gflags /p /enable <test>.exe /full`) and `cdb` it did
+  not happen in six runs. Next: more runs under page heap, the catalogue's
+  encoder probe serialised, and the probe run alone in a loop.
+
 ## What CI failed on main after the transitions merge, 2026-10-06
 
 Branch `fix/ci-main`, draft pull request #2, from main at `d5bcb319`. The

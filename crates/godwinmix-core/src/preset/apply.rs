@@ -88,7 +88,7 @@ fn write_scenes(
     let canvas = Canvas {
         width: config.canvas.width.max(2) as u32,
         height: config.canvas.height.max(2) as u32,
-        fps: config.canvas.fps.max(1) as u32,
+        fps: config.canvas.fps.rounded().max(1) as u32,
     };
     let mut collection = match std::fs::read_to_string(path).ok() {
         Some(text) => Collection::from_json(&text)
@@ -103,6 +103,7 @@ fn write_scenes(
             transitions: Vec::new(),
             assets: Default::default(),
             sources: Default::default(),
+            keys: Vec::new(),
         },
     };
     for scene in scenes {

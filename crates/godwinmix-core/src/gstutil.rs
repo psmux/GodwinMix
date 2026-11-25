@@ -13,6 +13,7 @@ use std::time::Duration;
 use tracing::{error, warn};
 
 pub mod backstop;
+pub mod decode_time;
 
 pub fn make(factory: &str, name: &str) -> Result<gst::Element> {
     gst::ElementFactory::make(factory)
@@ -142,6 +143,21 @@ macro_rules! slow_step {
     }};
 }
 
+/// Whether elements from `factory` have a property called `prop`, read off
+/// the element class so nothing has to be made to find out.
+pub fn factory_has_property(factory: &str, prop: &str) -> bool {
+    let Some(factory) = gst::ElementFactory::find(factory) else {
+        return false;
+    };
+    let Ok(factory) = factory.load() else {
+        return false;
+    };
+    let t = factory.element_type();
+    t.is_valid()
+        && glib::Class::<glib::Object>::from_type(t)
+            .is_some_and(|class| class.find_property(prop).is_some())
+}
+
 /// Build an aggregator (`compositor`, `audiomixer`) that keeps producing
 /// output even when no live source is linked upstream.
 ///
@@ -149,24 +165,111 @@ macro_rules! slow_step {
 /// single property is what guarantees the program encoder is never starved: a
 /// mixer with every input dead still emits black and silence on schedule, and
 /// the outgoing stream carries on.
+///
+/// GStreamer added `force-live` in 1.22. Ubuntu 22.04 has 1.20, and there the
+/// builder panicked on the unknown property before any fallback could run, so
+/// the server archive crash looped at startup. The property is now looked up
+/// first. Without it the aggregator is built plain, and it is live as soon as
+/// one live source feeds it, which every caller arranges: the programme has
+/// its slate and silence, a bus its silence, the preview its backdrop, and
+/// the mosaic and a group get a [`live_backdrop`] when [`is_force_live`] says
+/// they need one.
 pub fn make_live_aggregator(factory: &str, name: &str) -> Result<gst::Element> {
-    match gst::ElementFactory::make(factory)
+    build_aggregator(factory, name, factory_has_property(factory, "force-live"))
+}
+
+fn build_aggregator(factory: &str, name: &str, force_live: bool) -> Result<gst::Element> {
+    if !force_live {
+        warn_once_without_force_live(factory);
+        return make(factory, name);
+    }
+    gst::ElementFactory::make(factory)
         .name(name)
         .property("force-live", true)
         .build()
-    {
-        Ok(el) => Ok(el),
-        Err(e) => {
-            // Older plugin versions predate force-live. The mixer still works,
-            // but a totally dead set of inputs can stall it, so say so loudly.
-            warn!(
-                factory,
-                ?e,
-                "could not construct with force-live; output may stall if every input dies"
-            );
-            make(factory, name)
-        }
+        .with_context(|| format!("creating element {factory} (named {name}) with force-live"))
+}
+
+/// Said once per factory, not once per element: the mosaic and every group
+/// build one, and the reason is the same each time.
+fn warn_once_without_force_live(factory: &str) {
+    static SAID: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let mut said = SAID.lock().unwrap_or_else(|e| e.into_inner());
+    if said.iter().any(|f| f == factory) {
+        return;
     }
+    said.push(factory.to_string());
+    warn!(
+        factory,
+        gstreamer = %gst::version_string(),
+        "this GStreamer has no force-live (it came in 1.22), so the aggregator is built plain and kept live by a live source in front of it"
+    );
+}
+
+/// Whether `agg` was built with `force-live` on, so it keeps time with
+/// nothing feeding it. False on GStreamer 1.20, where a caller whose inputs
+/// may all be absent adds a [`live_backdrop`].
+pub fn is_force_live(agg: &gst::Element) -> bool {
+    agg.find_property("force-live").is_some() && agg.property::<bool>("force-live")
+}
+
+/// A live pad that is always feeding a compositor, so it keeps its own
+/// schedule whatever its other pads do.
+///
+/// A plain aggregator decides it is live by asking upstream, so with no live
+/// source behind any pad it waits for data on all of them and never times
+/// out. And on 1.24 even a `force-live` one with `start-time-selection=first`
+/// waits for a first buffer before it starts (see the preview). One live pad
+/// that always feeds fixes both, because the first buffer arrives within a
+/// frame of the branch coming up and the start time comes with it.
+///
+/// Sixteen pixels square at zero alpha: never drawn, never scaled, and about
+/// four hundred bytes a frame at `fps`. Added to `bin` and linked, not
+/// started; the caller brings the returned elements up with the rest, and
+/// stops them before it takes the compositor away, since a live source with
+/// nothing downstream posts a stream error.
+pub fn live_backdrop(
+    bin: &gst::Bin,
+    comp: &gst::Element,
+    name: &str,
+    fps: gst::Fraction,
+) -> Result<Vec<gst::Element>> {
+    let src = make("videotestsrc", name)?;
+    src.set_property_from_str("pattern", "black");
+    crate::probe::set_bool(&src, "is-live", true);
+    let caps = capsfilter(
+        &format!("{name}-caps"),
+        &crate::caps::CanvasCaps::video_at(16, 16, fps),
+    )?;
+    bin.add_many([&src, &caps]).context("adding a compositor backdrop")?;
+    src.link(&caps).context("linking a compositor backdrop")?;
+    let pad = comp
+        .request_pad_simple("sink_%u")
+        .context("the compositor refused the backdrop a pad")?;
+    pad.set_property("alpha", 0.0f64);
+    pad.set_property("zorder", 0u32);
+    caps.static_pad("src")
+        .context("the backdrop has no src pad")?
+        .link(&pad)
+        .context("linking the backdrop into the compositor")?;
+    Ok(vec![src, caps])
+}
+
+/// Keep a hardware decoder away from a still JPEG. On a Mac the core ranks
+/// `vtdec_hw` above everything, and GStreamer 1.28 lets it take
+/// `image/jpeg`, where it reports "no valid frames" for an ordinary JPEG and
+/// the picture never arrives: a gallery card stayed blank and a JPEG
+/// background never reached the canvas. `jpegdec` decodes it in software in
+/// a few milliseconds. For `decodebin` and `uridecodebin` alike.
+pub fn software_jpeg(decode: &gst::Element) {
+    decode.connect("autoplug-select", false, |args| {
+        let caps = args[2].get::<gst::Caps>().ok()?;
+        let factory = args[3].get::<gst::ElementFactory>().ok()?;
+        let jpeg = caps.structure(0).is_some_and(|s| s.name() == "image/jpeg");
+        let hardware = factory.klass().contains("Hardware") || factory.name().starts_with("vtdec");
+        let result = gst::glib::Type::from_name("GstAutoplugSelectResult").and_then(gst::glib::EnumClass::with_type)?;
+        result.to_value(if jpeg && hardware { 2 } else { 0 })
+    });
 }
 
 pub fn capsfilter(name: &str, caps: &gst::Caps) -> Result<gst::Element> {
@@ -341,6 +444,7 @@ where
 
     let waited = std::time::Instant::now();
     if rx.recv_timeout(timeout).is_ok() {
+        crate::observe::laps::mark("pad block");
         let ms = waited.elapsed().as_millis() as u64;
         if ms >= SLOW_STEP_MS {
             warn!(pad = %pad.name(), ms, "a pad took its time reaching an idle point");
@@ -948,6 +1052,66 @@ mod tests {
 
     fn init() {
         let _ = gst::init();
+    }
+
+    /// 0.3.33 crash looped on Ubuntu 22.04: GStreamer 1.20 has no
+    /// `force-live`, and the builder panicked on the unknown property before
+    /// the fallback could run. `queue` has never had it, so this is the 1.20
+    /// case on any GStreamer.
+    #[test]
+    fn an_element_without_force_live_is_built_plain_instead_of_panicking() {
+        init();
+        assert!(!factory_has_property("queue", "force-live"));
+        let el = make_live_aggregator("queue", "no-force-live").expect("built without the property");
+        assert!(!is_force_live(&el));
+        assert!(!factory_has_property("no-such-element", "force-live"));
+
+        let (major, minor, ..) = gst::version();
+        let expected = (major, minor) >= (1, 22);
+        assert_eq!(factory_has_property("compositor", "force-live"), expected);
+        let comp = make_live_aggregator("compositor", "maybe-force-live").unwrap();
+        assert_eq!(is_force_live(&comp), expected, "force-live is used wherever it exists");
+    }
+
+    /// The 1.20 fallback keeps output timing: a compositor built without
+    /// `force-live`, with nothing in front of it but the live backdrop, still
+    /// produces frames on schedule from the clock.
+    #[test]
+    fn a_plain_compositor_with_a_backdrop_keeps_time() {
+        init();
+        let pipeline = gst::Pipeline::with_name("plain-comp");
+        let comp = build_aggregator("compositor", "pc-comp", false).unwrap();
+        assert!(!is_force_live(&comp));
+        let caps = capsfilter(
+            "pc-caps",
+            &crate::caps::CanvasCaps::video_at(64, 36, gst::Fraction::new(30, 1)),
+        )
+        .unwrap();
+        let sink = gstreamer_app::AppSink::builder().name("pc-sink").sync(true).build();
+        let sink_el: gst::Element = sink.clone().upcast();
+        pipeline.add_many([&comp, &caps, &sink_el]).unwrap();
+        gst::Element::link_many([&comp, &caps, &sink_el]).unwrap();
+        live_backdrop(pipeline.upcast_ref(), &comp, "pc-bg", gst::Fraction::new(30, 1)).unwrap();
+
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let mut pts = Vec::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while pts.len() < 30 && std::time::Instant::now() < deadline {
+            if let Some(sample) = sink.try_pull_sample(gst::ClockTime::from_mseconds(500)) {
+                if let Some(p) = sample.buffer().and_then(|b| b.pts()) {
+                    pts.push(p);
+                }
+            }
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert_eq!(pts.len(), 30, "a second of frames from a compositor with only the backdrop");
+        for pair in pts.windows(2) {
+            let step = pair[1].saturating_sub(pair[0]);
+            assert!(
+                step.mseconds().abs_diff(33) <= 1,
+                "frames one thirtieth of a second apart, got {step}"
+            );
+        }
     }
 
     /// A proxy source whose other pipeline is not there cannot answer a

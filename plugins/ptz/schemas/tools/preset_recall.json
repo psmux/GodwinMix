@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "preset_recall",
+  "description": "Move the camera to a preset. Tracking, if it was on, is turned off.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "preset": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256,
+      "title": "Preset",
+      "description": "The preset number, from 1. VISCA cameras take 1 to 256, ONVIF and Canon 1 to 100.",
+      "examples": [
+        1
+      ]
+    }
+  },
+  "required": [
+    "preset"
+  ],
+  "additionalProperties": false
+}

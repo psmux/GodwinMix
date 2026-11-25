@@ -25,6 +25,7 @@ fn ayuv(size: Option<(u32, u32)>) -> gst::Caps {
 pub fn raster(uri: &str) -> Result<Picture> {
     let src = gst::Element::make_from_uri(gst::URIType::Src, uri, None).with_context(|| format!("nothing in this build reads {uri}"))?;
     let decode = make("decodebin", "still-decode")?;
+    crate::gstutil::software_jpeg(&decode);
     let convert = make("videoconvert", "still-convert")?;
     let tail = [convert.clone()];
     run(&[src.clone(), decode.clone()], &tail, ayuv(None), Some((&decode, &convert)))

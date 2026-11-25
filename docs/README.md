@@ -32,6 +32,7 @@ Start here if you have never run it.
 * [Install on Windows](how-to/install-on-windows.md),
   [macOS](how-to/install-on-macos.md),
   [Linux](how-to/install-on-linux.md)
+* [Check a download](how-to/verify-a-download.md): its hash, and who built it
 * [Start the mixer for the first time](how-to/first-run.md)
 * [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
 * [Use a web page source by hand](how-to/use-a-web-page-by-hand.md): click, type, scroll and change its address from the desk
@@ -52,7 +53,16 @@ Start here if you have never run it.
 * [Make your plugin editable in every designer](how-to/extend-the-designer.md)
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
+* [Mix audio with buses: headphones, a monitor feed and a guest's mix minus](how-to/mix-audio-with-buses.md)
 * [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
+* [Run PTZ cameras from Sources and Preview](how-to/run-ptz-cameras-from-sources-and-preview.md): camera properties, following a speaker, saved shots, the Preview overlay and an ATEM, with simulated cameras to practise on
+* [Connect an ATEM switcher](how-to/connect-an-atem.md): one or several, driven from the window or an agent, following or leading GodwinMix's programme
+* [Add a PTZ camera](how-to/add-a-ptz-camera.md): VISCA, ONVIF or a Canon CR-N camera, its picture, the joystick and presets
+* [Auto track a speaker](how-to/auto-track-a-speaker.md): have a PTZ camera follow one person and keep them framed
+* [Track people in a picture](how-to/track-people-in-a-picture.md): `godwinmix-track` from your own Rust code, on any frames
+* [Use the teleprompter](how-to/use-the-teleprompter.md): scripts on the desk, any number of screens in step, a mirror for the glass, keys and pedals
+* [Invite a guest](how-to/invite-a-guest.md): a link with a key of its own, a return without their own voice, and talkback
+* [Instant replay and the replay buffer](how-to/instant-replay.md): mark in and out, play back slow on any angle, save the last minutes to a file
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
   Bitfocus Companion and Elgato Stream Deck
@@ -65,6 +75,7 @@ Start here if you have never run it.
 * [Make a preset](how-to/make-a-preset.md)
 * [Make a custom build](how-to/custom-build.md)
 * [Sign the Windows builds](how-to/sign-windows-builds.md) with the Certum cloud certificate, and test it on a tag that publishes nothing
+* [Sign the macOS builds](how-to/sign-macos-builds.md) with a Developer ID, and notarise them
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
@@ -100,6 +111,10 @@ Start here if you have never run it.
 * [Show live data on air: RSS, JSON, a sheet or a websocket](how-to/show-live-data.md)
 * [Put a presenter on a green screen into a designed studio](how-to/green-screen-presenter.md)
 * [Key out a green or blue screen on any item](how-to/chroma-key.md)
+* [Keep a graphic up with a downstream key](how-to/keep-a-graphic-up-with-a-downstream-key.md)
+* [Clean up a microphone with sound filters](how-to/clean-up-a-microphone.md)
+* [Correct a camera's colour](how-to/correct-a-cameras-colour.md)
+* [Use LUTs and looks](how-to/use-luts-and-looks.md)
 * [Replace the background behind a person, with or without a green screen](how-to/replace-the-background.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
 * [Keep the show on air when a feed drops](how-to/keep-the-show-on-air-when-a-feed-drops.md): a backup source that takes over by itself and hands back when the feed is steady
@@ -115,6 +130,8 @@ Start here if you have never run it.
 * [Debug a show](how-to/debug-a-show.md)
 * [The desktop app](how-to/desktop-app.md)
 * [Stop streaming, and quit without leaving anything running](how-to/stop-streaming-and-quit.md)
+* [Sign in from a browser](how-to/sign-in-from-a-browser.md): find the token the desktop app made, and open the mixer in a browser signed in
+* [Sign in with a username and password](how-to/sign-in-with-a-username-and-password.md): give each person an account and a role instead of a token, from the page or from a server's shell
 * [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)
@@ -178,6 +195,9 @@ Start here if you have never run it.
 * [Live data: the feed methods, events, formats and limits](reference/live-data.md)
 * [Feed paths and templates](reference/feed-paths.md)
 * [The chroma key](reference/chroma-key.md)
+* [LUTs and looks](reference/luts.md)
+* [Sound filters](reference/sound-filters.md)
+* [Audio buses: the master, buses, cue and mix minus](reference/audio-buses.md)
 * [The cutout: a person with no screen behind them](reference/cutout.md)
 * [Streams: MJPEG, PCM, Opus, WHEP and the local socket](reference/streams.md)
 * [The generated protocol reference](reference/protocol.md)
@@ -221,6 +241,14 @@ Start here if you have never run it.
 * [Media library folders and tags](reference/media-library.md)
 * [Project files and the project methods](reference/project.md)
 * [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
+* [The camera and switcher controls' calls](reference/camera-controls.md): every `ptz`, `track` and `atem` tool camera properties, the Preview overlay and switcher properties send
+* [The atem plugin](reference/atem.md): its tools, the state it answers, follow and lead, and tally
+* [The ATEM network protocol](reference/atem-protocol.md): packets, the session, and every block and command `godwinmix-atem` reads and sends
+* [The ptz plugin](reference/ptz.md): settings, every tool, the drivers and what each protocol can do
+* [godwinmix-track](reference/track.md): the tracking engine's layers, types and settings, and building it for a Raspberry Pi
+* [The prompter](reference/prompter.md): `prompter.*`, rows, the shared position, its events and `/prompter/`
+* [Guest invites](reference/guest-invites.md): `guest.*`, `/guest/<id>/whip` and `/whep`, what is made for a guest, and what one costs
+* [Replay](reference/replay.md): `[replay]`, the rings, `replay.*`, the replay source, the keys and what an angle costs
 * [Recording outputs](reference/recording.md)
 * [Setup on first use](reference/setup.md)
 * [Show health: alarms, thresholds and thumbnails](reference/show-health.md)
@@ -232,6 +260,7 @@ Start here if you have never run it.
 
 ## Explanation
 
+* [How auto tracking works](explanation/auto-tracking.md): detecting, tracking, choosing, framing and steering, and a camera that moves
 * [Why the programme never stops](explanation/why-the-programme-never-stops.md)
 * [Nothing runs unless asked](explanation/nothing-runs-unless-asked.md)
 * [Why the full screen output is a page and not a video sink](explanation/full-screen-output.md)

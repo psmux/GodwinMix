@@ -297,6 +297,7 @@ canvas. `name: null` takes them out of the one they are in.
 | Method | What it does |
 |---|---|
 | `scene.preview.set {scene?}` | arm a scene, or clear it with no scene |
+| `scene.preview.set {draft}` | draw a draft in Preview in place of the armed scene; `draft: ""` stops |
 | `scene.preview.frame {width?}` | a still, base64 JPEG |
 | `program.take {scene?, source?, transition?, at_running_time_ms?}` | put it on air |
 
@@ -305,7 +306,16 @@ canvas. `name: null` takes them out of the one they are in.
 ```
 
 `source` is shorthand for a one item full canvas scene and is taken exactly as
-it always was. With neither `scene` nor `source`, the armed scene goes on air.
+it always was. With neither `scene` nor `source`, the armed scene goes on air
+and stays armed. What is armed after a take follows the core's after take
+setting, `scene.preview.set {"after_take": "same"}` or `"swap"`. With `same`,
+the default, a scene taken by name is armed after it goes on air when Preview
+was following the programme (nothing armed, or the armed scene was the one on
+air before). With `swap`, a take of the armed scene arms the scene it
+replaced, and a take by name leaves what is armed alone. Either way
+`event/preview.changed` says what changed, and a scene armed to go next is
+left alone. [The Programme panel](preview-monitor.md#after-take) walks through
+both.
 
 `transition` is a name or an object:
 
@@ -327,11 +337,43 @@ it, base64 JPEG under `image` (the field is `image` because it carries a media
 type beside it, not a format name). Asking for it is what builds the preview:
 the compositor is up for the length of the call and gone after, unless
 something else is watching. `layout` comes back beside the picture, so a client
-drawing handles has the geometry without recomputing it.
+drawing handles has the geometry without recomputing it. When an item in the
+scene has a filter, the call reads frames until the filters are built and
+every key and cutout has drawn, then answers with the next frame. It stops
+waiting 1.2 seconds after the first frame and answers with the newest.
 
 `scene.preview.set` arms a scene and costs one message: nothing is composited
 for a preview until a client asks for one with `ext.preview`, opens
 `/mjpeg/preview`, or calls `scene.preview.frame`.
+
+The preview draws every item as the programme would draw it, filters
+included: a chroma key, a cutout, a look and a colour correction on an item
+are in Preview before the take, and a change to one (a slider in the
+composer, `scene.item.filter.set`) shows there as it is made. A group with a
+filter is drawn as its children, each with its own filters and then the
+group's. A disabled filter is drawn in neither. Two kinds of filter are not
+item filters and Preview does not draw them: one on the whole programme
+(`filter.add {programme: true}`), which is on whatever goes out, and one on a
+source's programme branch (`filter.add {side: "programme"}`).
+
+The filters run on the preview's own copy of each item, at thumbnail size
+(480 by 270), and only while somebody is watching the preview and the armed
+scene has a filtered item. A cutout is the costly one, because it runs a
+model. A cutout on a camera that is cut out on air as well, with the same crop and
+turn, does not run a second model: the preview's copy reads the masks the
+programme's copy is already making, and feeds the model its own frames only
+when the programme has offered none for a quarter of a second. The filters
+are built off the mixer's command thread, so a take is not held up while the
+preview's are built, and the preview draws the change once they are. A
+filter that will not go in leaves its item drawn without filters.
+
+`scene.preview.set {draft}` is what the composer sends so its draft is what
+Preview shows. It ends on its own when the draft is applied or discarded,
+when the client that showed it arms a scene or clears the armed one (another
+client arming leaves it shown), when anybody sends
+`draft: ""`, and when the page that asked has closed and its client has no
+other connection open. The draft itself is kept, and `scene.edit.discard`
+throws it away.
 
 ## Editing off air
 

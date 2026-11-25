@@ -34,6 +34,7 @@ use std::sync::OnceLock;
 const ASSETS: &[(&str, &str)] = &[
     ("boot.js", include_str!("../../../ui/boot.js")),
     ("client/errors.js", include_str!("../../../ui/client/errors.js")),
+    ("client/auth.js", include_str!("../../../ui/client/auth.js")),
     ("client/destinations.js", include_str!("../../../ui/client/destinations.js")),
     ("client/devices.js", include_str!("../../../ui/client/devices.js")),
     ("client/frames.js", include_str!("../../../ui/client/frames.js")),
@@ -67,6 +68,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("join/page.js", include_str!("../../../ui/join/page.js")),
     ("join/publisher.js", include_str!("../../../ui/join/publisher.js")),
     ("join/form.js", include_str!("../../../ui/join/form.js")),
+    ("join/cameras.js", include_str!("../../../ui/join/cameras.js")),
+    ("join/cert-note.js", include_str!("../../../ui/join/cert-note.js")),
     ("join/devices.js", include_str!("../../../ui/join/devices.js")),
     ("join/session.js", include_str!("../../../ui/join/session.js")),
     ("join/retry.js", include_str!("../../../ui/join/retry.js")),
@@ -86,10 +89,81 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/programme/fullscreen.js", include_str!("../../../ui/panels/programme/fullscreen.js")),
     ("panels/programme/displays.js", include_str!("../../../ui/panels/programme/displays.js")),
     ("panels/programme/programme.css", include_str!("../../../ui/panels/programme/programme.css")),
+    // The teleprompter: alone at /prompter/ for a phone, a tablet or the
+    // monitor under the glass, and the desk panel that writes and drives it.
+    ("prompter/index.html", include_str!("../../../ui/prompter/index.html")),
+    ("prompter/prompter.css", include_str!("../../../ui/prompter/prompter.css")),
+    ("prompter/page.js", include_str!("../../../ui/prompter/page.js")),
+    ("prompter/clock.js", include_str!("../../../ui/prompter/clock.js")),
+    ("prompter/controls.js", include_str!("../../../ui/prompter/controls.js")),
+    ("prompter/follow.js", include_str!("../../../ui/prompter/follow.js")),
+    ("prompter/keys.js", include_str!("../../../ui/prompter/keys.js")),
+    ("prompter/link.js", include_str!("../../../ui/prompter/link.js")),
+    ("prompter/stage.js", include_str!("../../../ui/prompter/stage.js")),
+    ("prompter/text.js", include_str!("../../../ui/prompter/text.js")),
+    ("panels/prompter/entry.js", include_str!("../../../ui/panels/prompter/entry.js")),
+    ("panels/prompter/panel.js", include_str!("../../../ui/panels/prompter/panel.js")),
+    ("panels/prompter/editor.js", include_str!("../../../ui/panels/prompter/editor.js")),
+    ("panels/prompter/drive.js", include_str!("../../../ui/panels/prompter/drive.js")),
+    ("panels/prompter/share.js", include_str!("../../../ui/panels/prompter/share.js")),
+    ("panels/prompter/prompter.css", include_str!("../../../ui/panels/prompter/prompter.css")),
+    ("panels/camera/api.js", include_str!("../../../ui/panels/camera/api.js")),
+    ("panels/camera/atem-card.js", include_str!("../../../ui/panels/camera/atem-card.js")),
+    ("panels/camera/atem-chip.js", include_str!("../../../ui/panels/camera/atem-chip.js")),
+    ("panels/camera/bus.js", include_str!("../../../ui/panels/camera/bus.js")),
+    ("panels/camera/camera.css", include_str!("../../../ui/panels/camera/camera.css")),
+    ("panels/camera/controls.js", include_str!("../../../ui/panels/camera/controls.js")),
+    ("panels/camera/demo/atem.js", include_str!("../../../ui/panels/camera/demo/atem.js")),
+    ("panels/camera/demo/client.js", include_str!("../../../ui/panels/camera/demo/client.js")),
+    ("panels/camera/demo/paint.js", include_str!("../../../ui/panels/camera/demo/paint.js")),
+    ("panels/camera/demo/ptz.js", include_str!("../../../ui/panels/camera/demo/ptz.js")),
+    ("panels/camera/demo/rig.js", include_str!("../../../ui/panels/camera/demo/rig.js")),
+    ("panels/camera/demo/tune.js", include_str!("../../../ui/panels/camera/demo/tune.js")),
+    ("panels/camera/demo/tools.js", include_str!("../../../ui/panels/camera/demo/tools.js")),
+    ("panels/camera/demo/view.js", include_str!("../../../ui/panels/camera/demo/view.js")),
+    ("panels/camera/demo/world.js", include_str!("../../../ui/panels/camera/demo/world.js")),
+    ("panels/camera/drive.js", include_str!("../../../ui/panels/camera/drive.js")),
+    ("panels/camera/exposure.js", include_str!("../../../ui/panels/camera/exposure.js")),
+    ("panels/camera/follow.js", include_str!("../../../ui/panels/camera/follow.js")),
+    ("panels/camera/gamepad.js", include_str!("../../../ui/panels/camera/gamepad.js")),
+    ("panels/camera/hub-read.js", include_str!("../../../ui/panels/camera/hub-read.js")),
+    ("panels/camera/hub.js", include_str!("../../../ui/panels/camera/hub.js")),
+    ("panels/camera/joystick.js", include_str!("../../../ui/panels/camera/joystick.js")),
+    ("panels/camera/live.js", include_str!("../../../ui/panels/camera/live.js")),
+    ("panels/camera/look.js", include_str!("../../../ui/panels/camera/look.js")),
+    ("panels/camera/picture.js", include_str!("../../../ui/panels/camera/picture.js")),
+    ("panels/camera/presets.js", include_str!("../../../ui/panels/camera/presets.js")),
+    ("panels/camera/preview.js", include_str!("../../../ui/panels/camera/preview.js")),
+    ("panels/camera/props-empty.js", include_str!("../../../ui/panels/camera/props-empty.js")),
+    ("panels/camera/props.js", include_str!("../../../ui/panels/camera/props.js")),
+    ("panels/camera/shapes.js", include_str!("../../../ui/panels/camera/shapes.js")),
+    ("panels/camera/switcher-connect.js", include_str!("../../../ui/panels/camera/switcher-connect.js")),
+    ("panels/camera/switcher-more.js", include_str!("../../../ui/panels/camera/switcher-more.js")),
+    ("panels/camera/switcher.js", include_str!("../../../ui/panels/camera/switcher.js")),
+    ("panels/camera/tiles.js", include_str!("../../../ui/panels/camera/tiles.js")),
+    ("panels/camera/words.js", include_str!("../../../ui/panels/camera/words.js")),
+    ("panels/camera/zoom.js", include_str!("../../../ui/panels/camera/zoom.js")),
+    // Guests: the entry loads with the page, the rest when the panel is first shown.
+    ("panels/guests/entry.js", include_str!("../../../ui/panels/guests/entry.js")),
+    ("panels/guests/panel.js", include_str!("../../../ui/panels/guests/panel.js")),
+    ("panels/guests/card.js", include_str!("../../../ui/panels/guests/card.js")),
+    ("panels/guests/share.js", include_str!("../../../ui/panels/guests/share.js")),
+    ("panels/guests/talk.js", include_str!("../../../ui/panels/guests/talk.js")),
+    ("panels/guests/guests.css", include_str!("../../../ui/panels/guests/guests.css")),
+    // Instant replay: the entry loads with the page, the panel when first
+    // shown or when I, O or P is first pressed.
+    ("panels/replay/entry.js", include_str!("../../../ui/panels/replay/entry.js")),
+    ("panels/replay/panel.js", include_str!("../../../ui/panels/replay/panel.js")),
+    ("panels/replay/setup.js", include_str!("../../../ui/panels/replay/setup.js")),
+    ("panels/replay/angles.js", include_str!("../../../ui/panels/replay/angles.js")),
+    ("panels/replay/events.js", include_str!("../../../ui/panels/replay/events.js")),
+    ("panels/replay/controls.js", include_str!("../../../ui/panels/replay/controls.js")),
+    ("panels/replay/replay.css", include_str!("../../../ui/panels/replay/replay.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
     ("join/wiring.js", include_str!("../../../ui/join/wiring.js")),
+    ("join/return.js", include_str!("../../../ui/join/return.js")),
     ("kits/canvas/draw.js", include_str!("../../../ui/kits/canvas/draw.js")),
     ("kits/canvas/geometry.js", include_str!("../../../ui/kits/canvas/geometry.js")),
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),
@@ -155,6 +229,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/composer.js", include_str!("../../../ui/panels/composer/composer.js")),
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
     ("panels/composer/cutout.js", include_str!("../../../ui/panels/composer/cutout.js")),
+    ("panels/composer/lut.js", include_str!("../../../ui/panels/composer/lut.js")),
+    ("panels/composer/lut.css", include_str!("../../../ui/panels/composer/lut.css")),
+    ("panels/composer/colour.js", include_str!("../../../ui/panels/composer/colour.js")),
     ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/others.js", include_str!("../../../ui/panels/composer/others.js")),
@@ -194,10 +271,12 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
     ("panels/multiview/backup-banner.js", include_str!("../../../ui/panels/multiview/backup-banner.js")),
     ("panels/multiview/studio.js", include_str!("../../../ui/panels/multiview/studio.js")),
+    ("panels/multiview/transition-default.js", include_str!("../../../ui/panels/multiview/transition-default.js")),
     ("panels/multiview/transition-picker.js", include_str!("../../../ui/panels/multiview/transition-picker.js")),
     ("panels/multiview/fx-gallery.js", include_str!("../../../ui/panels/multiview/fx-gallery.js")),
     ("panels/multiview/studio.css", include_str!("../../../ui/panels/multiview/studio.css")),
     ("panels/multiview/studio-armed.js", include_str!("../../../ui/panels/multiview/studio-armed.js")),
+    ("panels/multiview/studio-camera.js", include_str!("../../../ui/panels/multiview/studio-camera.js")),
     ("panels/multiview/studio-picture.js", include_str!("../../../ui/panels/multiview/studio-picture.js")),
     ("panels/multiview/monitor-rate.js", include_str!("../../../ui/panels/multiview/monitor-rate.js")),
     ("panels/multiview/studio-next.js", include_str!("../../../ui/panels/multiview/studio-next.js")),
@@ -209,6 +288,13 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/destination.js", include_str!("../../../ui/panels/outputs/destination.js")),
     ("panels/outputs/failure.js", include_str!("../../../ui/panels/outputs/failure.js")),
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
+    ("panels/audio/chain.js", include_str!("../../../ui/panels/audio/chain.js")),
+    ("panels/audio/chain.css", include_str!("../../../ui/panels/audio/chain.css")),
+    ("panels/audio/desk.js", include_str!("../../../ui/panels/audio/desk.js")),
+    ("panels/audio/desk.css", include_str!("../../../ui/panels/audio/desk.css")),
+    ("panels/audio/bus-strip.js", include_str!("../../../ui/panels/audio/bus-strip.js")),
+    ("panels/audio/level.js", include_str!("../../../ui/panels/audio/level.js")),
+    ("panels/audio/listen.js", include_str!("../../../ui/panels/audio/listen.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
     ("panels/outputs/record-stop.js", include_str!("../../../ui/panels/outputs/record-stop.js")),
@@ -340,6 +426,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/fix-row.js", include_str!("../../../ui/panels/scenes/fix-row.js")),
     ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
     ("panels/scenes/green-screen.js", include_str!("../../../ui/panels/scenes/green-screen.js")),
+    ("panels/scenes/green-screen-tiles.js", include_str!("../../../ui/panels/scenes/green-screen-tiles.js")),
+    ("panels/scenes/green-screen.css", include_str!("../../../ui/panels/scenes/green-screen.css")),
     ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
     ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
     ("panels/scenes/pictures.js", include_str!("../../../ui/panels/scenes/pictures.js")),
@@ -423,6 +511,11 @@ const ASSETS: &[(&str, &str)] = &[
     // menu. Data, fetched when a menu first opens.
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
     ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
+    ("shell/signin.js", include_str!("../../../ui/shell/signin.js")),
+    ("shell/signin-page.js", include_str!("../../../ui/shell/signin-page.js")),
+    ("shell/password.js", include_str!("../../../ui/shell/password.js")),
+    ("shell/users-card.js", include_str!("../../../ui/shell/users-card.js")),
+    ("shell/users-rows.js", include_str!("../../../ui/shell/users-rows.js")),
     ("shell/agents-setup.js", include_str!("../../../ui/shell/agents-setup.js")),
     ("shell/agents-manual.js", include_str!("../../../ui/shell/agents-manual.js")),
     ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
@@ -443,6 +536,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
     ("shell/restart-bar.js", include_str!("../../../ui/shell/restart-bar.js")),
     ("shell/restart-check.js", include_str!("../../../ui/shell/restart-check.js")),
+    ("shell/cutout-ready.js", include_str!("../../../ui/shell/cutout-ready.js")),
+    ("shell/after-take.js", include_str!("../../../ui/shell/after-take.js")),
     ("shell/scene-session.js", include_str!("../../../ui/shell/scene-session.js")),
     ("shell/source-files.js", include_str!("../../../ui/shell/source-files.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
@@ -525,6 +620,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
     ("test/headend-setup.js", include_str!("../../../ui/test/headend-setup.js")),
     ("test/headend-picture.js", include_str!("../../../ui/test/headend-picture.js")),
+    ("test/cameras.js", include_str!("../../../ui/test/cameras.js")),
+    ("test/cameras-parts.js", include_str!("../../../ui/test/cameras-parts.js")),
     ("test/headend-stub.js", include_str!("../../../ui/test/headend-stub.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
@@ -628,6 +725,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/lan-devices.js", include_str!("../../../ui/test/lan-devices.js")),
     // Help > Connect an AI agent against a fake client.
     ("test/agents.js", include_str!("../../../ui/test/agents.js")),
+    ("test/signin.js", include_str!("../../../ui/test/signin.js")),
+    ("test/users.js", include_str!("../../../ui/test/users.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     ("test/phone-camera.js", include_str!("../../../ui/test/phone-camera.js")),
     ("test/publish-retry.js", include_str!("../../../ui/test/publish-retry.js")),
@@ -701,6 +800,9 @@ where
         // so the bare name is sent on to it.
         .route("/programme", get(|| async { axum::response::Redirect::permanent("programme/") }))
         .route("/programme/", get(|| async { asset("programme/index.html") }))
+        // The prompter page, the same way: its scripts sit beside it.
+        .route("/prompter", get(|| async { axum::response::Redirect::permanent("prompter/") }))
+        .route("/prompter/", get(|| async { asset("prompter/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
@@ -1055,6 +1157,32 @@ mod tests {
     }
 
     #[test]
+    fn every_file_of_a_panel_the_shell_registers_is_in_the_table() {
+        // boot.js names each panel's entry by path. A panel whose files were
+        // never added here opens to nothing in a release, which the UI's own
+        // tests cannot see because they serve ui/ straight from the disk.
+        let names: std::collections::HashSet<&str> = ASSETS.iter().map(|(p, _)| *p).collect();
+        let ui = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui");
+        let boot = std::fs::read_to_string(ui.join("boot.js")).expect("ui/boot.js");
+        for entry in boot.split('"').filter(|s| s.starts_with("./panels/") && s.ends_with("/entry.js")) {
+            let dir = ui.join(entry.trim_start_matches("./")).parent().expect("a folder").to_path_buf();
+            let mut stack = vec![dir];
+            while let Some(d) = stack.pop() {
+                for f in std::fs::read_dir(&d).expect("a panel folder").flatten() {
+                    let path = f.path();
+                    if path.is_dir() {
+                        stack.push(path);
+                        continue;
+                    }
+                    let rel = path.strip_prefix(&ui).expect("under ui").to_string_lossy().replace('\\', "/");
+                    let shipped = rel.ends_with(".js") || rel.ends_with(".css");
+                    assert!(!shipped || names.contains(rel.as_str()), "{rel} belongs to a panel boot.js registers and is not in ASSETS, so a release serves 404 for it");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn nothing_in_the_table_is_empty_or_listed_twice() {
         let mut seen = std::collections::HashSet::new();
         for (path, body) in ASSETS {
@@ -1162,7 +1290,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_398_kb() {
+    fn the_page_a_volunteer_opens_stays_under_403_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1183,6 +1311,23 @@ mod tests {
         // closed show. What closing asks and does loads only when a show is
         // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
         // them for this.
+        //
+        // Raised to 400 kB for the Guests panel: its entry, which only
+        // defines the element and fetches the panel when it is first shown,
+        // its line in View, and its card and icon on the phone's More screen,
+        // as the Prompter's were. Measured at 408860 bytes, about 850 of them for
+        // this; the panel, the link dialog and talkback load when opened.
+        //
+        // Raised to 399 kB for the Prompter panel: its entry, which only
+        // defines the element and fetches the panel when it is first shown,
+        // its line in View, and its card and icon on the phone's More screen.
+        // Measured at 407860 bytes.
+        //
+        // Raised to 400 kB for the Replay panel: its entry, which defines the
+        // element and the three commands the I, O and P keys run and fetches
+        // everything else when first shown or pressed, the three keys in the
+        // map and its line in View. It has no card on the phone. Measured at
+        // 409302 bytes, 1270 of them for this.
         //
         // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
         // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
@@ -1227,9 +1372,18 @@ mod tests {
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
+        // Raised to 401 kB when the Guests and Replay panel entries landed
+        // together: each alone raised it to 400 and fitted, and together they
+        // came to 409872 bytes. Both panels load when first shown. Raised to
+        // 402 kB for Preview after a restart, the transition panel showing the
+        // mixer's default and the cutout's preparing words: measured at 410680.
+        // Raised to 403 kB for signing in with a username: the page closing
+        // its socket on 4401 and the refusal naming the person's role. The
+        // sign in page, the Users card and the password dialogs load when
+        // first needed. Measured at 411986.
         assert!(
-            bytes < 398 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 398 kB budget",
+            bytes < 403 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 403 kB budget",
             eager.len()
         );
     }
@@ -1253,7 +1407,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_507_kb() {
+    fn the_page_with_the_composer_open_stays_under_513_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1272,7 +1426,21 @@ mod tests {
         // own files did not grow. Measured at 516509 bytes. Raised to 507 kB
         // with the page's own budget, for closing a show from its tab, and
         // again the composer's files did not grow: measured at 518135 bytes.
-        assert!(bytes < 507 * 1024, "the page with the composer open is {bytes} bytes, over the 507 kB budget");
+        // Raised to 508 kB for the teleprompter's panel entry, the audio
+        // panel's lazy desk hooks and its FX button, which landed together;
+        // each alone fitted, and the composer's files did not grow. The FX
+        // dialog and the desk load when first used. Measured at 519182 bytes.
+        // Raised to 509 kB with the page's own budget, for the Replay panel's
+        // entry and keys; the composer's files did not grow. Measured at
+        // 520194 bytes. Raised to 510 kB with the page's, for the Guests and
+        // Replay entries landing together: measured at 521433 bytes. Raised
+        // to 511 kB for the Programme row's FX button, the After Take choice
+        // in Settings, and a filter added in the composer showing at once:
+        // measured at 522924 bytes. Raised to 512 kB with the page's own
+        // budget, for the same three: measured at 523346 bytes. Raised to
+        // 513 kB with the page's own budget, for signing in with a username;
+        // the composer's files did not grow. Measured at 524652 bytes.
+        assert!(bytes < 513 * 1024, "the page with the composer open is {bytes} bytes, over the 513 kB budget");
     }
 
     #[test]
@@ -1292,6 +1460,8 @@ mod tests {
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("panels/media/panel.js"));
+        // The Replay panel, which its entry fetches when first shown.
+        reachable.extend(closure_of("panels/replay/panel.js"));
         // The Media panel's dialogs: tags, Move to, a name, removing a folder.
         reachable.extend(closure_of("panels/media/edit.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
@@ -1316,10 +1486,21 @@ mod tests {
         reachable.extend(closure_of("panels/scenes/green-screen.js"));
         reachable.extend(closure_of("panels/composer/key.js"));
         reachable.extend(closure_of("panels/composer/cutout.js"));
+        reachable.extend(closure_of("panels/composer/lut.js"));
+        reachable.extend(closure_of("panels/composer/colour.js"));
         // Help > Connect an AI agent, on its first press.
         reachable.extend(closure_of("shell/agents.js"));
         // Help > Open on another device, on its first press.
         reachable.extend(closure_of("shell/devices.js"));
+        // Help > Address and sign in, on its first press.
+        reachable.extend(closure_of("shell/signin.js"));
+        // The sign in page, fetched only by a mixer with accounts that
+        // answered 401, and Change password from the dialog above.
+        reachable.extend(closure_of("shell/signin-page.js"));
+        reachable.extend(closure_of("shell/password.js"));
+        reachable.extend(closure_of("client/auth.js"));
+        // Mixer settings > Users, fetched when the dialog opens.
+        reachable.extend(closure_of("shell/users-card.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         // The palette's Open Channels, Channels as rows and Paste several push addresses.
@@ -1413,6 +1594,32 @@ mod tests {
         for entry in ["programme/page.js", "panels/programme/fullscreen.js", "panels/programme/displays.js"] {
             reachable.extend(closure_of(entry));
         }
+        // The prompter: /prompter/ loads page.js itself, and the Prompter
+        // panel's entry fetches the panel the first time it is shown.
+        reachable.extend(closure_of("prompter/page.js"));
+        reachable.extend(closure_of("panels/prompter/panel.js"));
+        // PTZ cameras and ATEM switchers: Sources fetches the tiles' part
+        // after it draws, the camera button and Camera on a tile's menu fetch
+        // camera properties (and its empty state), Studio mode fetches the
+        // Preview overlay when Preview holds a camera, the Programme header
+        // and Outputs fetch the switcher chips and rows, those fetch switcher
+        // properties and its connect form, and Try with simulated cameras
+        // fetches the demo.
+        for entry in [
+            "panels/camera/tiles.js",
+            "panels/camera/props.js",
+            "panels/camera/props-empty.js",
+            "panels/camera/preview.js",
+            "panels/camera/atem-chip.js",
+            "panels/camera/atem-card.js",
+            "panels/camera/switcher.js",
+            "panels/camera/switcher-connect.js",
+            "panels/camera/demo/client.js",
+        ] {
+            reachable.extend(closure_of(entry));
+        }
+        // Guests: the entry imports the panel when it is first shown.
+        reachable.extend(closure_of("panels/guests/panel.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
@@ -1422,7 +1629,15 @@ mod tests {
         // A source's backup line and the programme's list of them, fetched by
         // backup-slot.js when a source first goes down or gets a backup.
         reachable.extend(closure_of("panels/sources/backup-line.js"));
+        // The audio desk: the master, buses, cue and sends, which the audio
+        // panel fetches when it is first put on screen.
+        reachable.extend(closure_of("panels/audio/desk.js"));
+        // A source's sound filters, fetched when its FX button is first pressed.
+        reachable.extend(closure_of("panels/audio/chain.js"));
         reachable.extend(closure_of("panels/multiview/backup-banner.js"));
+        // What Preview holds after a Take, sent to the core once somebody
+        // has chosen it in Settings.
+        reachable.extend(closure_of("shell/after-take.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
         // their buttons are pressed.
@@ -1541,6 +1756,7 @@ mod tests {
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("panels/sources/backup-line.js", "a source that goes down or has a backup"),
+            ("panels/audio/desk.js", "the audio panel on screen"),
             ("panels/multiview/backup-banner.js", "a source on its backup"),
             ("panels/sources/backup-form.js", "the settings drawer"),
             ("panels/sources/page-interact.js", "Interact on a web page source"),
@@ -1703,6 +1919,16 @@ mod tests {
         assert!(page.contains(r#"<link rel="manifest" href="manifest.webmanifest">"#));
         assert!(page.contains(r#"href="icons/apple-touch-icon.png""#));
         assert!(page.contains(r#"name="theme-color""#));
+    }
+
+    /// A guest's browser asked for /favicon.ico twice, on load and on going
+    /// live, and was answered 404 both times.
+    #[test]
+    fn the_guest_page_names_its_icons() {
+        let page = source_of("join/index.html").unwrap();
+        assert!(page.contains(r#"<link rel="icon" href="data:image/svg+xml"#));
+        let touch = r#"href="../icons/apple-touch-icon.png""#;
+        assert!(page.contains(touch) && IMAGES.iter().any(|(p, _)| *p == "icons/apple-touch-icon.png"));
     }
 
     #[test]

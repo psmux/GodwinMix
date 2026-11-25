@@ -51,6 +51,11 @@ pub struct ImportReport {
     /// With `add_sources`: the sources that were not added, each with why.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sources_not_added: Option<Vec<SourceNotAdded>>,
+    /// With `add_sources`: the sound filters put on the added sources, by id.
+    /// A sound filter stays on its source, as in OBS; one the mixer refused is
+    /// in `skipped` with its reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filters_added: Option<Vec<String>>,
     /// The `[[sources]]` block for a config file. Only for an import that did
     /// not add the sources itself, which is what the command line wants.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -83,10 +88,14 @@ pub(super) async fn import_obs(call: Call, params: Value) -> Result<Value, RpcEr
         filters_duplicated: imported.report.filters_duplicated.clone(),
         sources_added: None,
         sources_not_added: None,
+        filters_added: None,
         config_toml: None,
     };
     if req.add_sources {
         let (added, not_added) = add_sources(&call, &imported).await?;
+        let (filters, refused) = add_sound_filters(&call, &imported, &added).await;
+        report.filters_added = Some(filters);
+        report.skipped.extend(refused);
         report.sources_added = Some(added);
         report.sources_not_added = Some(not_added);
     } else {
@@ -172,6 +181,28 @@ async fn add_sources(
         }
     }
     Ok((added, not_added))
+}
+
+/// The sound filters of the sources that were added, through `filter.add`'s
+/// own handler. Refusals come back as lines for `skipped`.
+async fn add_sound_filters(
+    call: &Call,
+    imported: &obs_import::Import,
+    added: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let (mut done, mut refused) = (Vec::new(), Vec::new());
+    for f in imported.sound_filters.iter().filter(|f| added.contains(&f.source)) {
+        let params = match &f.params {
+            Value::Object(map) => Value::Object(map.clone()),
+            _ => Value::Object(Map::new()),
+        };
+        let asked = json!({ "id": f.id, "type": f.kind, "source": f.source, "params": params });
+        match crate::control::methods::filters::add(call.clone(), asked).await {
+            Ok(_) => done.push(f.id.clone()),
+            Err(e) => refused.push(format!("the sound filter {} on {} was not added: {}", f.id, f.source, e.message)),
+        }
+    }
+    (done, refused)
 }
 
 fn reason_to_leave_out(

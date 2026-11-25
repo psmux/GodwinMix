@@ -68,7 +68,9 @@ impl Player {
         let entry = chain[0].clone();
         let bin = pipeline.clone();
         decode.connect_pad_added(move |_, pad| route(&bin, &entry, pad));
+        crate::observe::laps::mark("clip player made");
         pipeline.set_state(gst::State::Playing).context("starting the clip")?;
+        crate::observe::laps::mark("clip player started");
         let shared = Arc::new(Shared::default());
         watch(pipeline, shared.clone());
         Ok(Player { sink, shared })

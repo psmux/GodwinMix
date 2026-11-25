@@ -152,6 +152,16 @@ pub fn by_backstop(queue: &gst::Element) -> bool {
     limit > 0 && time.saturating_mul(10) < limit.saturating_mul(9)
 }
 
+/// Whether `queue` is at its byte or buffer backstop now, within a tenth,
+/// with less than its time limit in it: the state [`report`] logs, read at
+/// any moment rather than when the queue overruns.
+pub fn held_by_backstop(queue: &gst::Element) -> bool {
+    let near = |level: u64, cap: u64| cap > 0 && level.saturating_mul(10) >= cap.saturating_mul(9);
+    let bytes = near(queue.property::<u32>("current-level-bytes").into(), queue.property::<u32>("max-size-bytes").into());
+    let buffers = near(queue.property::<u32>("current-level-buffers").into(), queue.property::<u32>("max-size-buffers").into());
+    (bytes || buffers) && by_backstop(queue)
+}
+
 /// The name of the pipeline an element is in, or its own if it is in none.
 fn top_name(element: &gst::Element) -> String {
     let mut top: gst::Object = element.clone().upcast();

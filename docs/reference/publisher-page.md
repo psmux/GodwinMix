@@ -26,12 +26,15 @@ browser keeps to itself:
 |---|---|
 | `whip` | The WHIP address, `/whip/<channel>/<stream>`, or a whole URL on the same origin |
 | `channel` | In place of `whip`: the channel's application name. The page publishes to `/whip/<channel>/<stream>` with a stream name of its own (below), and shows a **Name** field to change it |
-| `key` | The channel key, sent as `Authorization: Bearer <key>` |
+| `guest` | In place of both: a guest invite's id. The page publishes to `/guest/<id>/whip` and plays the guest's return from `/guest/<id>/whep` ([guest invites](guest-invites.md)) |
+| `key` | The channel key, or with `guest` the invite's own key, sent as `Authorization: Bearer <key>` |
 | `title` | What the page and its tab are called. Optional |
+| `show` | With `guest`, under a station: the show, added to both addresses as `?show=` |
 
 ```
 /join/#whip=/whip/browser/laptop&key=<key>&title=Laptop%20camera
 /join/#channel=browser&key=<key>
+/join/#guest=ana-lopez&key=<the invite's key>&title=Ana%20Lopez
 ```
 
 A link with no `key`, or with neither `whip` nor `channel`, says so on the
@@ -59,8 +62,29 @@ with storage blocked the name lasts as long as the page.
 The page is served under the same Content Security Policy as the rest of the
 UI, and loads nothing from anywhere else.
 
-Remote guests will get their own link with a key of their own; until invites
-exist, this link carries the channel's key.
+The first two forms carry the channel's key. A remote guest gets the third,
+from `guest.invite.create`, with a key of its own that publishes only that
+guest and plays only their return. See [A guest's link](#a-guests-link).
+
+## A guest's link
+
+With `guest`, the page is titled **Join the show as** and the name in
+`title`, the button is **Join the show**, and there is no **Name** field: the
+source is `guest-<id>`, named after the invite. Under the publisher is **The
+show**, a video of the guest's return, which starts once the publish is live
+and stops when it stops:
+
+| | |
+|---|---|
+| Offer | Recvonly video and audio, sent once ICE gathering is complete, to `/guest/<id>/whep` with the invite's key |
+| A `503` | The return is not made until the guest's camera is in, so the first offers may be answered 503. Tried again after 1, 2, 4 and 8 seconds, then every 8 |
+| `401`, `403`, `404` | The invite is gone or the key is wrong: the page says so and stops trying |
+| A dropped connection | `failed` or `closed` offers again after the same waits |
+| Stop | `DELETE` on the `Location`, with the key |
+| Mute the show | Mutes the video element on the page, and nothing at the mixer |
+
+The page's echo cancellation is on by default, so the show coming out of a
+laptop's speakers is taken back out of its microphone.
 
 ## What it sends
 

@@ -36,6 +36,15 @@ uses. Nothing here can do anything a script you write yourself could not.
 | Reconnect an output | `output.reconnect` |
 | Set a source's fader | `source.audio.set` |
 | Mute or unmute a source | `source.audio.set` |
+| Prompter: play or pause | `prompter.get`, then `prompter.play` or `prompter.pause` |
+| Prompter: faster or slower | `prompter.speed` with `by` |
+| Prompter: next or previous marker | `prompter.seek` with `step` |
+| Prompter: go to a marker | `prompter.seek` with `marker`, or the top when it is left empty |
+| Prompter: load a script | `prompter.load` |
+| Replay: mark in or out | `replay.mark` with `point`, or `seconds` alone for the last seconds |
+| Replay: play | `replay.play`, after `replay.event.list` for the last event when none is named |
+| Replay: change angle or speed while it plays | `replay.set` |
+| Replay: save the buffer | `replay.save` |
 
 There is no `output.start` in the protocol. The encoder is already running, so
 adding a destination is the whole of starting one and it costs nothing on air.

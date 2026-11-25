@@ -1,6 +1,6 @@
 # The esports preset: four player feeds, a caster, an overlay page and
 # replays. The player feeds come off a second machine, so the mixer's own box
-# only composites and encodes.
+# only composites, encodes and keeps the replays.
 
 [canvas]
 width = 1920
@@ -75,6 +75,15 @@ name = "Overlay"
 type = "browser/source"
 uri = "web+http://127.0.0.1:8000/overlay"
 params = { url = "http://127.0.0.1:8000/overlay", superimpose = "off" }
+
+# The last minute of every player and of the programme, kept in memory for
+# instant replay and slow motion. Each player angle is encoded at 6 Mbit/s,
+# about 45 MB a minute; the programme angle reads the programme encoder and
+# costs no encode of its own. See docs/how-to/instant-replay.md.
+[replay]
+seconds = 60
+angles = ["programme", "p1", "p2", "p3", "p4"]
+bitrate_kbps = 6000
 
 [[outputs]]
 id = "twitch"

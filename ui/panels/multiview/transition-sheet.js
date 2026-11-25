@@ -38,11 +38,12 @@ function options(state) {
     el("button.btn", { type: "button", text, "aria-pressed": String(state.ms() === ms), disabled: Boolean(k.ownMs), onclick: () => state.set({ ms }) })));
   row.append(lengths);
   if (k.ownMs) row.append(el("small.dim", { text: `Runs for its own ${state.lengthText()}.` }));
+  if (state.fromCore && !state.picked) row.append(el("small.dim.tp-default", { text: "The mixer's default. Pick another to use it on this page." }));
   return row;
 }
 
 /** The sheet's element, and the fill and empty its popover calls. */
-export function transitionSheet(state, { client, armedScene, done }) {
+export function transitionSheet(state, { client, armedScene, done, onAssigned = () => {} }) {
   const body = el("div.tp-body");
   const status = el("div.fx-status", { role: "status" });
   const file = el("input", { type: "file", accept: ACCEPT, multiple: true, hidden: true });
@@ -102,6 +103,7 @@ export function transitionSheet(state, { client, armedScene, done }) {
       const list = await client.call("fx.list", {});
       fx = (list.fx || []).filter((i) => i.transition);
       assigned = list.assigned || {};
+      onAssigned(assigned);
       status.textContent = fx.length ? (list.gpu ? "Shaders run on the GPU." : "") : "No transitions from packs yet. Import adds some.";
     } catch {
       fx = [];

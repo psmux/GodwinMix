@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "track_observe",
+  "description": "What a camera sees now, without moving it: each person's id, box (0 to 1 from the top left) and confidence. Starts looking if nothing is, and stops looking 15 s after the last ask.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "wait_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5000,
+      "default": 1500,
+      "description": "When nothing was looking yet, how long to watch before answering.",
+      "examples": [
+        1500
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

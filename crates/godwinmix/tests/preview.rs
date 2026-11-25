@@ -28,7 +28,7 @@ async fn serve() -> (String, Arc<tokio::sync::Notify>) {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
     cfg.canvas.width = 640;
     cfg.canvas.height = 360;
-    cfg.canvas.fps = 30;
+    cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(30);
     cfg.multiview.enabled = true;
     cfg.multiview.width = 640;
     cfg.multiview.height = 360;

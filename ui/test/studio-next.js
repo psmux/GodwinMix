@@ -20,16 +20,16 @@ export async function studioNextTests(test, eq, ok) {
   const panel = {};
   test('with nothing armed and nothing on air, Preview suggests the first scene', () => {
     follow(panel, {}, kit(null));
-    eq(nextUp(panel, {}, kit(null), null), { kind: 'scene', id: 'wide', name: 'Wide', why: 'next' });
+    eq(nextUp(panel, {}, kit(null), null, null, 'swap'), { kind: 'scene', id: 'wide', name: 'Wide', why: 'next' });
   });
   test('an armed scene that is not on air is what Preview holds', () => {
-    eq(nextUp(panel, { preview: 'Two shot', scene: 'Wide' }, kit('wide'), null), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, { preview: 'Two shot', scene: 'Wide' }, kit('wide'), null, null, 'swap'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
   });
   // Somebody else takes Two shot while Wide is on air: an agent, another desk.
   follow(panel, { scene: 'Wide' }, kit('wide'));
   follow(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'));
-  test('a take from anywhere leaves Preview on where the show came from, not on black or the same shot twice', () => {
-    const next = nextUp(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'), null);
+  test('with After Take set to swap, a take leaves Preview on where the show came from', () => {
+    const next = nextUp(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'), null, null, 'swap');
     eq(next, { kind: 'scene', id: 'wide', name: 'Wide', why: 'before' });
     eq(whyText(next), 'Suggested: on air before this');
   });
@@ -37,8 +37,18 @@ export async function studioNextTests(test, eq, ok) {
   // for it, so Preview holds it and Take sends it, rather than a suggestion.
   test('the scene on air, picked on this page, is what Preview holds', () => {
     const s = { scene: 'Two shot', preview: 'Two shot' };
-    eq(nextUp(panel, s, kit('two'), null, 'two'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
-    eq(nextUp(panel, s, kit('two'), null, 'wide').why, 'before', 'a pick of another scene says nothing about this one');
+    eq(nextUp(panel, s, kit('two'), null, 'two', 'swap'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, s, kit('two'), null, 'wide', 'swap').why, 'before', 'a pick of another scene says nothing about this one');
+  });
+  // The default since the owner's ruling: Preview keeps what was just taken.
+  test('by default a take leaves Preview on the scene just taken, as Programme shows it', () => {
+    eq(nextUp(panel, { scene: 'Two shot', preview: 'Two shot' }, kit('two'), null), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, { scene: 'Two shot' }, kit('two'), null), { kind: 'scene', id: 'two', name: 'Two shot', why: 'live' });
+    eq(whyText({ kind: 'scene', id: 'two', name: 'Two shot', why: 'live' }), '');
+  });
+  test('by default a source taken on its own stays in Preview, and nothing on air shows the first scene', () => {
+    eq(nextUp(panel, { program: 'cam-wide', scene: null, sources: [{ id: 'cam-wide', name: 'Wide camera' }] }, kit(null), null), { kind: 'source', id: 'cam-wide', name: 'Wide camera', why: 'live' });
+    eq(nextUp(panel, {}, kit(null), null).id, 'wide');
   });
   const { resolve } = await import('../panels/multiview/studio-armed.js');
   test('a take forgets the pick made on this page', () => {
@@ -52,13 +62,40 @@ export async function studioNextTests(test, eq, ok) {
     eq(next, { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' }, 'what is armed and not on air is still held');
     delete document.body.dataset.chosen;
   });
+  // The core arms a scene taken by name (scene/server/after_take.rs), once,
+  // for every page. A page that armed it as well raced the other operators.
+  test('a take by name arms nothing from the page; the core does it', () => {
+    const k = Object.assign(kit('wide'), { supported: true });
+    const asked = [];
+    const pane = { sceneSession: { scenes: k }, client: { call: async (m, p) => { asked.push([m, p]); } } };
+    resolve(pane, { scene: 'Wide', preview: 'Two shot' });
+    k.live = () => 'cam';
+    resolve(pane, { scene: 'Camera', preview: 'Two shot' });
+    eq(asked, [], 'a Stream Deck took Camera by name');
+  });
+  test('a source armed here and taken is forgotten once something else goes on air', () => {
+    const k = Object.assign(kit(null), { supported: true });
+    const pane = { sceneSession: { scenes: k } };
+    document.body.dataset.armed = 'cam-wide';
+    eq(resolve(pane, { program: 'cam-wide', scene: null }).kind, 'source', 'the camera taken stays in Preview');
+    k.live = () => 'two';
+    resolve(pane, { program: 'cam-wide', scene: 'Two shot' });
+    eq(document.body.dataset.armed, undefined, 'a Stream Deck took Two shot and the camera stayed armed');
+    document.body.dataset.armed = 'cam-late';
+    k.live = () => 'wide';
+    resolve(pane, { scene: 'Wide' });
+    eq(document.body.dataset.armed, 'cam-late', 'a camera armed to go next is kept through a take of something else');
+    delete document.body.dataset.armed;
+  });
   test('a source armed here is held until it goes on air itself', () => {
     const s = { scene: 'Two shot', sources: [{ id: 'cam-wide', name: 'Wide camera' }] };
-    eq(nextUp(panel, s, kit('two'), 'cam-wide').kind, 'source');
-    eq(nextUp(panel, { program: 'cam-wide', scene: null }, kit(null), 'cam-wide').kind, 'scene');
+    eq(nextUp(panel, s, kit('two'), 'cam-wide', null, 'swap').kind, 'source');
+    eq(nextUp(panel, { program: 'cam-wide', scene: null }, kit(null), 'cam-wide', null, 'swap').kind, 'scene');
+    eq(nextUp(panel, { program: 'cam-wide', scene: null }, kit(null), 'cam-wide').kind, 'source', 'by default it stays once taken');
   });
   test('with no scenes at all there is nothing to suggest', () => {
     const empty = { scenes: () => [], summary: () => null, live: () => null, armed: () => null };
+    eq(nextUp({}, {}, empty, null, null, 'swap'), null);
     eq(nextUp({}, {}, empty, null), null);
   });
 
@@ -83,6 +120,54 @@ export async function studioNextTests(test, eq, ok) {
   test('a clip held on its last frame has a picture, so its box carries no words', () => {
     eq(sourceTrouble({ sources: [{ id: 'clip', state: 'live', ended: true, has_video: true }] }, 'clip'), null);
   });
+
+  // A cutout whose model is still opening draws nothing of the camera, which
+  // looked as if nothing had happened for seven seconds.
+  const ready = await import('../shell/cutout-ready.js');
+  const { CUTOUT_PREPARING } = await import('../panels/multiview/studio-slots.js');
+  const { readinessText } = await import('../panels/composer/cutout.js');
+  const asked = [];
+  let answer = { preparing: 1, running: 0 };
+  const cutKit = kit('wide');
+  cutKit.mirror = { record: (item) => (item === 'w' ? { visible: true, filters: [{ type: 'matte/filter' }] } : { visible: true }) };
+  const cutHost = { previewSlots: layer, client: { call: async (method) => { asked.push(method); return answer; } } };
+  ready.resetCutoutReadiness();
+  paintSlots(cutHost, { sources, multiview: { enabled: true } }, cutKit, { kind: 'scene', id: 'wide', name: 'Wide', why: 'armed' });
+  await new Promise((r) => setTimeout(r, 50));
+  paintSlots(cutHost, { sources, multiview: { enabled: true } }, cutKit, { kind: 'scene', id: 'wide', name: 'Wide', why: 'armed' });
+  test('Preview says on the box that a cutout is preparing, and asks the core', () => {
+    eq(asked[0], 'filter.cutout');
+    ok(layer.textContent.includes(CUTOUT_PREPARING), layer.textContent);
+  });
+  test('the item says it too, and says nothing once the model answers', () => {
+    ok(readinessText({ preparing: 1, running: 0 }).startsWith('Preparing the cutout'));
+    eq(readinessText({ preparing: 0, running: 1 }), '');
+    eq(readinessText({ preparing: 1, running: 0 }, false), '', 'a cutout switched off is not preparing');
+    ok(readinessText({ preparing: 0, running: 0, error: 'no model' }).includes('no model'));
+  });
+  answer = { preparing: 0, running: 1 };
+  ready.resetCutoutReadiness();
+  test('with the cutout ready its box carries no words', () => {
+    paintSlots(cutHost, { sources, multiview: { enabled: true } }, cutKit, { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    ok(!layer.textContent.includes(CUTOUT_PREPARING), layer.textContent);
+  });
+  ready.resetCutoutReadiness();
+
+  // A mixer restart opens every model again, with the composer still open.
+  const opens = [];
+  const again = { call: async () => answer, on: (name, fn) => { if (name === 'open') opens.push(fn); return () => {}; } };
+  answer = { preparing: 0, running: 1 };
+  ready.watchCutouts(again);
+  await new Promise((r) => setTimeout(r, 20));
+  answer = { preparing: 1, running: 0 };
+  for (const fn of opens) fn();
+  // The next ask, at most one interval later.
+  await new Promise((r) => setTimeout(r, 700));
+  test('a page that watched asks again after it reconnects', () => {
+    eq(opens.length, 1, 'one open listener per client');
+    ok(ready.cutoutPreparing(), JSON.stringify(ready.cutoutReadiness()));
+  });
+  ready.resetCutoutReadiness();
 
   // Take with nothing armed sends the suggestion, by id, with the transition.
   const studio = await import('../panels/multiview/studio.js');

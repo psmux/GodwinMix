@@ -16,6 +16,14 @@ import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } fr
 import { motionSection } from "./motion.js";
 import { byPointer } from "../../shell/pointer.js";
 
+/** What a filter's row says, for the built in ones a person adds by name. */
+const SHORT_TITLES = {
+  "chroma/filter": "Chroma key",
+  "color/filter": "Colour",
+  "lut/filter": "Look",
+  "matte/filter": "Background cutout",
+};
+
 export class Inspector {
   /**
    * @param {{client, scenes, catalogue, context: () => object,
@@ -35,7 +43,10 @@ export class Inspector {
     // and the half typed word with it. The core's echo of their own edit is
     // exactly when that would happen, so the same item with the hand still in
     // it is left alone.
-    if (record && record.id === this.showing && this.el.contains(document.activeElement)) return;
+    // An added or removed filter is drawn although its menu keeps the focus.
+    const restack = this.restack;
+    this.restack = false;
+    if (!restack && record && record.id === this.showing && this.el.contains(document.activeElement)) return;
     clear(this.el);
     if (!record) {
       this.showing = null;
@@ -269,15 +280,15 @@ export class Inspector {
     for (const [i, filter] of (record.filters || []).entries()) {
       const enabled = el("input", { type: "checkbox", checked: filter.enabled !== false });
       on(enabled, "change", () =>
-        api.set(filter.name || filter.type || i, undefined, enabled.checked).then(() => this.changed()).catch((e) => errorToast(e, "Filter"))
+        api.set(filter.name || filter.type || i, undefined, enabled.checked).then((a) => this.changed(a)).catch((e) => errorToast(e, "Filter"))
       );
       list.appendChild(
         el("div.row", {}, [
-          el("label.inline.grow", {}, [enabled, el("span.sm", { text: filter.name || filter.type })]),
+          el("label.inline.grow", {}, [enabled, el("span.sm", { text: filter.name || SHORT_TITLES[filter.type] || filter.type })]),
           el("button.btn.icon", {
             text: "×",
             title: "Remove this filter",
-            onclick: () => api.remove(filter.name || filter.type || i).then(() => this.changed()).catch((e) => errorToast(e, "Filter")),
+            onclick: () => api.remove(filter.name || filter.type || i).then((a) => this.changed(a, true)).catch((e) => errorToast(e, "Filter")),
           }),
         ])
       );
@@ -287,9 +298,17 @@ export class Inspector {
         const { keyEditor } = await import("./key.js");
         list.appendChild(keyEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, source, set: (ref, params) => api.set(ref, params) }));
       }
+      if (filter.type === "color/filter") {
+        const { colourEditor } = await import("./colour.js");
+        list.appendChild(colourEditor({ filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
+      }
+      if (filter.type === "lut/filter") {
+        const { lutEditor } = await import("./lut.js");
+        list.appendChild(lutEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, source, set: (ref, params) => api.set(ref, params) }));
+      }
       if (filter.type === "matte/filter") {
         const { cutoutEditor } = await import("./cutout.js");
-        list.appendChild(cutoutEditor({ filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
+        list.appendChild(cutoutEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, set: (ref, params) => api.set(ref, params) }));
       }
     }
     if (!(record.filters || []).length) {
@@ -309,8 +328,8 @@ export class Inspector {
       picker.value = "";
       if (!type) return;
       try {
-        await api.add(type, {});
-        this.changed();
+        // Redraw from the answer: the composer's own copy has no new filter.
+        this.changed(await api.add(type, {}), true);
       } catch (e) {
         errorToast(e, "Filter");
       }
@@ -319,7 +338,9 @@ export class Inspector {
     return el("div.col", {}, [el("div.row.pad", {}, [el("strong.sm.grow", { text: "Filters" }), picker]), list]);
   }
 
-  changed(answer) {
+  /** Pass an answer on. `restack` when the list of filters changed. */
+  changed(answer, restack = false) {
+    if (restack) this.restack = true;
     if (this.o.onChanged) this.o.onChanged(answer);
   }
 }

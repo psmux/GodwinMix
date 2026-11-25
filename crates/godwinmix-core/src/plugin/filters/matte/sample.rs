@@ -26,7 +26,9 @@ pub fn input(src: &Planes<'_>, spec: &Spec, out: &mut Vec<f32>) {
     let scale = 1.0 / (255.0 * spec.std);
     let shift = spec.mean / spec.std;
     // Each output pixel reads the source pixel under its centre.
-    let xs: Vec<usize> = (0..w).map(|x| ((2 * x + 1) * src.width / (2 * w)).min(src.width - 1)).collect();
+    let xs: Vec<usize> = (0..w)
+        .map(|x| ((2 * x + 1) * src.width / (2 * w)).min(src.width - 1))
+        .collect();
     for oy in 0..h {
         let sy = ((2 * oy + 1) * src.height / (2 * h)).min(src.height - 1);
         let row_y = &src.y[sy * src.strides[0]..];
@@ -63,7 +65,11 @@ pub fn mask(answer: &[f32], last: Option<&[u8]>, steady: f32, out: &mut Vec<u8>)
         Some(last) => {
             for ((o, &a), &l) in out.iter_mut().zip(answer).zip(last) {
                 let now = a.clamp(0.0, 1.0) * 255.0;
-                *o = (l as f32 * keep + now * (1.0 - keep)).round() as u8;
+                // Large changes are motion, so follow them immediately. Keep
+                // smoothing small changes at hair and other uncertain edges.
+                let motion = ((now - l as f32).abs() / 64.0).clamp(0.0, 1.0);
+                let weight = keep * (1.0 - motion);
+                *o = (l as f32 * weight + now * (1.0 - weight)).round() as u8;
             }
         }
         None => {
@@ -80,15 +86,31 @@ mod tests {
     use std::path::PathBuf;
 
     fn spec(w: usize, h: usize, mean: f32, std: f32) -> Spec {
-        Spec { name: "t".into(), file: PathBuf::new(), width: w, height: h, mean, std }
+        Spec {
+            name: "t".into(),
+            file: PathBuf::new(),
+            width: w,
+            height: h,
+            mean,
+            std,
+        }
     }
 
     #[test]
     fn white_and_black_land_at_the_ends_of_the_models_range() {
         let (w, h) = (8, 4);
-        let y: Vec<u8> = (0..w * h).map(|i| if i % w < w / 2 { 16 } else { 235 }).collect();
+        let y: Vec<u8> = (0..w * h)
+            .map(|i| if i % w < w / 2 { 16 } else { 235 })
+            .collect();
         let uv = vec![128u8; (w / 2) * (h / 2)];
-        let src = Planes { y: &y, u: &uv, v: &uv, strides: [w, w / 2, w / 2], width: w, height: h };
+        let src = Planes {
+            y: &y,
+            u: &uv,
+            v: &uv,
+            strides: [w, w / 2, w / 2],
+            width: w,
+            height: h,
+        };
         let mut out = Vec::new();
         input(&src, &spec(2, 1, 0.5, 0.5), &mut out);
         assert_eq!(out.len(), 6);
@@ -99,12 +121,19 @@ mod tests {
     }
 
     #[test]
-    fn steady_carries_the_last_mask_forward() {
+    fn small_mask_changes_stay_smoothed() {
+        let mut out = Vec::new();
+        mask(&[0.5], Some(&[120]), 0.5, &mut out);
+        assert!(out[0] > 120 && out[0] < 128);
+    }
+
+    #[test]
+    fn motion_follows_the_new_mask_without_a_ghost() {
         let mut out = Vec::new();
         mask(&[1.0, 0.0], None, 0.5, &mut out);
         assert_eq!(out, [255, 0]);
         let last = out.clone();
         mask(&[0.0, 1.0], Some(&last), 0.5, &mut out);
-        assert_eq!(out, [128, 128]);
+        assert_eq!(out, [0, 255]);
     }
 }

@@ -238,6 +238,12 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     for name in ["token.create", "token.list", "token.revoke"] {
         assert_eq!(scope(name), Scope::Admin, "{name}");
     }
+    // So do accounts. Who you are and your own password are anybody's.
+    for name in ["user.list", "user.add", "user.update", "user.reset_password", "user.remove", "user.sessions", "user.sign_out"] {
+        assert_eq!(scope(name), Scope::Admin, "{name}");
+    }
+    assert_eq!(scope("account.get"), Scope::Read);
+    assert_eq!(scope("account.change_password"), Scope::Read);
 
     let destructive: Vec<&str> =
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
@@ -247,6 +253,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             // It rewrites another program's configuration file, keeping a
             // copy of the old one beside it.
             "agent.setup",
+            // A guest's return or the operator's headphones go quiet, and the
+            // sends on it are forgotten.
+            "audio.bus.remove",
             // It takes a live stream off a platform, and repeating the call
             // does not put it back.
             "channel.destination.remove",
@@ -265,10 +274,17 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "fx.remove",
             // A graphic deleted takes its files with it, like a clip.
             "gallery.remove",
+            // A guest is cut off on air, and the link they hold stops working:
+            // a new invite is a new link.
+            "guest.invite.revoke",
             // A headend channel removed takes its show with it, as
             // show.remove does, and a removed profile is gone.
             "headend.channel.remove",
             "headend.profile.remove",
+            // A deleted LUT or preset is gone from the disk, and a look that
+            // named it passes the picture through until it is made again.
+            "lut.preset.remove",
+            "lut.remove",
             "media.remove",
             // It restarts the mixer on a new address, as core.restart does.
             "network.share",
@@ -280,6 +296,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "preset.apply",
             // It can replace every source, output, channel and scene at once.
             "project.import",
+            // Every angle's buffer is freed and every marked event forgotten:
+            // the replays of the last minutes are gone.
+            "replay.stop",
             // A scene and an item are documents: deleting one cannot be undone
             // by repeating the call, so both are confirmed like the rest.
             "scene.item.filter.remove",
@@ -294,9 +313,14 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             // A device signed out cannot be signed in again with the same
             // secret: the next code is a different token.
             "token.revoke",
+            // An account removed is signed out everywhere and its password is
+            // gone: making it again needs a new one.
+            "user.remove",
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
+         audio.bus.remove (a guest's return goes quiet and its sends are forgotten), \
+         replay.stop (the buffered replays and their events are gone), \
          plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
          preset.apply (it rewrites the operator's configuration file), core.restart \
          (the programme goes off air until the mixer is back), the two scene \

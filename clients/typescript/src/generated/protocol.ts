@@ -12,6 +12,20 @@
 export const API_LEVEL = 1;
 export const API_COMPATIBLE = 1;
 
+/** `account.get`: who this call is, in a person's terms. */
+export interface AccountInfo {
+  accounts: boolean;
+  role?: Role | null;
+  user?: string | null;
+  via: string;
+}
+
+/** `account.change_password`. */
+export interface AccountPasswordRequest {
+  current: string;
+  password: string;
+}
+
 /** What a write does to a file. */
 export type Action = "create" | "merge" | "update" | "unchanged";
 
@@ -108,6 +122,9 @@ export interface AddSourceRequest {
   [key: string]: unknown;
 }
 
+/** What Preview holds after a Take. See the module. */
+export type AfterTake = "same" | "swap";
+
 /** `ext.agent`. `true` takes the default thresholds; an object moves them. */
 export type AgentExt = boolean | {
   black?: number | null;
@@ -148,6 +165,17 @@ export interface AlarmSettings {
 
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
+
+/** One angle's ring, as it stands. */
+export interface AngleStatus {
+  bytes: number;
+  dropped: number;
+  encoder: string;
+  gops: number;
+  held_secs: number;
+  id: string;
+  waiting?: string | null;
+}
 
 /** When a change to a key takes effect. */
 export type Applies = "live" | "next_source" | "restart";
@@ -209,6 +237,19 @@ export type Audio = "follow" | "always" | "never";
 
 export type AudioCodec = "aac" | "opus" | "mp3" | "ac3" | "pcm" | "other";
 
+/** One sound card a bus can be played on. */
+export interface AudioDevice {
+  api?: string | null;
+  id: string;
+  index: number;
+  name: string;
+}
+
+/** `audio.device.list`. */
+export interface AudioDeviceList {
+  devices: AudioDevice[];
+}
+
 /**
  * `source.audio.set` takes an id as well as the levels: the id comes off the
  * path on REST and out of the params on `/rpc`, and both land in one object.
@@ -227,6 +268,13 @@ export interface AudioShape {
   channels: number;
   codec: AudioCodec;
   sample_rate: number;
+}
+
+/** The audio desk as `audio.bus.list` and the status snapshot report it. */
+export interface AudioStatus {
+  buses: BusStatus[];
+  cue?: string[];
+  master: MasterConfig;
 }
 
 /** The audio an output wants. Every field left out is taken from the source. */
@@ -365,6 +413,60 @@ export interface BundleAsset {
   size: number;
 }
 
+/**
+ * One bus: a mix of its own beside the programme.
+ *
+ * Three kinds, decided by two keys. With neither, it carries each source at
+ * the level its `sends` give it (a source with no send is not on it). With
+ * `minus`, it is the programme as heard, without that one source: a guest's
+ * return. With `cue`, it carries the sources marked cue at unity, and the
+ * programme while nothing is marked.
+ */
+export interface BusConfig {
+  cue?: boolean;
+  device?: string | null;
+  gain?: number;
+  id: string;
+  minus?: string | null;
+  muted?: boolean;
+  name?: string | null;
+  sends?: Record<string, unknown>;
+}
+
+/** `audio.bus.remove`, and anything else that names one bus. */
+export interface BusIdRequest {
+  id: string;
+}
+
+/**
+ * `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
+ * on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
+ */
+export interface BusSetRequest {
+  device?: string | null;
+  gain?: number | null;
+  id: string;
+  minus?: string | null;
+  muted?: boolean | null;
+  name?: string | null;
+}
+
+/** One bus and what is using it. */
+export interface BusStatus {
+  cue?: boolean;
+  device?: string | null;
+  device_state?: string | null;
+  gain?: number;
+  id: string;
+  kind: string;
+  listen: string;
+  minus?: string | null;
+  muted?: boolean;
+  name?: string | null;
+  outputs?: string[];
+  sends?: Record<string, unknown>;
+}
+
 /** `governor.calibrate`. */
 export interface CalibrateRequest {
   confirm?: boolean;
@@ -387,6 +489,7 @@ export interface Canvas {
 /** The canvas every source is scaled onto and every output leaves by. */
 export interface CanvasInfo {
   fps: number;
+  fps_fraction?: number[] | null;
   height: number;
   width: number;
 }
@@ -695,6 +798,9 @@ export interface ConfigSetResult {
   unchanged: string[];
 }
 
+/** Whether destructive calls need a confirm round trip first. */
+export type ConfirmPolicy = "none" | "required";
+
 /**
  * How the bytes leave. Decides which codecs are allowed: FLV carries H.264
  * (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
@@ -778,6 +884,24 @@ export interface Crop {
   left: number;
   right: number;
   top: number;
+}
+
+/** `audio.cue.set`: mark or clear one source for the cue bus. */
+export interface CueSetRequest {
+  cue: boolean;
+  solo?: boolean;
+  source: string;
+}
+
+/**
+ * `filter.cutout`. A page asks while a cutout it can see is new, so it can
+ * say the cutout is on its way rather than show a camera that looks as if
+ * nothing happened.
+ */
+export interface CutoutReadiness {
+  error?: string | null;
+  preparing: number;
+  running: number;
 }
 
 /** Whether an interlaced picture is made progressive. */
@@ -964,6 +1088,22 @@ export interface ErrorAction {
   panel?: string | null;
   piece?: string | null;
   value?: unknown;
+}
+
+/** `replay.event.delete`, and anything else that names one event. */
+export interface EventIdRequest {
+  id: string;
+}
+
+/** `replay.event.list`. */
+export interface EventList {
+  events: ReplayEvent[];
+}
+
+/** `replay.event.rename`. */
+export interface EventRenameRequest {
+  id: string;
+  name: string;
 }
 
 export interface ExportRequest {
@@ -1154,6 +1294,7 @@ export interface FilterListing {
 /** One filter as the core reports it. */
 export interface FilterRecord {
   id: string;
+  params?: Record<string, unknown>;
   side: string;
   source?: string | null;
   type: string;
@@ -1732,6 +1873,16 @@ export interface GroupSourcesRequest {
   sources: string[];
 }
 
+/** What `guest.invite.list` answers, and the payload of `event/guest.changed`. */
+export interface GuestList {
+  guests: Invite[];
+  max_guests: number;
+  talkback: TalkbackState;
+}
+
+/** Where a guest is. */
+export type GuestState = "invited" | "joining" | "live" | "gone";
+
 /** One channel. */
 export interface HeadendChannel {
   custom?: TranscodeProfile | null;
@@ -1902,6 +2053,7 @@ export interface ImportObsRequest {
 
 export interface ImportReport {
   config_toml?: string | null;
+  filters_added?: string[] | null;
   filters_duplicated?: FilterReport[];
   items: number;
   scenes: string[];
@@ -1983,6 +2135,53 @@ export interface InstanceRecord {
   restarts: number;
   rss_bytes?: number | null;
   state: string;
+}
+
+/** One invite, without its key. */
+export interface Invite {
+  bus: string;
+  created: string;
+  expires: string;
+  id: string;
+  name: string;
+  source: string;
+  state: GuestState;
+  talkback: boolean;
+}
+
+/** `guest.invite.create`. */
+export interface InviteCreateRequest {
+  base?: string | null;
+  expires_in_secs?: number | null;
+  id?: string | null;
+  name: string;
+}
+
+/** What `guest.invite.create` answers. */
+export interface InviteCreated {
+  id: string;
+  invite: Invite;
+  link: string;
+  note?: string | null;
+  qr_svg: string;
+}
+
+/** `guest.invite.revoke` and `guest.invite.link`. */
+export interface InviteIdRequest {
+  id: string;
+}
+
+/** The link to send a guest, and the same as a QR code. */
+export interface InviteLink {
+  id: string;
+  link: string;
+  note?: string | null;
+  qr_svg: string;
+}
+
+/** What `guest.invite.revoke` answers. */
+export interface InviteRevoked {
+  revoked: Invite;
 }
 
 export type ItemEdge = "left" | "right" | "top" | "bottom";
@@ -2076,8 +2275,18 @@ export interface KeyColorRequest {
   y?: number | null;
 }
 
+/** The keys on air, bottom first. */
+export interface KeyListing {
+  keys: KeyRecord[];
+}
+
 /** How a publisher gives its key. */
 export type KeyMode = "query" | "stream";
+
+export interface KeyRecord {
+  id: string;
+  name: string;
+}
 
 /**
  * What `channel.key.reveal` answers: the key itself, and nothing a list
@@ -2085,6 +2294,13 @@ export type KeyMode = "query" | "stream";
  */
 export interface KeyRevealed {
   secret: string;
+}
+
+/** `program.key.set`. */
+export interface KeySetRequest {
+  on: boolean;
+  scene: string;
+  transition?: Transition | null;
 }
 
 /** A custom ladder. */
@@ -2153,6 +2369,12 @@ export interface Listener {
   transport: string;
 }
 
+/** `prompter.load`: put a script on the prompter, paused at the top. */
+export interface LoadRequest {
+  id: string;
+  play?: boolean;
+}
+
 /** `log.gst`. */
 export interface LogGstRequest {
   categories: string;
@@ -2173,6 +2395,91 @@ export interface LogSetRequest {
   target?: string | null;
 }
 
+/** `prompter.set`: change how the text looks. Only what is named changes. */
+export interface LookRequest {
+  cue?: number | null;
+  line_chars?: number | null;
+  margin?: number | null;
+  mirror?: boolean | null;
+}
+
+/** One LUT the library has. */
+export interface LutEntry {
+  about?: string;
+  group: string;
+  name: string;
+  size: number;
+  title: string;
+}
+
+/** `lut.import`: a file on the mixer's machine. */
+export interface LutImportRequest {
+  name?: string | null;
+  path: string;
+  title?: string | null;
+}
+
+export interface LutImported {
+  lut: LutEntry;
+}
+
+export interface LutList {
+  errors?: string[];
+  formats: string[];
+  luts: LutEntry[];
+  presets: LutPreset[];
+}
+
+/** `lut.list`. */
+export interface LutListRequest {
+  group?: string | null;
+}
+
+/** `lut.remove` and `lut.preset.remove`. */
+export interface LutNameRequest {
+  name: string;
+}
+
+/**
+ * A saved look: a LUT, how much of it, and a colour correction before it.
+ * Anything left out is the filter's default.
+ */
+export interface LutPreset {
+  amount?: number | null;
+  brightness?: number | null;
+  contrast?: number | null;
+  gamma?: number | null;
+  hue_shift?: number | null;
+  lut?: string | null;
+  name: string;
+  saturation?: number | null;
+  tint?: number | null;
+  title?: string;
+  warmth?: number | null;
+}
+
+export interface LutPreview {
+  image: string;
+  kind: string;
+  name: string;
+}
+
+/** `lut.preview`: small pictures of looks, on a source or on a test card. */
+export interface LutPreviewRequest {
+  amount?: number | null;
+  luts?: string[] | null;
+  presets?: string[];
+  source?: string | null;
+  width?: number | null;
+}
+
+export interface LutPreviews {
+  log_like?: boolean | null;
+  original: string;
+  previews: LutPreview[];
+  source?: string | null;
+}
+
 /** `machine.status`'s answer: the box, not one process. */
 export interface MachineStatus {
   cores: number;
@@ -2185,9 +2492,41 @@ export interface MachineStatus {
   uptime_secs?: number | null;
 }
 
-/** `scene.history.mark`. */
+/** Which point `replay.mark` sets. */
+export type MarkPoint = "in" | "out";
+
+/**
+ * `replay.mark`. With `point` it sets an in or an out point; with
+ * `seconds` alone it makes a whole event of the last that many seconds.
+ */
 export interface MarkRequest {
+  angle?: string | null;
+  name?: string | null;
+  point?: MarkPoint | null;
+  seconds?: number | null;
+}
+
+/** `scene.history.mark`. */
+export interface MarkRequest2 {
   label?: string | null;
+}
+
+/** A place in a script a person can jump to: a line that starts with `#`. */
+export interface Marker {
+  name: string;
+  row: number;
+}
+
+/** A master fader and mute. */
+export interface MasterConfig {
+  gain?: number;
+  muted?: boolean;
+}
+
+/** `audio.master.set`. Only what is named moves. */
+export interface MasterSetRequest {
+  gain?: number | null;
+  muted?: boolean | null;
 }
 
 /** A rendition that follows a larger source's size, up to a limit. */
@@ -2320,6 +2659,7 @@ export interface MediaTagged {
  * per second, rather than one message per meter as the legacy stream sends.
  */
 export interface Meters {
+  buses?: Record<string, unknown>;
   program: number[];
   sources: Record<string, unknown>;
 }
@@ -2348,6 +2688,7 @@ export type MissingWhy = "failed" | "not_started" | "removed" | "unknown";
 
 export interface MixerStatus {
   ad?: AdStatus | null;
+  audio?: AudioStatus | null;
   backend: BackendInfo;
   multiview: MultiviewStatus;
   outputs: OutputStatus[];
@@ -2739,6 +3080,35 @@ export interface PlanView {
   totals: PlanTotals;
 }
 
+/** `prompter.play`. */
+export interface PlayRequest {
+  speed?: number | null;
+}
+
+/**
+ * `replay.play`: load an event, or the last seconds of an angle, into a
+ * replay source and play it from the start.
+ */
+export interface PlayRequest2 {
+  angle?: string | null;
+  event?: string | null;
+  seconds?: number | null;
+  source?: string | null;
+  speed?: number | null;
+  take?: boolean;
+  transition?: Transition | null;
+}
+
+/** What `replay.play` and `replay.set` answer with. */
+export interface PlayStatus {
+  angle: string;
+  duration_ms: number;
+  event?: string | null;
+  position_ms: number;
+  source: string;
+  speed: number;
+}
+
 /**
  * The links of an output served as HLS from the control port, each with
  * the output's viewer key on it. A channel's watch link is one too:
@@ -2885,6 +3255,7 @@ export interface PreviewOpenRequest {
 
 /** `scene.preview.set`. */
 export interface PreviewRequest {
+  after_take?: AfterTake | null;
   draft?: string | null;
   scene?: string | null;
 }
@@ -2920,6 +3291,7 @@ export interface ProfileSaveRequest {
 export interface ProgramState {
   ad?: AdStatus | null;
   missing?: string[];
+  on_air?: string | null;
   preview?: string | null;
   previous?: string | null;
   program?: string | null;
@@ -2932,6 +3304,25 @@ export type ProgrammeExt = boolean | {
   fps?: number | null;
   width?: number | null;
 };
+
+/** `prompter.get`, and the payload of `event/prompter.changed`. */
+export interface PrompterState {
+  at_ms: number;
+  cue: number;
+  line_chars: number;
+  margin: number;
+  markers: Marker[];
+  mirror: boolean;
+  now_ms: number;
+  playing: boolean;
+  position: number;
+  revision: number;
+  rows: number;
+  script?: string | null;
+  speed: number;
+  title?: string | null;
+  updated_ms: number;
+}
 
 /** Where an encoder is pointed for one protocol. */
 export interface PublishAddress {
@@ -3039,6 +3430,44 @@ export interface ReorderRequest {
   seq?: number | null;
 }
 
+/** The `[replay]` table. With no angles nothing is built. */
+export interface ReplayConfig {
+  angles?: string[];
+  bitrate_kbps?: number;
+  seconds?: number;
+}
+
+/**
+ * One event: a stretch of time between an in point and an out point, the
+ * same stretch on every angle.
+ */
+export interface ReplayEvent {
+  angle?: string | null;
+  id: string;
+  in_ms: number;
+  name: string;
+  out_ms?: number | null;
+}
+
+/**
+ * `replay.set`: change the angle or the speed of a replay that is playing,
+ * from the frame it is on.
+ */
+export interface ReplaySetRequest {
+  angle?: string | null;
+  source?: string | null;
+  speed?: number | null;
+}
+
+/** `replay.get`: everything about replay on this mixer. */
+export interface ReplayStatus {
+  angles: AngleStatus[];
+  config: ReplayConfig;
+  events: ReplayEvent[];
+  now_ms: number;
+  on: boolean;
+}
+
 /** What `project.import` answers with. */
 export interface Report {
   changes: Change[];
@@ -3085,6 +3514,27 @@ export interface Resync {
 /** How the programme goes back to a source that came back. */
 export type ReturnMode = "auto" | "manual";
 
+/**
+ * What an account may do. The same ladder as a token's scopes, in the words
+ * a person picking one for a colleague would use.
+ */
+export type Role = "view" | "operate" | "admin";
+
+/** One row of a script. */
+export interface Row {
+  line: number;
+  marker?: boolean;
+  text: string;
+}
+
+/** `prompter.rows`: the script on the prompter, broken into rows. */
+export interface RowsAnswer {
+  line_chars: number;
+  rows: Row[];
+  script?: string | null;
+  updated_ms: number;
+}
+
 /** The RTMP port every channel shares. */
 export interface RtmpInfo {
   listening: boolean;
@@ -3102,6 +3552,25 @@ export interface Rtmps {
 export interface SaveRequest {
   name: string;
   out?: string | null;
+}
+
+/**
+ * `replay.save`: write an event, or the whole buffer of one angle, to an
+ * MP4 in the media folder without encoding it again.
+ */
+export interface SaveRequest2 {
+  angle?: string | null;
+  event?: string | null;
+  name?: string | null;
+}
+
+/** What `replay.save` answers with once the file is written. */
+export interface SaveStatus {
+  angle: string;
+  bytes: number;
+  duration_ms: number;
+  name: string;
+  path: string;
 }
 
 /** `headend.scan`. */
@@ -3195,6 +3664,49 @@ export interface SceneView {
  */
 export type Scope = "plugin" | "read" | "operate" | "admin";
 
+/** One script, as `prompter.script.get` and `prompter.script.save` answer. */
+export interface Script {
+  id: string;
+  text: string;
+  title: string;
+  updated_ms: number;
+}
+
+/** `event/prompter.script.changed`. */
+export interface ScriptChanged {
+  id: string;
+  removed: boolean;
+  updated_ms: number;
+}
+
+/** `prompter.script.get` and `prompter.script.remove`. */
+export interface ScriptIdRequest {
+  id: string;
+}
+
+/** `prompter.script.list`. */
+export interface ScriptList {
+  on?: string | null;
+  scripts: ScriptSummary[];
+}
+
+/** `prompter.script.save`: make a script, or replace one with the same id. */
+export interface ScriptSaveRequest {
+  id?: string | null;
+  text: string;
+  title: string;
+}
+
+/** One script in `prompter.script.list`, without its text. */
+export interface ScriptSummary {
+  bytes: number;
+  id: string;
+  lines: number;
+  markers: string[];
+  title: string;
+  updated_ms: number;
+}
+
 /** `plugin.search`. */
 export interface SearchRequest {
   term?: string;
@@ -3222,6 +3734,39 @@ export interface SearchResults {
 export interface SeekParams {
   id: string;
   position_ms: number;
+}
+
+/** `prompter.seek`: exactly one of these. */
+export interface SeekRequest {
+  by?: number | null;
+  fraction?: number | null;
+  marker?: string | null;
+  row?: number | null;
+  step?: number | null;
+}
+
+/** `audio.send.set`: how much of one source goes to one bus. */
+export interface SendSetRequest {
+  bus: string;
+  level: number;
+  source: string;
+}
+
+/** One signed in browser or device. */
+export interface SessionInfo {
+  address?: string;
+  created: string;
+  current?: boolean;
+  device?: string;
+  expires: string;
+  id: string;
+  last_seen?: string | null;
+  user: string;
+}
+
+/** `user.sessions`. */
+export interface SessionList {
+  sessions: SessionInfo[];
 }
 
 /** `core.session_log`. */
@@ -3595,6 +4140,22 @@ export interface ShowStatsRequest {
 /** What a show does to make its outputs, which is what its load pays for. */
 export type ShowWork = "mix" | "transcode" | "copy";
 
+export interface SignRequest {
+  ip?: string | null;
+  output: string;
+  ttl_secs?: number | null;
+}
+
+export interface SignedLink {
+  expires: number;
+  master_url_path: string;
+}
+
+/** `user.sign_out`. */
+export interface SignedOut {
+  sessions_ended: number;
+}
+
 /** `event/snapshot`: the full state, and where in the stream it sits. */
 export interface Snapshot {
   seq: number;
@@ -3688,6 +4249,19 @@ export interface SourceStatus {
   [key: string]: unknown;
 }
 
+/**
+ * `prompter.speed`: one of `speed` or `by`.
+ *
+ * Shaped for something that follows the speaker as well as for a person: a
+ * plugin listening to the voice sends `speed` as often as it likes, and the
+ * screens follow without a jump, since the position carries on from where it
+ * was at the moment of the change.
+ */
+export interface SpeedRequest {
+  by?: number | null;
+  speed?: number | null;
+}
+
 export interface StatsListing {
   instances: InstanceRecord[];
 }
@@ -3744,6 +4318,20 @@ export interface TakeRequest {
   scene?: string | null;
   source?: string | null;
   transition?: Transition | null;
+}
+
+/** `guest.talkback.set`. */
+export interface TalkbackRequest {
+  guest?: string | null;
+  on: boolean;
+  source?: string | null;
+}
+
+/** Talkback as it stands. */
+export interface TalkbackState {
+  held: string[];
+  present: boolean;
+  source: string;
 }
 
 /** `event/tally`. */
@@ -3955,6 +4543,20 @@ export interface TokenRevoked {
   revoked: DeviceToken;
 }
 
+/**
+ * A token's own safety numbers, `[[tokens]] safety = { .. }`.
+ *
+ * The core's `[safety]` table is the default. A human token may move any of
+ * these in either direction; a token marked `agent` may only make them
+ * harder, which is enforced in `godwinmix_core::safety`. Held here rather
+ * than in the engine because the dispatcher has the token and not the config.
+ */
+export interface TokenSafety {
+  flash_guard?: boolean | null;
+  max_takes_per_minute?: number | null;
+  min_hold_ms?: number | null;
+}
+
 /** `tool.call`. */
 export interface ToolCallRequest {
   arguments?: unknown;
@@ -4055,6 +4657,69 @@ export interface Update {
 export interface UpdatePluginRequest {
   id: string;
   source?: string | null;
+}
+
+/** `user.add`. */
+export interface UserAddRequest {
+  confirm?: ConfirmPolicy;
+  name: string;
+  password: string;
+  role?: Role;
+}
+
+/**
+ * What `user.add`, `user.update`, `user.reset_password` and `user.remove`
+ * answer with.
+ */
+export interface UserChanged {
+  sessions_ended?: number;
+  user: UserInfo;
+}
+
+/** One account, without its password. */
+export interface UserInfo {
+  confirm?: ConfirmPolicy;
+  created: string;
+  disabled?: boolean;
+  name: string;
+  role: Role;
+  safety?: TokenSafety | null;
+  sessions?: number;
+}
+
+/** `user.list`. */
+export interface UserList {
+  users: UserInfo[];
+}
+
+/** `user.remove` and `user.sessions`. */
+export interface UserNameRequest {
+  name: string;
+}
+
+/** `user.reset_password`. */
+export interface UserPasswordRequest {
+  name: string;
+  password: string;
+}
+
+/** `user.sessions` with no name lists everybody's. */
+export interface UserSessionsRequest {
+  name?: string | null;
+}
+
+/** `user.sign_out`: one session by its id, or every session of one user. */
+export interface UserSignOutRequest {
+  name?: string | null;
+  session?: string | null;
+}
+
+/** `user.update`: whatever is given changes, the rest stays. */
+export interface UserUpdateRequest {
+  confirm?: ConfirmPolicy | null;
+  disabled?: boolean | null;
+  name: string;
+  role?: Role | null;
 }
 
 export interface ValidateRequest {
@@ -4260,13 +4925,27 @@ export interface FeedRecoveredEvent {
   id: string;
 }
 
+export interface FxAssignedEvent {
+  assigned?: FxAssignments;
+}
+
 /** The params each method takes, by method name. */
 export interface MethodParams {
+  "account.change_password": AccountPasswordRequest;
+  "account.get": Record<string, never>;
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
   "agent.setup": SetupRequest;
   "agent.state": AgentStateRequest;
   "agent.tools": Record<string, never>;
+  "audio.bus.add": BusConfig;
+  "audio.bus.list": Record<string, never>;
+  "audio.bus.remove": BusIdRequest;
+  "audio.bus.set": BusSetRequest;
+  "audio.cue.set": CueSetRequest;
+  "audio.device.list": Record<string, never>;
+  "audio.master.set": MasterSetRequest;
+  "audio.send.set": SendSetRequest;
   "channel.add": ChannelAddRequest;
   "channel.certificate.generate": CertificateGenerateRequest;
   "channel.certificate.set": CertificateSetRequest;
@@ -4309,6 +4988,7 @@ export interface MethodParams {
   "feed.set": FeedSetRequest;
   "feed.test": FeedTestRequest;
   "filter.add": AddFilterRequest;
+  "filter.cutout": Record<string, never>;
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
   "filter.set": SetFilterRequest;
@@ -4333,6 +5013,11 @@ export interface MethodParams {
   "governor.status": Record<string, never>;
   "gpu.rebalance": GpuRebalanceRequest;
   "gpu.status": GpuStatusRequest;
+  "guest.invite.create": InviteCreateRequest;
+  "guest.invite.link": InviteIdRequest;
+  "guest.invite.list": Record<string, never>;
+  "guest.invite.revoke": InviteIdRequest;
+  "guest.talkback.set": TalkbackRequest;
   "headend.channel.add": ChannelAddRequest2;
   "headend.channel.bulk": ChannelBulkRequest;
   "headend.channel.follow": ChannelNames;
@@ -4345,9 +5030,16 @@ export interface MethodParams {
   "headend.profile.save": ProfileSaveRequest;
   "headend.scan": ScanRequest;
   "headend.status": Record<string, never>;
+  "hls.sign": SignRequest;
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
+  "lut.import": LutImportRequest;
+  "lut.list": LutListRequest;
+  "lut.preset.remove": LutNameRequest;
+  "lut.preset.save": LutPreset;
+  "lut.preview": LutPreviewRequest;
+  "lut.remove": LutNameRequest;
   "machine.status": Record<string, never>;
   "media.convert": NameRequest;
   "media.folder.add": MediaFolderAddRequest;
@@ -4403,14 +5095,38 @@ export interface MethodParams {
   "program.get": Record<string, never>;
   "program.golive": GoLiveRequest;
   "program.history": HistoryRequest;
+  "program.key.list": Record<string, never>;
+  "program.key.set": KeySetRequest;
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
   "program.thumbnail": ThumbnailRequest;
   "program.transitions": Record<string, never>;
   "project.export": ExportRequest;
   "project.import": ImportRequest;
+  "prompter.get": Record<string, never>;
+  "prompter.load": LoadRequest;
+  "prompter.pause": Record<string, never>;
+  "prompter.play": PlayRequest;
+  "prompter.rows": Record<string, never>;
+  "prompter.script.get": ScriptIdRequest;
+  "prompter.script.list": Record<string, never>;
+  "prompter.script.remove": ScriptIdRequest;
+  "prompter.script.save": ScriptSaveRequest;
+  "prompter.seek": SeekRequest;
+  "prompter.set": LookRequest;
+  "prompter.speed": SpeedRequest;
   "rendition.plan": PlanRequest;
   "rendition.presets": Record<string, never>;
+  "replay.event.delete": EventIdRequest;
+  "replay.event.list": Record<string, never>;
+  "replay.event.rename": EventRenameRequest;
+  "replay.get": Record<string, never>;
+  "replay.mark": MarkRequest;
+  "replay.play": PlayRequest2;
+  "replay.save": SaveRequest2;
+  "replay.set": ReplaySetRequest;
+  "replay.start": ReplayConfig;
+  "replay.stop": Record<string, never>;
   "scene.add": AddSceneRequest;
   "scene.apply_graphic": ApplyGraphicRequest;
   "scene.apply_layout": ApplyLayoutRequest;
@@ -4422,7 +5138,7 @@ export interface MethodParams {
   "scene.export": ExportRequest2;
   "scene.get": SceneRequest;
   "scene.graphic.list": Record<string, never>;
-  "scene.history.mark": MarkRequest;
+  "scene.history.mark": MarkRequest2;
   "scene.import": ImportRequest2;
   "scene.import.obs": ImportObsRequest;
   "scene.item.add": AddItemRequest;
@@ -4510,17 +5226,34 @@ export interface MethodParams {
   "token.list": Record<string, never>;
   "token.revoke": TokenRevokeRequest;
   "tool.call": ToolCallRequest;
+  "user.add": UserAddRequest;
+  "user.list": Record<string, never>;
+  "user.remove": UserNameRequest;
+  "user.reset_password": UserPasswordRequest;
+  "user.sessions": UserSessionsRequest;
+  "user.sign_out": UserSignOutRequest;
+  "user.update": UserUpdateRequest;
   "vitals.get": Record<string, never>;
   "vitals.set": VitalsConfig;
 }
 
 /** What each method answers with, by method name. */
 export interface MethodResults {
+  "account.change_password": SignedOut;
+  "account.get": AccountInfo;
   "adbreak.end": Record<string, unknown>;
   "adbreak.start": Record<string, unknown>;
   "agent.setup": Setup;
   "agent.state": Record<string, unknown>;
   "agent.tools": Detected[];
+  "audio.bus.add": BusStatus;
+  "audio.bus.list": AudioStatus;
+  "audio.bus.remove": BusIdRequest;
+  "audio.bus.set": BusStatus;
+  "audio.cue.set": AudioStatus;
+  "audio.device.list": AudioDeviceList;
+  "audio.master.set": MasterConfig;
+  "audio.send.set": BusStatus;
   "channel.add": ChannelAdded;
   "channel.certificate.generate": CertificateInfo;
   "channel.certificate.set": CertificateInfo;
@@ -4563,6 +5296,7 @@ export interface MethodResults {
   "feed.set": FeedStatus;
   "feed.test": FeedTestResult;
   "filter.add": FilterRecord;
+  "filter.cutout": CutoutReadiness;
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
   "filter.set": FilterRecord;
@@ -4587,6 +5321,11 @@ export interface MethodResults {
   "governor.status": GovernorStatus;
   "gpu.rebalance": GpuRebalance;
   "gpu.status": GpuStatus;
+  "guest.invite.create": InviteCreated;
+  "guest.invite.link": InviteLink;
+  "guest.invite.list": GuestList;
+  "guest.invite.revoke": InviteRevoked;
+  "guest.talkback.set": GuestList;
   "headend.channel.add": ChannelChange;
   "headend.channel.bulk": ChannelChange;
   "headend.channel.follow": ChannelChange;
@@ -4599,9 +5338,16 @@ export interface MethodResults {
   "headend.profile.save": ProfileChange;
   "headend.scan": ScanResult;
   "headend.status": HeadendStatus;
+  "hls.sign": SignedLink;
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
+  "lut.import": LutImported;
+  "lut.list": LutList;
+  "lut.preset.remove": Record<string, unknown>;
+  "lut.preset.save": LutPreset;
+  "lut.preview": LutPreviews;
+  "lut.remove": Record<string, unknown>;
   "machine.status": MachineStatus;
   "media.convert": ConversionState;
   "media.folder.add": Record<string, unknown>;
@@ -4657,14 +5403,38 @@ export interface MethodResults {
   "program.get": ProgramState;
   "program.golive": GoLiveResult;
   "program.history": TakeRecord[];
+  "program.key.list": KeyListing;
+  "program.key.set": KeyListing;
   "program.revert": ProgramState;
   "program.take": ProgramState;
   "program.thumbnail": Record<string, unknown>;
   "program.transitions": TransitionCatalogue;
   "project.export": Record<string, unknown>;
   "project.import": Report;
+  "prompter.get": PrompterState;
+  "prompter.load": PrompterState;
+  "prompter.pause": PrompterState;
+  "prompter.play": PrompterState;
+  "prompter.rows": RowsAnswer;
+  "prompter.script.get": Script;
+  "prompter.script.list": ScriptList;
+  "prompter.script.remove": ScriptChanged;
+  "prompter.script.save": Script;
+  "prompter.seek": PrompterState;
+  "prompter.set": PrompterState;
+  "prompter.speed": PrompterState;
   "rendition.plan": PlanView;
   "rendition.presets": PresetsResult;
+  "replay.event.delete": EventIdRequest;
+  "replay.event.list": EventList;
+  "replay.event.rename": ReplayEvent;
+  "replay.get": ReplayStatus;
+  "replay.mark": ReplayEvent;
+  "replay.play": PlayStatus;
+  "replay.save": SaveStatus;
+  "replay.set": PlayStatus;
+  "replay.start": ReplayStatus;
+  "replay.stop": ReplayStatus;
   "scene.add": SceneView;
   "scene.apply_graphic": Record<string, unknown>;
   "scene.apply_layout": Record<string, unknown>;
@@ -4764,6 +5534,13 @@ export interface MethodResults {
   "token.list": TokenList;
   "token.revoke": TokenRevoked;
   "tool.call": Record<string, unknown>;
+  "user.add": UserChanged;
+  "user.list": UserList;
+  "user.remove": UserChanged;
+  "user.reset_password": UserChanged;
+  "user.sessions": SessionList;
+  "user.sign_out": SignedOut;
+  "user.update": UserChanged;
   "vitals.get": Record<string, unknown>;
   "vitals.set": Record<string, unknown>;
 }
@@ -4809,6 +5586,10 @@ export interface EventPayloads {
   "feed.failed": FeedFailedEvent;
   "feed.recovered": FeedRecoveredEvent;
   "presence.changed": PresenceList;
+  "prompter.changed": PrompterState;
+  "prompter.script.changed": ScriptChanged;
+  "guest.changed": GuestList;
+  "fx.assigned": FxAssignedEvent;
   "health": HealthEvent;
 }
 
@@ -4825,11 +5606,21 @@ export interface MethodInfo {
 }
 
 export const METHODS: readonly MethodInfo[] = [
+  { name: "account.change_password", summary: "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/account/change_password" } },
+  { name: "account.get", summary: "Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/account" } },
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/agent/tools" } },
+  { name: "audio.bus.add", summary: "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/bus/add" } },
+  { name: "audio.bus.list", summary: "The programme master, every bus with its sends, and the sources marked cue.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/audio/bus/list" } },
+  { name: "audio.bus.remove", summary: "Take a bus out, live. Refused while an output takes its sound from it.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/audio/bus/remove" } },
+  { name: "audio.bus.set", summary: "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/bus/set" } },
+  { name: "audio.cue.set", summary: "Mark or clear a source for the cue bus. `solo` clears every other mark first.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/cue/set" } },
+  { name: "audio.device.list", summary: "The sound outputs on the mixer's machine that a bus can play on.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/audio/device/list" } },
+  { name: "audio.master.set", summary: "Move the programme's master fader or mute. Only what is named moves.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/master/set" } },
+  { name: "audio.send.set", summary: "Set how much of one source goes to one bus. 0 takes it off the bus.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/audio/send/set" } },
   { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/generate" } },
   { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/set" } },
@@ -4872,6 +5663,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "feed.set", summary: "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/set" } },
   { name: "feed.test", summary: "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.", scope: "operate", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/feed/test" } },
   { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters" } },
+  { name: "filter.cutout", summary: "Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/cutout" } },
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
   { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/set" } },
@@ -4896,6 +5688,11 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gpu/rebalance" } },
   { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
+  { name: "guest.invite.create", summary: "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/guest/invite/create" } },
+  { name: "guest.invite.link", summary: "An invite's link and QR code again, to copy or show.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/guest/invite/link" } },
+  { name: "guest.invite.list", summary: "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/guest/invite/list" } },
+  { name: "guest.invite.revoke", summary: "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/guest/invite/revoke" } },
+  { name: "guest.talkback.set", summary: "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/guest/talkback/set" } },
   { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/add" } },
   { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/bulk" } },
   { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/channel/follow" } },
@@ -4908,9 +5705,16 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "headend.profile.save", summary: "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/profile/save" } },
   { name: "headend.scan", summary: "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/headend/scan" } },
   { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/headend/status" } },
+  { name: "hls.sign", summary: "A viewer link to one HLS output that stops working after a time, and can be held to one address.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/hls/sign" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
+  { name: "lut.import", summary: "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/lut/import" } },
+  { name: "lut.list", summary: "Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/lut/list" } },
+  { name: "lut.preset.remove", summary: "Delete a saved preset.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/lut/preset/remove" } },
+  { name: "lut.preset.save", summary: "Save a look under a name: a LUT, how much of it, and a colour correction before it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/lut/preset/save" } },
+  { name: "lut.preview", summary: "Small JPEG pictures of looks on a source, or on a test card, for a picker.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/lut/preview" } },
+  { name: "lut.remove", summary: "Delete an imported LUT. The built in ones cannot be deleted.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/lut/remove" } },
   { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/machine/status" } },
   { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/convert" } },
   { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/folder/add" } },
@@ -4966,14 +5770,38 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program" } },
   { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/golive" } },
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
+  { name: "program.key.list", summary: "The downstream keys on air, bottom first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/key/list" } },
+  { name: "program.key.set", summary: "Put a scene on air as a downstream key, above whatever is taken, or take it off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/key/set" } },
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
   { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/thumbnail" } },
   { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/program/transitions" } },
   { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/project/export" } },
   { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/project/import" } },
+  { name: "prompter.get", summary: "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter" } },
+  { name: "prompter.load", summary: "Put a script on the prompter, at the top and paused unless play is true.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/load" } },
+  { name: "prompter.pause", summary: "Stop the prompter where it is.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/pause" } },
+  { name: "prompter.play", summary: "Start the prompter scrolling, at speed when given. From the end it starts again at the top.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/play" } },
+  { name: "prompter.rows", summary: "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/rows" } },
+  { name: "prompter.script.get", summary: "One prompter script with its text.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter/script/get" } },
+  { name: "prompter.script.list", summary: "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/prompter/script/list" } },
+  { name: "prompter.script.remove", summary: "Forget a prompter script. When it is on the prompter the screens go empty.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/script/remove" } },
+  { name: "prompter.script.save", summary: "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/script/save" } },
+  { name: "prompter.seek", summary: "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/seek" } },
+  { name: "prompter.set", summary: "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/set" } },
+  { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/prompter/speed" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
   { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/presets" } },
+  { name: "replay.event.delete", summary: "Forget a replay event. The recording it pointed at is not touched.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/event/delete" } },
+  { name: "replay.event.list", summary: "Every replay event, oldest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/replay/event/list" } },
+  { name: "replay.event.rename", summary: "Give a replay event a name.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/event/rename" } },
+  { name: "replay.get", summary: "Whether replay is on, each angle's buffer depth and size, and every event.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/replay" } },
+  { name: "replay.mark", summary: "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/mark" } },
+  { name: "replay.play", summary: "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/play" } },
+  { name: "replay.save", summary: "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/save" } },
+  { name: "replay.set", summary: "Change a playing replay's angle or speed, from the frame it is on.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/set" } },
+  { name: "replay.start", summary: "Record these angles, each the last `seconds`. Called again, it changes them in place.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/replay/start" } },
+  { name: "replay.stop", summary: "Stop recording, free every buffer and forget every event.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/replay/stop" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
   { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_graphic" } },
   { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_layout" } },
@@ -5014,7 +5842,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/params/get" } },
   { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
   { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/preview/frame" } },
-  { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
+  { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
   { name: "scene.redo", summary: "Put back what your undo took away.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/redo" } },
   { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/scenes/{id}" } },
   { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/rename" } },
@@ -5073,6 +5901,13 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/token/list" } },
   { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/token/revoke" } },
   { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
+  { name: "user.add", summary: "Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/add" } },
+  { name: "user.list", summary: "Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/user/list" } },
+  { name: "user.remove", summary: "Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/user/remove" } },
+  { name: "user.reset_password", summary: "Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/reset_password" } },
+  { name: "user.sessions", summary: "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/user/sessions" } },
+  { name: "user.sign_out", summary: "End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/sign_out" } },
+  { name: "user.update", summary: "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/user/update" } },
   { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/vitals" } },
   { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/vitals/set" } },
 ] as const;
@@ -5128,6 +5963,10 @@ export const EVENT_NAMES: readonly EventName[] = [
   "feed.failed",
   "feed.recovered",
   "presence.changed",
+  "prompter.changed",
+  "prompter.script.changed",
+  "guest.changed",
+  "fx.assigned",
   "health",
 ];
 
@@ -5142,6 +5981,16 @@ export class GeneratedMethods {
   /** Replaced by Client. Sends one call and answers its result. */
   _call(method: string, params: Record<string, unknown>): Promise<unknown> {
     return Promise.reject(new Error(`no transport for ${method}: build this object with connect()`));
+  }
+
+  /** Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused. */
+  accountChangePassword(params: AccountPasswordRequest): Promise<SignedOut> {
+    return this._call("account.change_password", params as unknown as Record<string, unknown>) as Promise<SignedOut>;
+  }
+
+  /** Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all. */
+  accountGet(): Promise<AccountInfo> {
+    return this._call("account.get", {}) as Promise<AccountInfo>;
   }
 
   /** Cut a running ad short, or disarm one that is scheduled. */
@@ -5167,6 +6016,46 @@ export class GeneratedMethods {
   /** The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. */
   agentTools(): Promise<Detected[]> {
     return this._call("agent.tools", {}) as Promise<Detected[]>;
+  }
+
+  /** Add a bus beside the programme mix, live. Nothing is built for buses until the first one. */
+  audioBusAdd(params: BusConfig): Promise<BusStatus> {
+    return this._call("audio.bus.add", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
+  }
+
+  /** The programme master, every bus with its sends, and the sources marked cue. */
+  audioBusList(): Promise<AudioStatus> {
+    return this._call("audio.bus.list", {}) as Promise<AudioStatus>;
+  }
+
+  /** Take a bus out, live. Refused while an output takes its sound from it. */
+  audioBusRemove(params: BusIdRequest): Promise<BusIdRequest> {
+    return this._call("audio.bus.remove", params as unknown as Record<string, unknown>) as Promise<BusIdRequest>;
+  }
+
+  /** Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card. */
+  audioBusSet(params: BusSetRequest): Promise<BusStatus> {
+    return this._call("audio.bus.set", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
+  }
+
+  /** Mark or clear a source for the cue bus. `solo` clears every other mark first. */
+  audioCueSet(params: CueSetRequest): Promise<AudioStatus> {
+    return this._call("audio.cue.set", params as unknown as Record<string, unknown>) as Promise<AudioStatus>;
+  }
+
+  /** The sound outputs on the mixer's machine that a bus can play on. */
+  audioDeviceList(): Promise<AudioDeviceList> {
+    return this._call("audio.device.list", {}) as Promise<AudioDeviceList>;
+  }
+
+  /** Move the programme's master fader or mute. Only what is named moves. */
+  audioMasterSet(params: MasterSetRequest = {}): Promise<MasterConfig> {
+    return this._call("audio.master.set", params as unknown as Record<string, unknown>) as Promise<MasterConfig>;
+  }
+
+  /** Set how much of one source goes to one bus. 0 takes it off the bus. */
+  audioSendSet(params: SendSetRequest): Promise<BusStatus> {
+    return this._call("audio.send.set", params as unknown as Record<string, unknown>) as Promise<BusStatus>;
   }
 
   /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. */
@@ -5379,6 +6268,11 @@ export class GeneratedMethods {
     return this._call("filter.add", params as unknown as Record<string, unknown>) as Promise<FilterRecord>;
   }
 
+  /** Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out. */
+  filterCutout(): Promise<CutoutReadiness> {
+    return this._call("filter.cutout", {}) as Promise<CutoutReadiness>;
+  }
+
   /** Every filter in place, with what it is and where it sits. */
   filterList(): Promise<FilterListing> {
     return this._call("filter.list", {}) as Promise<FilterListing>;
@@ -5499,6 +6393,31 @@ export class GeneratedMethods {
     return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
   }
 
+  /** Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise. */
+  guestInviteCreate(params: InviteCreateRequest): Promise<InviteCreated> {
+    return this._call("guest.invite.create", params as unknown as Record<string, unknown>) as Promise<InviteCreated>;
+  }
+
+  /** An invite's link and QR code again, to copy or show. */
+  guestInviteLink(params: InviteIdRequest): Promise<InviteLink> {
+    return this._call("guest.invite.link", params as unknown as Record<string, unknown>) as Promise<InviteLink>;
+  }
+
+  /** Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback. */
+  guestInviteList(): Promise<GuestList> {
+    return this._call("guest.invite.list", {}) as Promise<GuestList>;
+  }
+
+  /** Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again. */
+  guestInviteRevoke(params: InviteIdRequest): Promise<InviteRevoked> {
+    return this._call("guest.invite.revoke", params as unknown as Record<string, unknown>) as Promise<InviteRevoked>;
+  }
+
+  /** Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with. */
+  guestTalkbackSet(params: TalkbackRequest): Promise<GuestList> {
+    return this._call("guest.talkback.set", params as unknown as Record<string, unknown>) as Promise<GuestList>;
+  }
+
   /** Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. */
   headendChannelAdd(params: ChannelAddRequest2): Promise<ChannelChange> {
     return this._call("headend.channel.add", params as unknown as Record<string, unknown>) as Promise<ChannelChange>;
@@ -5559,6 +6478,11 @@ export class GeneratedMethods {
     return this._call("headend.status", {}) as Promise<HeadendStatus>;
   }
 
+  /** A viewer link to one HLS output that stops working after a time, and can be held to one address. */
+  hlsSign(params: SignRequest): Promise<SignedLink> {
+    return this._call("hls.sign", params as unknown as Record<string, unknown>) as Promise<SignedLink>;
+  }
+
   /** Raise GStreamer's own debug categories for a while, then let them fall back on their own. */
   logGst(params: LogGstRequest): Promise<LogGstResult> {
     return this._call("log.gst", params as unknown as Record<string, unknown>) as Promise<LogGstResult>;
@@ -5572,6 +6496,36 @@ export class GeneratedMethods {
   /** Change one instance's or one module's log level while the mixer runs. */
   logSet(params: LogSetRequest): Promise<Record<string, unknown>> {
     return this._call("log.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library. */
+  lutImport(params: LutImportRequest): Promise<LutImported> {
+    return this._call("lut.import", params as unknown as Record<string, unknown>) as Promise<LutImported>;
+  }
+
+  /** Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets. */
+  lutList(params: LutListRequest = {}): Promise<LutList> {
+    return this._call("lut.list", params as unknown as Record<string, unknown>) as Promise<LutList>;
+  }
+
+  /** Delete a saved preset. */
+  lutPresetRemove(params: LutNameRequest): Promise<Record<string, unknown>> {
+    return this._call("lut.preset.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Save a look under a name: a LUT, how much of it, and a colour correction before it. */
+  lutPresetSave(params: LutPreset): Promise<LutPreset> {
+    return this._call("lut.preset.save", params as unknown as Record<string, unknown>) as Promise<LutPreset>;
+  }
+
+  /** Small JPEG pictures of looks on a source, or on a test card, for a picker. */
+  lutPreview(params: LutPreviewRequest = {}): Promise<LutPreviews> {
+    return this._call("lut.preview", params as unknown as Record<string, unknown>) as Promise<LutPreviews>;
+  }
+
+  /** Delete an imported LUT. The built in ones cannot be deleted. */
+  lutRemove(params: LutNameRequest): Promise<Record<string, unknown>> {
+    return this._call("lut.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. */
@@ -5849,6 +6803,16 @@ export class GeneratedMethods {
     return this._call("program.history", params as unknown as Record<string, unknown>) as Promise<TakeRecord[]>;
   }
 
+  /** The downstream keys on air, bottom first. */
+  programKeyList(): Promise<KeyListing> {
+    return this._call("program.key.list", {}) as Promise<KeyListing>;
+  }
+
+  /** Put a scene on air as a downstream key, above whatever is taken, or take it off. */
+  programKeySet(params: KeySetRequest): Promise<KeyListing> {
+    return this._call("program.key.set", params as unknown as Record<string, unknown>) as Promise<KeyListing>;
+  }
+
   /** Take back to the shot before this one. */
   programRevert(): Promise<ProgramState> {
     return this._call("program.revert", {}) as Promise<ProgramState>;
@@ -5879,6 +6843,66 @@ export class GeneratedMethods {
     return this._call("project.import", params as unknown as Record<string, unknown>) as Promise<Report>;
   }
 
+  /** The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look. */
+  prompterGet(): Promise<PrompterState> {
+    return this._call("prompter.get", {}) as Promise<PrompterState>;
+  }
+
+  /** Put a script on the prompter, at the top and paused unless play is true. */
+  prompterLoad(params: LoadRequest): Promise<PrompterState> {
+    return this._call("prompter.load", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Stop the prompter where it is. */
+  prompterPause(): Promise<PrompterState> {
+    return this._call("prompter.pause", {}) as Promise<PrompterState>;
+  }
+
+  /** Start the prompter scrolling, at speed when given. From the end it starts again at the top. */
+  prompterPlay(params: PlayRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.play", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes. */
+  prompterRows(): Promise<RowsAnswer> {
+    return this._call("prompter.rows", {}) as Promise<RowsAnswer>;
+  }
+
+  /** One prompter script with its text. */
+  prompterScriptGet(params: ScriptIdRequest): Promise<Script> {
+    return this._call("prompter.script.get", params as unknown as Record<string, unknown>) as Promise<Script>;
+  }
+
+  /** Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text. */
+  prompterScriptList(): Promise<ScriptList> {
+    return this._call("prompter.script.list", {}) as Promise<ScriptList>;
+  }
+
+  /** Forget a prompter script. When it is on the prompter the screens go empty. */
+  prompterScriptRemove(params: ScriptIdRequest): Promise<ScriptChanged> {
+    return this._call("prompter.script.remove", params as unknown as Record<string, unknown>) as Promise<ScriptChanged>;
+  }
+
+  /** Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place. */
+  prompterScriptSave(params: ScriptSaveRequest): Promise<Script> {
+    return this._call("prompter.script.save", params as unknown as Record<string, unknown>) as Promise<Script>;
+  }
+
+  /** Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by). */
+  prompterSeek(params: SeekRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.seek", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes. */
+  prompterSet(params: LookRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.set", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
+  /** Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted. */
+  prompterSpeed(params: SpeedRequest = {}): Promise<PrompterState> {
+    return this._call("prompter.speed", params as unknown as Record<string, unknown>) as Promise<PrompterState>;
+  }
+
   /** What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. */
   renditionPlan(params: PlanRequest = {}): Promise<PlanView> {
     return this._call("rendition.plan", params as unknown as Record<string, unknown>) as Promise<PlanView>;
@@ -5887,6 +6911,56 @@ export class GeneratedMethods {
   /** Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. */
   renditionPresets(): Promise<PresetsResult> {
     return this._call("rendition.presets", {}) as Promise<PresetsResult>;
+  }
+
+  /** Forget a replay event. The recording it pointed at is not touched. */
+  replayEventDelete(params: EventIdRequest): Promise<EventIdRequest> {
+    return this._call("replay.event.delete", params as unknown as Record<string, unknown>) as Promise<EventIdRequest>;
+  }
+
+  /** Every replay event, oldest first. */
+  replayEventList(): Promise<EventList> {
+    return this._call("replay.event.list", {}) as Promise<EventList>;
+  }
+
+  /** Give a replay event a name. */
+  replayEventRename(params: EventRenameRequest): Promise<ReplayEvent> {
+    return this._call("replay.event.rename", params as unknown as Record<string, unknown>) as Promise<ReplayEvent>;
+  }
+
+  /** Whether replay is on, each angle's buffer depth and size, and every event. */
+  replayGet(): Promise<ReplayStatus> {
+    return this._call("replay.get", {}) as Promise<ReplayStatus>;
+  }
+
+  /** Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`. */
+  replayMark(params: MarkRequest = {}): Promise<ReplayEvent> {
+    return this._call("replay.mark", params as unknown as Record<string, unknown>) as Promise<ReplayEvent>;
+  }
+
+  /** Play an event, or the last seconds of an angle, on a replay source, added if it is not there. */
+  replayPlay(params: PlayRequest2 = {}): Promise<PlayStatus> {
+    return this._call("replay.play", params as unknown as Record<string, unknown>) as Promise<PlayStatus>;
+  }
+
+  /** Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again. */
+  replaySave(params: SaveRequest2 = {}): Promise<SaveStatus> {
+    return this._call("replay.save", params as unknown as Record<string, unknown>) as Promise<SaveStatus>;
+  }
+
+  /** Change a playing replay's angle or speed, from the frame it is on. */
+  replaySet(params: ReplaySetRequest = {}): Promise<PlayStatus> {
+    return this._call("replay.set", params as unknown as Record<string, unknown>) as Promise<PlayStatus>;
+  }
+
+  /** Record these angles, each the last `seconds`. Called again, it changes them in place. */
+  replayStart(params: ReplayConfig = {}): Promise<ReplayStatus> {
+    return this._call("replay.start", params as unknown as Record<string, unknown>) as Promise<ReplayStatus>;
+  }
+
+  /** Stop recording, free every buffer and forget every event. */
+  replayStop(): Promise<ReplayStatus> {
+    return this._call("replay.stop", {}) as Promise<ReplayStatus>;
   }
 
   /** Make an empty scene, or one built from a set of sources. */
@@ -5945,7 +7019,7 @@ export class GeneratedMethods {
   }
 
   /** Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z. */
-  sceneHistoryMark(params: MarkRequest = {}): Promise<Record<string, unknown>> {
+  sceneHistoryMark(params: MarkRequest2 = {}): Promise<Record<string, unknown>> {
     return this._call("scene.history.mark", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
@@ -6089,7 +7163,7 @@ export class GeneratedMethods {
     return this._call("scene.preview.frame", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** Arm a scene. The armed scene is the preview, and program.take with no argument takes it. */
+  /** Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client. */
   scenePreviewSet(params: PreviewRequest = {}): Promise<Record<string, unknown>> {
     return this._call("scene.preview.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
@@ -6382,6 +7456,41 @@ export class GeneratedMethods {
   /** Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. */
   toolCall(params: ToolCallRequest): Promise<Record<string, unknown>> {
     return this._call("tool.call", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token. */
+  userAdd(params: UserAddRequest): Promise<UserChanged> {
+    return this._call("user.add", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
+  }
+
+  /** Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password. */
+  userList(): Promise<UserList> {
+    return this._call("user.list", {}) as Promise<UserList>;
+  }
+
+  /** Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain. */
+  userRemove(params: UserNameRequest): Promise<UserChanged> {
+    return this._call("user.remove", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
+  }
+
+  /** Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out. */
+  userResetPassword(params: UserPasswordRequest): Promise<UserChanged> {
+    return this._call("user.reset_password", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
+  }
+
+  /** The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen. */
+  userSessions(params: UserSessionsRequest = {}): Promise<SessionList> {
+    return this._call("user.sessions", params as unknown as Record<string, unknown>) as Promise<SessionList>;
+  }
+
+  /** End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call. */
+  userSignOut(params: UserSignOutRequest = {}): Promise<SignedOut> {
+    return this._call("user.sign_out", params as unknown as Record<string, unknown>) as Promise<SignedOut>;
+  }
+
+  /** Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role. */
+  userUpdate(params: UserUpdateRequest): Promise<UserChanged> {
+    return this._call("user.update", params as unknown as Record<string, unknown>) as Promise<UserChanged>;
   }
 
   /** This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. */

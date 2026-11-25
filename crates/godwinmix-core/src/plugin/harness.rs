@@ -45,7 +45,7 @@ use std::time::{Duration, Instant};
 /// The canvas the harness runs on: small enough to be quick on a Pi, large
 /// enough that scaling and conversion are real work.
 pub fn test_canvas() -> CanvasCaps {
-    CanvasCaps::new(&Canvas { width: 1280, height: 720, fps: 30, sample_rate: 48000, channels: 2 })
+    CanvasCaps::new(&Canvas { width: 1280, height: 720, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 })
 }
 
 /// How long buffers are counted for.

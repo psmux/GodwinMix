@@ -59,6 +59,8 @@ use gstreamer::prelude::*;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+mod filters_in;
+
 /// How many slots the pool starts with.
 ///
 /// Eight is the number 11 section 3 settles on: more scenes than anyone builds
@@ -383,9 +385,19 @@ pub struct Slot {
     /// What those filters were built from, for the comparison that decides
     /// whether to touch the graph at all.
     filter_shape: Vec<ItemFilter>,
+    /// The picture those filters were last told they work on
+    /// (`filter::share_key`), so a crop or a turn changed on air tells them
+    /// once.
+    shared_as: Option<String>,
     /// How the last placement drawn here trims and fits its picture, and the
     /// item's own motions, for a transition that has to reach them.
     look: Look,
+    /// The item drawn here asks for filters that are not on the chain, so it
+    /// is held at alpha 0. See `filters_in`.
+    waiting: bool,
+    /// The filters that last failed to go on here, so the reason is said
+    /// once and not on every apply.
+    refused: Option<Vec<ItemFilter>>,
 }
 
 /// The parts of a placement a transition needs after the apply has gone.
@@ -778,7 +790,10 @@ impl SlotPool {
             drawn: None,
             filters: Vec::new(),
             filter_shape: Vec::new(),
+            shared_as: None,
             look: Look::default(),
+            waiting: false,
+            refused: None,
         });
         Ok(self.slots.last_mut().expect("just pushed"))
     }
@@ -881,6 +896,7 @@ impl SlotPool {
             .zip(placements.iter().filter(|p| branches.iter().any(|(id, _)| *id == &p.source)))
             .map(|(index, p)| {
                 let to = PadState::of(p);
+                let to = PadState { alpha: self.may_show(*index, to.alpha), ..to };
                 self.slots[*index].leg(p.source.clone(), PadState { alpha: 0.0, ..to }, to)
             })
             .collect();
@@ -944,6 +960,7 @@ impl SlotPool {
                     p.item.is_some() && s.drawn == p.item && !self.crossing.contains(&s.index)
                 })?;
                 let to = PadState::of(p);
+                let to = PadState { alpha: self.may_show(slot.index, to.alpha), ..to };
                 Some(slot.leg(p.source.clone(), PadState { alpha: slot.state().alpha, ..to }, to))
             })
             .collect()
@@ -974,11 +991,9 @@ impl SlotPool {
                     warn!(?e, "a filtered group could not be composited; it was left out");
                     continue;
                 }
+                let shown = self.filters_in(index, p);
                 self.slots[index].open();
-                if let Err(e) = self.sync_filters(index, &p.filters) {
-                    warn!(slot = index, ?e, "a group's filter could not go on");
-                }
-                ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+                ramps.push(self.slots[index].draw(&shown, Z_LIVE + i as u32, write));
                 self.slots[index].remember(p);
                 claimed.push(index);
                 drawn += 1;
@@ -998,18 +1013,13 @@ impl SlotPool {
                     index
                 }
             };
+            // Filters before the valve opens: a camera that has just started
+            // sent its first frames through raw, so a cutout's room reached
+            // the programme for a second after a restart. An item whose
+            // filters would not go on is held at alpha 0 until they do.
+            let shown = self.filters_in(index, p);
             self.slots[index].open();
-            if let Err(e) = self.sync_filters(index, &p.filters) {
-                // The picture is still on air with whatever chain it had. A
-                // filter that will not build is a refused change, not a black
-                // frame, and the message names the item's own filter.
-                warn!(slot = index, source = %p.source, ?e, "a scene item's filter could not go on");
-                // Once, not twice a second. The shape is remembered as it was
-                // asked for, so the next apply finds nothing new to build and
-                // leaves the pad alone until the item's filters change.
-                self.slots[index].filter_shape = p.filters.to_vec();
-            }
-            ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
+            ramps.push(self.slots[index].draw(&shown, Z_LIVE + i as u32, write));
             self.slots[index].remember(p);
             claimed.push(index);
             drawn += 1;
@@ -1103,7 +1113,28 @@ impl SlotPool {
     /// The comparison comes first and is the whole point: a scene reapplied
     /// twice a second by the visibility tick must not take a pad block twice a
     /// second. Only a chain that is actually different is built.
-    fn sync_filters(&mut self, index: usize, want: &[ItemFilter]) -> Result<()> {
+    fn sync_filters(&mut self, index: usize, p: &Placement) -> Result<()> {
+        let key = crate::plugin::filter::share_key(&p.source, p.crop, p.rotation);
+        self.build_filters(index, &p.filters, &key)?;
+        self.share_filters(index, key);
+        Ok(())
+    }
+
+    /// Tell a slot's filters whose picture they work on, when it changed
+    /// since they were last told. The programme's copy leads a cutout shared
+    /// with the preview's copy of the same item (`matte::share`).
+    fn share_filters(&mut self, index: usize, key: String) {
+        let slot = &mut self.slots[index];
+        if slot.shared_as.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        for f in &mut slot.filters {
+            f.share_as(&key, true);
+        }
+        slot.shared_as = Some(key);
+    }
+
+    fn build_filters(&mut self, index: usize, want: &[ItemFilter], key: &str) -> Result<()> {
         let same = self.slots[index].filter_shape.len() == want.len()
             && self
                 .slots[index]
@@ -1132,7 +1163,8 @@ impl SlotPool {
                 params: f.params.clone(),
             };
             let board = self.board.clone();
-            let built = crate::plugin::filter::make(&f.type_id).and_then(|filter| {
+            let built = crate::plugin::filter::make(&f.type_id).and_then(|mut filter| {
+                filter.share_as(key, true);
                 let pad = self.slots[index].pad.clone();
                 // Turned on before the first frame goes through, so a key
                 // never shows a frame flattened over black on its way in.
@@ -1156,6 +1188,7 @@ impl SlotPool {
             }
         }
         self.slots[index].filter_shape = want.to_vec();
+        self.slots[index].shared_as = Some(key.to_string());
         Ok(())
     }
 
@@ -1195,6 +1228,7 @@ impl SlotPool {
     fn clear_filters(&mut self, index: usize) {
         let filters = std::mem::take(&mut self.slots[index].filters);
         self.slots[index].filter_shape.clear();
+        self.slots[index].shared_as = None;
         for (n, f) in filters.iter().enumerate() {
             super::keyed::detach(self.board.as_ref(), f.board(), &board_key(index, n));
         }

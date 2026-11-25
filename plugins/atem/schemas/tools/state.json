@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "state",
+  "description": "Everything one switcher has said about itself: product, firmware, inputs with long and short names, each M/E's programme, preview, transition and upstream keys, the downstream keys with on air and tie, fade to black, aux outputs, macros, tally and the source map.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

@@ -58,7 +58,16 @@ pub struct PluginMeta {
     /// component gets a store with no preopens and no sockets.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub wasi: Vec<String>,
+    /// Core scopes the plugin's own token carries on top of `plugin`: `read`
+    /// to see previews and state, `operate` to take and to watch events.
+    /// `admin` is never granted. Installing the plugin is the operator's
+    /// consent, and `[plugins.<name>] core_scopes` may narrow it, never widen.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub core_scopes: Vec<String>,
 }
+
+/// The core scopes a manifest may ask its token to carry.
+pub const CORE_SCOPES: &[&str] = &["read", "operate"];
 
 fn default_process() -> String {
     "per-instance".into()
@@ -507,6 +516,18 @@ impl Manifest {
                         "'{grant}' is not a WASI grant. Known: {}. Both are refused unless the \
                          operator also lists this plugin under `[plugins] allow_wasi`.",
                         WASI_GRANTS.join(", ")
+                    ),
+                ));
+            }
+        }
+        for (i, scope) in p.core_scopes.iter().enumerate() {
+            if !CORE_SCOPES.contains(&scope.as_str()) {
+                out.push(problem(
+                    format!("plugin.core_scopes[{i}]"),
+                    format!(
+                        "'{scope}' cannot be granted to a plugin. Known: {}. `admin` is never \
+                         given to a plugin; a person does that work.",
+                        CORE_SCOPES.join(", ")
                     ),
                 ));
             }
@@ -1187,6 +1208,17 @@ skill = "SKILL.md"
         assert_eq!(m.plugin.name, "clock");
         assert_eq!(m.provides[0].transports, vec![Transport::Container]);
         assert!(m.provide("source").is_some());
+    }
+
+    #[test]
+    fn core_scopes_take_read_and_operate_and_never_admin() {
+        let ok = GOOD.replacen("[plugin]\n", "[plugin]\ncore_scopes = [\"read\", \"operate\"]\n", 1);
+        let m = Manifest::parse(&ok).unwrap();
+        assert!(m.validate(None).is_empty(), "read and operate are grantable");
+        assert_eq!(m.plugin.core_scopes, vec!["read", "operate"]);
+        let bad = GOOD.replacen("[plugin]\n", "[plugin]\ncore_scopes = [\"admin\"]\n", 1);
+        let got = Manifest::parse(&bad).unwrap().validate(None);
+        assert!(paths(&got).contains(&"plugin.core_scopes[0]"), "admin is refused: {got:?}");
     }
 
     #[test]

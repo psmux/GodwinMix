@@ -49,4 +49,20 @@ impl Transparent {
     pub fn unbind(&self, source: &str) {
         self.board.detach(source);
     }
+
+    /// Draw a filter's keyed result wherever `pad` is drawn: an item's chroma
+    /// key or cutout in the preview, drawn by this board the way the
+    /// programme's board draws it on air. `key` is a name of the preview's
+    /// own, never a source id, so it cannot take a graphic's place.
+    pub fn key(&self, key: &str, hook: &crate::plugin::filter::BoardHook, pad: &gst::Pad) {
+        let pads = VideoPads::new();
+        pads.track(pad);
+        hook.draw_at(pads.clone());
+        self.board.attach(key, hook.layer.clone(), pads);
+    }
+
+    pub fn unkey(&self, key: &str, hook: &crate::plugin::filter::BoardHook) {
+        self.board.detach(key);
+        hook.release();
+    }
 }

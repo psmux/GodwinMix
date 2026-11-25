@@ -1,0 +1,20 @@
+# PTZ camera drivers: VISCA over IP and TCP, ONVIF PTZ and Canon's CR-N HTTP
+# control, behind one trait. See README.md for what each one follows and
+# docs/reference/ptz.md for the surface.
+[package]
+name = "godwinmix-ptz"
+description = "PTZ camera drivers for GodwinMix: VISCA over IP and TCP, ONVIF PTZ and Canon CR-N, behind one blocking trait, with fake cameras for tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Blocking std networking on purpose, like the tracking engine: no async
+# runtime and no media stack, so the plugin, a test or a command line tool
+# drives a camera with nothing else installed.
+[dependencies]
+# The ONVIF login: WS-Security's password digest is SHA-1 of a nonce, the
+# time and the password, in base64. Both are already in the tree.
+ring = { workspace = true }
+base64 = { workspace = true }

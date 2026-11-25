@@ -24,6 +24,32 @@ use crate::{Client, Result};
 pub const API_LEVEL: u32 = 1;
 pub const API_COMPATIBLE: u32 = 1;
 
+/// `account.get`: who this call is, in a person's terms.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccountInfo {
+    /// True when the mixer has at least one account, so the page signs people
+    /// in with a username rather than a token.
+    pub accounts: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+    /// The account this call signed in as. Absent for a token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    /// `session` for a sign in, `token` for a bearer token, `open` for a
+    /// mixer that asks for nothing.
+    pub via: String,
+}
+
+/// `account.change_password`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccountPasswordRequest {
+    pub current: String,
+    /// At least 8 characters.
+    pub password: String,
+}
+
 /// What a write does to a file.
 pub type Action = String;
 /// The values api_level 1 knows for [`Action`].
@@ -239,6 +265,11 @@ pub struct AddSourceRequest {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// What Preview holds after a Take. See the module.
+pub type AfterTake = String;
+/// The values api_level 1 knows for [`AfterTake`].
+pub const AFTER_TAKE_VALUES: &[&str] = &["same", "swap"];
+
 /// `ext.agent`. `true` takes the default thresholds; an object moves them.
 pub type AgentExt = Value;
 
@@ -297,6 +328,30 @@ pub struct AlarmSettings {
 pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
 pub const ALIGN_VALUES: &[&str] = &["top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right"];
+
+/// One angle's ring, as it stands.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AngleStatus {
+    /// Bytes of encoded picture and sound held.
+    pub bytes: u64,
+    /// Frames the angle's encoder could not keep up with and dropped. The
+    /// source and the programme lose none.
+    pub dropped: u64,
+    /// The encoder this angle is written with, or `shared` when it reads the
+    /// programme encoder's own output.
+    pub encoder: String,
+    /// Whole groups of pictures held. The ring drops the oldest one at a time.
+    pub gops: u32,
+    /// Seconds of picture held, from the oldest keyframe to the newest frame.
+    pub held_secs: f64,
+    /// The source id, or `programme`.
+    pub id: String,
+    /// Why this angle holds nothing, when it does not: the source is not
+    /// there, or has not sent a picture yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiting: Option<String>,
+}
 
 /// When a change to a key takes effect.
 pub type Applies = String;
@@ -414,6 +469,28 @@ pub type AudioCodec = String;
 /// The values api_level 1 knows for [`AudioCodec`].
 pub const AUDIO_CODEC_VALUES: &[&str] = &["aac", "opus", "mp3", "ac3", "pcm", "other"];
 
+/// One sound card a bus can be played on.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioDevice {
+    /// The platform's sound API, when it says: `osxaudio`, `wasapi2`,
+    /// `pulse`, `alsa`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api: Option<String>,
+    /// The id `device` takes, the most stable thing the platform says about it.
+    pub id: String,
+    /// Its number in this list, which `device` also takes.
+    pub index: i64,
+    pub name: String,
+}
+
+/// `audio.device.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioDeviceList {
+    pub devices: Vec<AudioDevice>,
+}
+
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -447,6 +524,16 @@ pub struct AudioShape {
     pub channels: u8,
     pub codec: AudioCodec,
     pub sample_rate: u32,
+}
+
+/// The audio desk as `audio.bus.list` and the status snapshot report it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioStatus {
+    pub buses: Vec<BusStatus>,
+    /// The sources marked cue, in the order they were marked.
+    pub cue: Vec<String>,
+    pub master: MasterConfig,
 }
 
 /// The audio an output wants. Every field left out is taken from the source.
@@ -688,6 +775,104 @@ pub struct BundleAsset {
     pub size: u64,
 }
 
+/// One bus: a mix of its own beside the programme.
+///
+/// Three kinds, decided by two keys. With neither, it carries each source at
+/// the level its `sends` give it (a source with no send is not on it). With
+/// `minus`, it is the programme as heard, without that one source: a guest's
+/// return. With `cue`, it carries the sources marked cue at unity, and the
+/// programme while nothing is marked.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusConfig {
+    /// Make this the cue bus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<bool>,
+    /// Play the bus on a sound card here: `default`, a device name, its id,
+    /// or its number in `audio.device.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The bus master, 0.0 to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    /// A slug: `monitor`, `guest-return`, `recording-b`.
+    pub id: String,
+    /// Make this bus the programme without this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// What the desk shows. The id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Level per source id, 0.0 to 10.0, after the source's own fader and
+    /// mute. Read only on a bus with neither `minus` nor `cue`.
+    pub sends: BTreeMap<String, Value>,
+}
+
+/// `audio.bus.remove`, and anything else that names one bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusIdRequest {
+    pub id: String,
+}
+
+/// `audio.bus.set`. Only what is named moves. `device: ""` stops playing it
+/// on a sound card, and `minus: ""` makes a mix minus bus an ordinary one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// One bus and what is using it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BusStatus {
+    /// Make this the cue bus.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<bool>,
+    /// Play the bus on a sound card here: `default`, a device name, its id,
+    /// or its number in `audio.device.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// The device it is playing on, once it opened, or why it is not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_state: Option<String>,
+    /// The bus master, 0.0 to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    /// A slug: `monitor`, `guest-return`, `recording-b`.
+    pub id: String,
+    /// `sends`, `minus` or `cue`.
+    pub kind: String,
+    /// Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
+    pub listen: String,
+    /// Make this bus the programme without this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// What the desk shows. The id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The outputs that take their sound from this bus.
+    pub outputs: Vec<String>,
+    /// Level per source id, 0.0 to 10.0, after the source's own fader and
+    /// mute. Read only on a bus with neither `minus` nor `cue`.
+    pub sends: BTreeMap<String, Value>,
+}
+
 /// `governor.calibrate`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -718,7 +903,12 @@ pub struct Canvas {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CanvasInfo {
+    /// Frames a second to the nearest whole frame: 30 for 29.97.
     pub fps: i32,
+    /// The exact rate as numerator and denominator, when it is not whole:
+    /// `[30000, 1001]` for 29.97. Absent for a whole rate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps_fraction: Option<Vec<i32>>,
     pub height: i32,
     pub width: i32,
 }
@@ -1313,6 +1503,11 @@ pub struct ConfigSetResult {
     pub unchanged: Vec<String>,
 }
 
+/// Whether destructive calls need a confirm round trip first.
+pub type ConfirmPolicy = String;
+/// The values api_level 1 knows for [`ConfirmPolicy`].
+pub const CONFIRM_POLICY_VALUES: &[&str] = &["none", "required"];
+
 /// How the bytes leave. Decides which codecs are allowed: FLV carries H.264
 /// (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
 pub type Container = String;
@@ -1488,6 +1683,34 @@ pub struct Crop {
     pub left: f64,
     pub right: f64,
     pub top: f64,
+}
+
+/// `audio.cue.set`: mark or clear one source for the cue bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CueSetRequest {
+    pub cue: bool,
+    /// Clear every other mark first, so only this source is heard: solo.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solo: Option<bool>,
+    pub source: String,
+}
+
+/// `filter.cutout`. A page asks while a cutout it can see is new, so it can
+/// say the cutout is on its way rather than show a camera that looks as if
+/// nothing happened.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CutoutReadiness {
+    /// Why the last cutout that failed could not start, until one starts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Cutouts whose model is opening or has not answered a frame yet. Each
+    /// draws nothing of the camera until it has. Preview's copy of a scene counts
+    /// as well as the programme's.
+    pub preparing: i64,
+    /// Cutouts cutting the person out now.
+    pub running: i64,
 }
 
 /// Whether an interlaced picture is made progressive.
@@ -1839,6 +2062,28 @@ pub struct ErrorAction {
     pub value: Value,
 }
 
+/// `replay.event.delete`, and anything else that names one event.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventIdRequest {
+    pub id: String,
+}
+
+/// `replay.event.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventList {
+    pub events: Vec<ReplayEvent>,
+}
+
+/// `replay.event.rename`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EventRenameRequest {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportRequest {
@@ -2170,6 +2415,8 @@ pub struct FilterListing {
 #[serde(default)]
 pub struct FilterRecord {
     pub id: String,
+    /// The settings in force, as `filter.set` last left them.
+    pub params: BTreeMap<String, Value>,
     pub side: String,
     /// Absent on a programme filter.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3218,6 +3465,21 @@ pub struct GroupSourcesRequest {
     pub sources: Vec<String>,
 }
 
+/// What `guest.invite.list` answers, and the payload of `event/guest.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GuestList {
+    pub guests: Vec<Invite>,
+    /// The most guests this show takes at once.
+    pub max_guests: i64,
+    pub talkback: TalkbackState,
+}
+
+/// Where a guest is.
+pub type GuestState = String;
+/// The values api_level 1 knows for [`GuestState`].
+pub const GUEST_STATE_VALUES: &[&str] = &["invited", "joining", "live", "gone"];
+
 /// One channel.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3539,6 +3801,11 @@ pub struct ImportReport {
     /// not add the sources itself, which is what the command line wants.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config_toml: Option<String>,
+    /// With `add_sources`: the sound filters put on the added sources, by id.
+    /// A sound filter stays on its source, as in OBS; one the mixer refused is
+    /// in `skipped` with its reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filters_added: Option<Vec<String>>,
     /// OBS attaches a filter to a source, so a camera keyed in one scene is
     /// keyed in all of them. Here filters belong to the item, so a source
     /// filter is copied onto each placement and each copy is named here. This
@@ -3708,6 +3975,96 @@ pub struct InstanceRecord {
     pub state: String,
 }
 
+/// One invite, without its key.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Invite {
+    /// The mix minus bus the guest hears, `guest-<id>`: the programme
+    /// without the guest, with talkback added while it is held.
+    pub bus: String,
+    /// When it was made, RFC 3339.
+    pub created: String,
+    /// When it stops letting the guest in, RFC 3339. The guest is let go then.
+    pub expires: String,
+    /// A slug, made from the name unless one was given.
+    pub id: String,
+    /// What the guest is called on screen and in the desk.
+    pub name: String,
+    /// The mixer source the guest's camera is, `guest-<id>`. It exists from
+    /// the guest's first offer until the invite goes.
+    pub source: String,
+    pub state: GuestState,
+    /// Whether talkback is held into this guest's return now.
+    pub talkback: bool,
+}
+
+/// `guest.invite.create`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteCreateRequest {
+    /// The address the link starts with, such as `https://studio.example.com`,
+    /// for a mixer reached through a name or a tunnel. Left out, the first
+    /// https address of this machine that is not loopback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// How long the invite lasts, in seconds. One day when left out; at most
+    /// thirty days.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in_secs: Option<u64>,
+    /// A slug for the invite. Made from the name when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The guest's name, as it should appear on screen. 1 to 64 characters.
+    pub name: String,
+}
+
+/// What `guest.invite.create` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteCreated {
+    pub id: String,
+    pub invite: Invite,
+    /// The `/join/` page with the guest's id and key in the fragment, which a
+    /// browser never sends to a server.
+    pub link: String,
+    /// Set when no guest on another device could open the link as it stands,
+    /// with what to change.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The link as a QR code, an SVG document a page can show as it is.
+    pub qr_svg: String,
+}
+
+/// `guest.invite.revoke` and `guest.invite.link`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteIdRequest {
+    pub id: String,
+}
+
+/// The link to send a guest, and the same as a QR code.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteLink {
+    pub id: String,
+    /// The `/join/` page with the guest's id and key in the fragment, which a
+    /// browser never sends to a server.
+    pub link: String,
+    /// Set when no guest on another device could open the link as it stands,
+    /// with what to change.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The link as a QR code, an SVG document a page can show as it is.
+    pub qr_svg: String,
+}
+
+/// What `guest.invite.revoke` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InviteRevoked {
+    pub revoked: Invite,
+}
+
 pub type ItemEdge = String;
 /// The values api_level 1 knows for [`ItemEdge`].
 pub const ITEM_EDGE_VALUES: &[&str] = &["left", "right", "top", "bottom"];
@@ -3872,10 +4229,24 @@ pub struct KeyColorRequest {
     pub y: Option<f64>,
 }
 
+/// The keys on air, bottom first.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyListing {
+    pub keys: Vec<KeyRecord>,
+}
+
 /// How a publisher gives its key.
 pub type KeyMode = String;
 /// The values api_level 1 knows for [`KeyMode`].
 pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyRecord {
+    pub id: String,
+    pub name: String,
+}
 
 /// What `channel.key.reveal` answers: the key itself, and nothing a list
 /// would carry.
@@ -3883,6 +4254,20 @@ pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
 #[serde(default)]
 pub struct KeyRevealed {
     pub secret: String,
+}
+
+/// `program.key.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeySetRequest {
+    /// True to put it on air, false to take it off.
+    pub on: bool,
+    /// The scene to put on air as a key, or take off, by name or by id.
+    pub scene: String,
+    /// How the key comes and goes: a name or {type, duration_ms, params}, as
+    /// in `program.take`. A fade of 300 ms when absent; `"cut"` for none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<Transition>,
 }
 
 /// A custom ladder.
@@ -3994,6 +4379,16 @@ pub struct Listener {
     pub transport: String,
 }
 
+/// `prompter.load`: put a script on the prompter, paused at the top.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LoadRequest {
+    pub id: String,
+    /// Start playing at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub play: Option<bool>,
+}
+
 /// `log.gst`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4036,6 +4431,174 @@ pub struct LogSetRequest {
     pub target: Option<String>,
 }
 
+/// `prompter.set`: change how the text looks. Only what is named changes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LookRequest {
+    /// Where the cue line sits, 0.1 to 0.9 of the height from the top.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cue: Option<f64>,
+    /// Characters a row holds, 12 to 80. Fewer is bigger.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_chars: Option<u32>,
+    /// Percent of the width left on each side, 0 to 30.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub margin: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mirror: Option<bool>,
+}
+
+/// One LUT the library has.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutEntry {
+    /// For a built in, what it is for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
+    /// `camera` for a log to Rec.709 conversion, `look` for a built in grade,
+    /// `imported` for one brought in with `lut.import`.
+    pub group: String,
+    /// The slug a filter names it by: `lut = "teal-orange"`.
+    pub name: String,
+    /// Points a side of its cube, or the length of a 1D table.
+    pub size: i64,
+    pub title: String,
+}
+
+/// `lut.import`: a file on the mixer's machine.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutImportRequest {
+    /// The slug to keep it under. Taken from the file name when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// An absolute path, or a name in the media library (where `media.upload`
+    /// puts a file): a `.cube`, a `.3dl` or a `.png`.
+    pub path: String,
+    /// What the UI calls it. The file's own title, or its name, when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutImported {
+    pub lut: LutEntry,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutList {
+    /// Files in the library that would not read, each with the reason.
+    pub errors: Vec<String>,
+    /// What `lut.import` reads.
+    pub formats: Vec<String>,
+    pub luts: Vec<LutEntry>,
+    pub presets: Vec<LutPreset>,
+}
+
+/// `lut.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutListRequest {
+    /// `camera`, `look` or `imported` to see only those.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+/// `lut.remove` and `lut.preset.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutNameRequest {
+    pub name: String,
+}
+
+/// A saved look: a LUT, how much of it, and a colour correction before it.
+/// Anything left out is the filter's default.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreset {
+    /// 0 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    /// -1 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<f64>,
+    /// -4 to 4.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contrast: Option<f64>,
+    /// -3 to 3.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gamma: Option<f64>,
+    /// -180 to 180.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hue_shift: Option<f64>,
+    /// The LUT, by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lut: Option<String>,
+    /// A slug, made from what is given: "Church Warm" is kept as `church-warm`.
+    pub name: String,
+    /// -1 to 5.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub saturation: Option<f64>,
+    /// -1 greener to 1 more magenta.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tint: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// -1 cooler to 1 warmer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warmth: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreview {
+    /// A JPEG as a data URL, ready for an `<img src>`.
+    pub image: String,
+    /// `lut` or `preset`.
+    pub kind: String,
+    /// The LUT or preset name.
+    pub name: String,
+}
+
+/// `lut.preview`: small pictures of looks, on a source or on a test card.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreviewRequest {
+    /// The amount each LUT is shown at, 0 to 1. 1 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>,
+    /// LUT names. Every LUT in the library when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub luts: Option<Vec<String>>,
+    /// Preset names, previewed after the LUTs.
+    pub presets: Vec<String>,
+    /// The source to show them on. A test card of skin, sky, foliage and
+    /// greys when absent or when the source has no picture yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Width of each picture in pixels, 64 to 640. 240 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LutPreviews {
+    /// For a source, whether its picture looks like a log recording (flat,
+    /// grey, no deep blacks). The camera conversions are for those only: on
+    /// a normal camera they push skin bright and red.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_like: Option<bool>,
+    /// The picture with no look, to compare against.
+    pub original: String,
+    pub previews: Vec<LutPreview>,
+    /// The source the pictures show, or absent for the test card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
 /// `machine.status`'s answer: the box, not one process.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4060,14 +4623,69 @@ pub struct MachineStatus {
     pub uptime_secs: Option<u64>,
 }
 
-/// `scene.history.mark`.
+/// Which point `replay.mark` sets.
+pub type MarkPoint = String;
+/// The values api_level 1 knows for [`MarkPoint`].
+pub const MARK_POINT_VALUES: &[&str] = &["in", "out"];
+
+/// `replay.mark`. With `point` it sets an in or an out point; with
+/// `seconds` alone it makes a whole event of the last that many seconds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MarkRequest {
+    /// The angle it was seen on, which playback starts from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// A name for the event. Its id when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub point: Option<MarkPoint>,
+    /// For an in point, how many seconds before now it goes. For a whole
+    /// event, how long it is. 0 is now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<f64>,
+}
+
+/// `scene.history.mark`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MarkRequest2 {
     /// What to call the group of changes that follows. Omit it to end the
     /// group, so the next change is its own undo step.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+}
+
+/// A place in a script a person can jump to: a line that starts with `#`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Marker {
+    /// The words after the `#`, or `marker <n>` for a bare `#`.
+    pub name: String,
+    /// The row it starts on.
+    pub row: u32,
+}
+
+/// A master fader and mute.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MasterConfig {
+    /// 0.0 silent, 1.0 unity, up to 10.0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+}
+
+/// `audio.master.set`. Only what is named moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MasterSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gain: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
 }
 
 /// A rendition that follows a larger source's size, up to a limit.
@@ -4317,6 +4935,9 @@ pub struct MediaTagged {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Meters {
+    /// Peak dBFS per channel, per audio bus id, after the bus master. Left out
+    /// while there are no buses.
+    pub buses: BTreeMap<String, Value>,
     /// Peak dBFS per channel on the programme bus.
     pub program: Vec<f64>,
     /// Peak dBFS per channel, per source id.
@@ -4364,6 +4985,10 @@ pub struct MixerStatus {
     /// Present while an ad break is armed or running.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ad: Option<AdStatus>,
+    /// The programme master, the buses and the cue marks. Left out by a core
+    /// that has no audio desk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioStatus>,
     pub backend: BackendInfo,
     pub multiview: MultiviewStatus,
     pub outputs: Vec<OutputStatus>,
@@ -4968,6 +5593,61 @@ pub struct PlanView {
     pub totals: PlanTotals,
 }
 
+/// `prompter.play`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayRequest {
+    /// Rows a second to play at. Left out keeps the speed it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+}
+
+/// `replay.play`: load an event, or the last seconds of an angle, into a
+/// replay source and play it from the start.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayRequest2 {
+    /// The angle to show. The event's own angle, then the first angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// The event to play. Without one, the last `seconds` of the angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// How far back to start when no event is named. 10 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<f64>,
+    /// The source to play it on, added if it is not there. `replay` when
+    /// left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// 1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    /// Put it on air once it is loaded, as `program.take` would.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub take: Option<bool>,
+    /// The transition for that take: a name such as `"fade"` or a stinger's
+    /// object. A cut when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<Transition>,
+}
+
+/// What `replay.play` and `replay.set` answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayStatus {
+    pub angle: String,
+    /// How long it plays at this speed.
+    pub duration_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// Where it is, in milliseconds of playback.
+    pub position_ms: u64,
+    /// The source it plays on.
+    pub source: String,
+    pub speed: f64,
+}
+
 /// The links of an output served as HLS from the control port, each with
 /// the output's viewer key on it. A channel's watch link is one too:
 /// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
@@ -5211,6 +5891,13 @@ pub struct PreviewOpenRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PreviewRequest {
+    /// What Preview holds after a Take, for every client of this core:
+    /// `same` (the default) keeps the scene just taken, `swap` arms the scene
+    /// it replaced when the armed scene is taken. `program.take {}` takes
+    /// what this leaves armed. Sent alone it changes the setting and nothing
+    /// else; nothing is disarmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_take: Option<AfterTake>,
     /// A draft from `scene.edit.begin` for the preview to draw in place of
     /// the armed scene, which is how a designer sees what it is laying out.
     /// What is armed is left as it is, and `scene` is ignored. An empty string
@@ -5275,6 +5962,11 @@ pub struct ProgramState {
     /// sits under them shows through, until they are added back. Left out when
     /// every source is here.
     pub missing: Vec<String>,
+    /// What is on air, in one name: the scene when a scene is, whatever it
+    /// holds, else the source, and null for the slate. `program` is null
+    /// under a scene of more than one item, so read this to say what is up.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_air: Option<String>,
     /// The scene armed for the next `program.take` with no argument.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preview: Option<String>,
@@ -5295,6 +5987,50 @@ pub struct ProgramState {
 
 /// `ext.programme`. `true`, `false`, or an object.
 pub type ProgrammeExt = Value;
+
+/// `prompter.get`, and the payload of `event/prompter.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PrompterState {
+    /// When `position` was true, on the mixer's clock.
+    pub at_ms: u64,
+    /// Where the cue line sits, as a fraction of the screen's height from the
+    /// top. The row at `position` is drawn on it. 0.1 to 0.9.
+    pub cue: f64,
+    /// The text size, as how many characters a row holds. Fewer is bigger.
+    /// Every screen fits this many across its own width, so all of them break
+    /// the rows in the same places. 12 to 80; 32 to start.
+    pub line_chars: u32,
+    /// Space left on each side, as a percentage of the screen's width. 0 to 30.
+    pub margin: f64,
+    pub markers: Vec<Marker>,
+    /// Flip the text left to right, for a screen read through beam splitter
+    /// glass. A screen may override it for itself.
+    pub mirror: bool,
+    /// The mixer's clock as this was written, so a screen can tell how far
+    /// its own clock is from it.
+    pub now_ms: u64,
+    pub playing: bool,
+    /// Where the prompter was at `at_ms`, in rows from the top. 2.5 is half
+    /// way through the third row.
+    pub position: f64,
+    /// Moves on every change, so a screen can drop an answer older than the
+    /// last event it applied.
+    pub revision: u64,
+    /// How many rows it makes at `line_chars`.
+    pub rows: u32,
+    /// The script on the prompter, or null when none is loaded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    /// Rows a second. Negative scrolls back. It applies only while `playing`.
+    pub speed: f64,
+    /// Its title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// When its text last changed, in milliseconds since the Unix epoch. A
+    /// screen asks `prompter.rows` again when this or `line_chars` moves.
+    pub updated_ms: u64,
+}
 
 /// Where an encoder is pointed for one protocol.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -5476,6 +6212,70 @@ pub struct ReorderRequest {
     pub seq: Option<u64>,
 }
 
+/// The `[replay]` table. With no angles nothing is built.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayConfig {
+    /// The angles to record: source ids, and `programme` for the programme
+    /// itself. Empty turns replay off.
+    pub angles: Vec<String>,
+    /// The bitrate a source angle is encoded at, in kbit/s. 0 or left out
+    /// is the programme's own bitrate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// Seconds each angle keeps, 1 to 1800. 60 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seconds: Option<u32>,
+}
+
+/// One event: a stretch of time between an in point and an out point, the
+/// same stretch on every angle.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayEvent {
+    /// The angle it was marked on, which playback starts from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// A slug the mixer gives it: `replay-1`, `replay-2`.
+    pub id: String,
+    /// The in point, in milliseconds of the mixer's clock.
+    pub in_ms: u64,
+    /// What the desk shows. The id until it is renamed.
+    pub name: String,
+    /// The out point. Absent while the event is still open (marked in and not
+    /// out yet).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_ms: Option<u64>,
+}
+
+/// `replay.set`: change the angle or the speed of a replay that is playing,
+/// from the frame it is on.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplaySetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+}
+
+/// `replay.get`: everything about replay on this mixer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReplayStatus {
+    pub angles: Vec<AngleStatus>,
+    pub config: ReplayConfig,
+    /// Every event, oldest first. An event whose stretch has left every ring
+    /// is still listed until it is deleted, and plays nothing.
+    pub events: Vec<ReplayEvent>,
+    /// The mixer's clock now, in the same milliseconds as an event's points.
+    pub now_ms: u64,
+    /// Whether anything is being recorded.
+    pub on: bool,
+}
+
 /// What `project.import` answers with.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5554,6 +6354,37 @@ pub type ReturnMode = String;
 /// The values api_level 1 knows for [`ReturnMode`].
 pub const RETURN_MODE_VALUES: &[&str] = &["auto", "manual"];
 
+/// What an account may do. The same ladder as a token's scopes, in the words
+/// a person picking one for a colleague would use.
+pub type Role = String;
+/// The values api_level 1 knows for [`Role`].
+pub const ROLE_VALUES: &[&str] = &["view", "operate", "admin"];
+
+/// One row of a script.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Row {
+    /// The line it came from, counting from 0.
+    pub line: u32,
+    /// True for the rows of a marker line, drawn as a heading.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker: Option<bool>,
+    /// The words, with any asterisks still in them.
+    pub text: String,
+}
+
+/// `prompter.rows`: the script on the prompter, broken into rows.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RowsAnswer {
+    /// The width the rows were made at.
+    pub line_chars: u32,
+    pub rows: Vec<Row>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
+    pub updated_ms: u64,
+}
+
 /// The RTMP port every channel shares.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5586,6 +6417,36 @@ pub struct SaveRequest {
     /// Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub out: Option<String>,
+}
+
+/// `replay.save`: write an event, or the whole buffer of one angle, to an
+/// MP4 in the media folder without encoding it again.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveRequest2 {
+    /// The angle to save. The event's own, then `programme` if it is
+    /// recorded, then the first angle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub angle: Option<String>,
+    /// The event to save. The whole buffer when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<String>,
+    /// The file's name, without a folder. Made from the time when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// What `replay.save` answers with once the file is written.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SaveStatus {
+    pub angle: String,
+    pub bytes: u64,
+    pub duration_ms: u64,
+    /// The file, as the media library names it: `Replays/<name>.mp4`.
+    pub name: String,
+    /// Its absolute path on the mixer's machine.
+    pub path: String,
 }
 
 /// `headend.scan`.
@@ -5740,6 +6601,75 @@ pub type Scope = String;
 /// The values api_level 1 knows for [`Scope`].
 pub const SCOPE_VALUES: &[&str] = &["plugin", "read", "operate", "admin"];
 
+/// One script, as `prompter.script.get` and `prompter.script.save` answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Script {
+    /// A slug: `evening-news`.
+    pub id: String,
+    /// Plain text. A line starting with `#` is a marker, `*word*` is drawn in
+    /// italics and `**word**` in bold.
+    pub text: String,
+    pub title: String,
+    /// When it was last saved, in milliseconds since the Unix epoch.
+    pub updated_ms: u64,
+}
+
+/// `event/prompter.script.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptChanged {
+    pub id: String,
+    /// True when the script was removed.
+    pub removed: bool,
+    pub updated_ms: u64,
+}
+
+/// `prompter.script.get` and `prompter.script.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptIdRequest {
+    pub id: String,
+}
+
+/// `prompter.script.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptList {
+    /// The one on the prompter now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<String>,
+    /// Every script, by id.
+    pub scripts: Vec<ScriptSummary>,
+}
+
+/// `prompter.script.save`: make a script, or replace one with the same id.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptSaveRequest {
+    /// A slug. Made from the title when left out: "Evening news" is
+    /// `evening-news`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The words. A line starting with `#` is a marker.
+    pub text: String,
+    pub title: String,
+}
+
+/// One script in `prompter.script.list`, without its text.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScriptSummary {
+    pub bytes: u32,
+    pub id: String,
+    /// Lines as written, blank ones included.
+    pub lines: u32,
+    /// The names of its markers, in order.
+    pub markers: Vec<String>,
+    pub title: String,
+    pub updated_ms: u64,
+}
+
 /// `plugin.search`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -5786,6 +6716,72 @@ pub struct SeekParams {
     /// Milliseconds from the start of the clip. Off either end is clamped
     /// rather than refused, so a scrubber flicked past the end lands there.
     pub position_ms: f64,
+}
+
+/// `prompter.seek`: exactly one of these.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SeekRequest {
+    /// Move this many rows on, or back when negative.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<f64>,
+    /// A fraction of the way through: 0 is the top, 1 the end.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fraction: Option<f64>,
+    /// A marker by name, or by its number counting from 1 as a string ("2").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker: Option<String>,
+    /// A row, from 0. 2.5 is half way through the third row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row: Option<f64>,
+    /// Move this many markers on (1 is the next, -1 the one before). From
+    /// inside a section, -1 goes to the start of that section.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<i32>,
+}
+
+/// `audio.send.set`: how much of one source goes to one bus.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SendSetRequest {
+    pub bus: String,
+    /// 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
+    pub level: f64,
+    pub source: String,
+}
+
+/// One signed in browser or device.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionInfo {
+    /// The address it signed in from, as the mixer saw it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// When it signed in, RFC 3339 in UTC.
+    pub created: String,
+    /// True for the session that made this call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current: Option<bool>,
+    /// The browser's own description of itself, shortened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
+    /// When it stops working unless the person signs in again.
+    pub expires: String,
+    /// A short id for this session, to end it with `user.sign_out`. Never the
+    /// secret.
+    pub id: String,
+    /// When this mixer last saw it, since the mixer started. Absent when it
+    /// has not been seen since then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<String>,
+    pub user: String,
+}
+
+/// `user.sessions`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SessionList {
+    pub sessions: Vec<SessionInfo>,
 }
 
 /// `core.session_log`.
@@ -6493,6 +7489,38 @@ pub type ShowWork = String;
 /// The values api_level 1 knows for [`ShowWork`].
 pub const SHOW_WORK_VALUES: &[&str] = &["mix", "transcode", "copy"];
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignRequest {
+    /// An address the link opens from and from nowhere else, for a link meant
+    /// for one viewer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip: Option<String>,
+    /// The HLS output, by id.
+    pub output: String,
+    /// How long the link works, in seconds: 3600 when left out, at most
+    /// 2592000 (thirty days).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignedLink {
+    /// When it stops working, in Unix seconds.
+    pub expires: u64,
+    /// The multivariant playlist's path with the signed query on it. Put the
+    /// page's origin in front of it for a link.
+    pub master_url_path: String,
+}
+
+/// `user.sign_out`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SignedOut {
+    pub sessions_ended: i64,
+}
+
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -6660,6 +7688,23 @@ pub struct SourceStatus {
     pub extra: BTreeMap<String, Value>,
 }
 
+/// `prompter.speed`: one of `speed` or `by`.
+///
+/// Shaped for something that follows the speaker as well as for a person: a
+/// plugin listening to the voice sends `speed` as often as it likes, and the
+/// screens follow without a jump, since the position carries on from where it
+/// was at the moment of the change.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpeedRequest {
+    /// Add this to the speed it has: what a key or a Stream Deck button sends.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<f64>,
+    /// Rows a second, -20 to 20. Negative scrolls back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StatsListing {
@@ -6773,6 +7818,36 @@ pub struct TakeRequest {
     /// "fade", or {type, duration_ms, params}. Absent is a cut.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transition: Option<Transition>,
+}
+
+/// `guest.talkback.set`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TalkbackRequest {
+    /// The guest to talk to. Left out, every guest that is live or joining.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guest: Option<String>,
+    /// Hold talkback (true) or let it go (false).
+    pub on: bool,
+    /// Another input to talk with, such as a microphone on the mixer. It is
+    /// muted on the programme from then on, for as long as it is the
+    /// talkback source. Left out, the source stays what it was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// Talkback as it stands.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TalkbackState {
+    /// The guests it is held into now.
+    pub held: Vec<String>,
+    /// Whether that source is in the mixer now.
+    pub present: bool,
+    /// The source that talks: `guest-talkback` (the operator's browser
+    /// microphone, published to `/guest/talkback/whip`) unless another input
+    /// was chosen. It is kept muted on the programme.
+    pub source: String,
 }
 
 /// `event/tally`.
@@ -7141,6 +8216,23 @@ pub struct TokenRevoked {
     pub revoked: DeviceToken,
 }
 
+/// A token's own safety numbers, `[[tokens]] safety = { .. }`.
+///
+/// The core's `[safety]` table is the default. A human token may move any of
+/// these in either direction; a token marked `agent` may only make them
+/// harder, which is enforced in `godwinmix_core::safety`. Held here rather
+/// than in the engine because the dispatcher has the token and not the config.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenSafety {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flash_guard: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_takes_per_minute: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_hold_ms: Option<u64>,
+}
+
 /// `tool.call`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -7324,6 +8416,110 @@ pub struct UpdatePluginRequest {
     /// installed from last time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+}
+
+/// `user.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserAddRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmPolicy>,
+    /// Lower case letters, digits, `.`, `-` and `_`, up to 32 characters.
+    pub name: String,
+    /// At least 8 characters.
+    pub password: String,
+    /// `view`, `operate` (the default) or `admin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
+}
+
+/// What `user.add`, `user.update`, `user.reset_password` and `user.remove`
+/// answer with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserChanged {
+    /// How many sessions the change ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions_ended: Option<i64>,
+    pub user: UserInfo,
+}
+
+/// One account, without its password.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserInfo {
+    /// `required` asks for a confirmation before a destructive call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmPolicy>,
+    /// When it was made, RFC 3339 in UTC.
+    pub created: String,
+    /// A disabled account cannot sign in, and its sessions are ended.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    /// The username. Also the id every take is recorded against in
+    /// `program.history`.
+    pub name: String,
+    pub role: Role,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety: Option<TokenSafety>,
+    /// How many sessions are signed in now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<i64>,
+}
+
+/// `user.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserList {
+    pub users: Vec<UserInfo>,
+}
+
+/// `user.remove` and `user.sessions`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserNameRequest {
+    pub name: String,
+}
+
+/// `user.reset_password`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserPasswordRequest {
+    pub name: String,
+    /// The new password, at least 8 characters.
+    pub password: String,
+}
+
+/// `user.sessions` with no name lists everybody's.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserSessionsRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// `user.sign_out`: one session by its id, or every session of one user.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserSignOutRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
+}
+
+/// `user.update`: whatever is given changes, the rest stays.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UserUpdateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirm: Option<ConfirmPolicy>,
+    /// True ends every session of the account at once and refuses its sign in.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<Role>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -7733,6 +8929,13 @@ pub struct FeedRecoveredEvent {
     pub id: String,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FxAssignedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned: Option<FxAssignments>,
+}
+
 /// What a method is, for a surface that builds its own menu or its own REST call.
 #[derive(Debug, Clone, Copy)]
 pub struct MethodInfo {
@@ -7744,12 +8947,22 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 250] = [
+pub const METHODS: [MethodInfo; 304] = [
+    MethodInfo { name: "account.change_password", summary: "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/account/change_password")) },
+    MethodInfo { name: "account.get", summary: "Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/account")) },
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
     MethodInfo { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/agent/tools")) },
+    MethodInfo { name: "audio.bus.add", summary: "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/bus/add")) },
+    MethodInfo { name: "audio.bus.list", summary: "The programme master, every bus with its sends, and the sources marked cue.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/audio/bus/list")) },
+    MethodInfo { name: "audio.bus.remove", summary: "Take a bus out, live. Refused while an output takes its sound from it.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/audio/bus/remove")) },
+    MethodInfo { name: "audio.bus.set", summary: "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/bus/set")) },
+    MethodInfo { name: "audio.cue.set", summary: "Mark or clear a source for the cue bus. `solo` clears every other mark first.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/cue/set")) },
+    MethodInfo { name: "audio.device.list", summary: "The sound outputs on the mixer's machine that a bus can play on.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/audio/device/list")) },
+    MethodInfo { name: "audio.master.set", summary: "Move the programme's master fader or mute. Only what is named moves.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/master/set")) },
+    MethodInfo { name: "audio.send.set", summary: "Set how much of one source goes to one bus. 0 takes it off the bus.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/audio/send/set")) },
     MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/generate")) },
     MethodInfo { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/set")) },
@@ -7792,6 +9005,7 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "feed.set", summary: "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/set")) },
     MethodInfo { name: "feed.test", summary: "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.", scope: "operate", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/feed/test")) },
     MethodInfo { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters")) },
+    MethodInfo { name: "filter.cutout", summary: "Whether the cutouts are ready: how many are still opening their model, and so draw nothing of the camera, and how many cut the person out.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/cutout")) },
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
     MethodInfo { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/set")) },
@@ -7816,6 +9030,11 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
     MethodInfo { name: "gpu.rebalance", summary: "Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gpu/rebalance")) },
     MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
+    MethodInfo { name: "guest.invite.create", summary: "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/invite/create")) },
+    MethodInfo { name: "guest.invite.link", summary: "An invite's link and QR code again, to copy or show.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/invite/link")) },
+    MethodInfo { name: "guest.invite.list", summary: "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/guest/invite/list")) },
+    MethodInfo { name: "guest.invite.revoke", summary: "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/guest/invite/revoke")) },
+    MethodInfo { name: "guest.talkback.set", summary: "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/guest/talkback/set")) },
     MethodInfo { name: "headend.channel.add", summary: "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/add")) },
     MethodInfo { name: "headend.channel.bulk", summary: "The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/bulk")) },
     MethodInfo { name: "headend.channel.follow", summary: "Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/channel/follow")) },
@@ -7828,9 +9047,16 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "headend.profile.save", summary: "Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/profile/save")) },
     MethodInfo { name: "headend.scan", summary: "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/headend/scan")) },
     MethodInfo { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/headend/status")) },
+    MethodInfo { name: "hls.sign", summary: "A viewer link to one HLS output that stops working after a time, and can be held to one address.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/hls/sign")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
+    MethodInfo { name: "lut.import", summary: "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/lut/import")) },
+    MethodInfo { name: "lut.list", summary: "Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/lut/list")) },
+    MethodInfo { name: "lut.preset.remove", summary: "Delete a saved preset.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/lut/preset/remove")) },
+    MethodInfo { name: "lut.preset.save", summary: "Save a look under a name: a LUT, how much of it, and a colour correction before it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/lut/preset/save")) },
+    MethodInfo { name: "lut.preview", summary: "Small JPEG pictures of looks on a source, or on a test card, for a picker.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/lut/preview")) },
+    MethodInfo { name: "lut.remove", summary: "Delete an imported LUT. The built in ones cannot be deleted.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/lut/remove")) },
     MethodInfo { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/machine/status")) },
     MethodInfo { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/convert")) },
     MethodInfo { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/folder/add")) },
@@ -7886,14 +9112,38 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "program.get", summary: "What is on air, the programme running time, and what revert would go back to.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program")) },
     MethodInfo { name: "program.golive", summary: "One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/golive")) },
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
+    MethodInfo { name: "program.key.list", summary: "The downstream keys on air, bottom first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/key/list")) },
+    MethodInfo { name: "program.key.set", summary: "Put a scene on air as a downstream key, above whatever is taken, or take it off.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/key/set")) },
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
     MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
     MethodInfo { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/thumbnail")) },
     MethodInfo { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/program/transitions")) },
     MethodInfo { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/project/export")) },
     MethodInfo { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/project/import")) },
+    MethodInfo { name: "prompter.get", summary: "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/prompter")) },
+    MethodInfo { name: "prompter.load", summary: "Put a script on the prompter, at the top and paused unless play is true.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/load")) },
+    MethodInfo { name: "prompter.pause", summary: "Stop the prompter where it is.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/pause")) },
+    MethodInfo { name: "prompter.play", summary: "Start the prompter scrolling, at speed when given. From the end it starts again at the top.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/play")) },
+    MethodInfo { name: "prompter.rows", summary: "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/prompter/rows")) },
+    MethodInfo { name: "prompter.script.get", summary: "One prompter script with its text.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/prompter/script/get")) },
+    MethodInfo { name: "prompter.script.list", summary: "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/prompter/script/list")) },
+    MethodInfo { name: "prompter.script.remove", summary: "Forget a prompter script. When it is on the prompter the screens go empty.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/script/remove")) },
+    MethodInfo { name: "prompter.script.save", summary: "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/script/save")) },
+    MethodInfo { name: "prompter.seek", summary: "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/seek")) },
+    MethodInfo { name: "prompter.set", summary: "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/set")) },
+    MethodInfo { name: "prompter.speed", summary: "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/prompter/speed")) },
     MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
     MethodInfo { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/presets")) },
+    MethodInfo { name: "replay.event.delete", summary: "Forget a replay event. The recording it pointed at is not touched.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/event/delete")) },
+    MethodInfo { name: "replay.event.list", summary: "Every replay event, oldest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/replay/event/list")) },
+    MethodInfo { name: "replay.event.rename", summary: "Give a replay event a name.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/event/rename")) },
+    MethodInfo { name: "replay.get", summary: "Whether replay is on, each angle's buffer depth and size, and every event.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/replay")) },
+    MethodInfo { name: "replay.mark", summary: "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/mark")) },
+    MethodInfo { name: "replay.play", summary: "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/play")) },
+    MethodInfo { name: "replay.save", summary: "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/save")) },
+    MethodInfo { name: "replay.set", summary: "Change a playing replay's angle or speed, from the frame it is on.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/set")) },
+    MethodInfo { name: "replay.start", summary: "Record these angles, each the last `seconds`. Called again, it changes them in place.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/replay/start")) },
+    MethodInfo { name: "replay.stop", summary: "Stop recording, free every buffer and forget every event.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/replay/stop")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
     MethodInfo { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_graphic")) },
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
@@ -7934,7 +9184,7 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "scene.params.get", summary: "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/params/get")) },
     MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
     MethodInfo { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/preview/frame")) },
-    MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
+    MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
     MethodInfo { name: "scene.redo", summary: "Put back what your undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
     MethodInfo { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/scenes/{id}")) },
     MethodInfo { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/rename")) },
@@ -7993,11 +9243,18 @@ pub const METHODS: [MethodInfo; 250] = [
     MethodInfo { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/token/list")) },
     MethodInfo { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/token/revoke")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
+    MethodInfo { name: "user.add", summary: "Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/add")) },
+    MethodInfo { name: "user.list", summary: "Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/user/list")) },
+    MethodInfo { name: "user.remove", summary: "Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/user/remove")) },
+    MethodInfo { name: "user.reset_password", summary: "Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/reset_password")) },
+    MethodInfo { name: "user.sessions", summary: "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/user/sessions")) },
+    MethodInfo { name: "user.sign_out", summary: "End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/sign_out")) },
+    MethodInfo { name: "user.update", summary: "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/user/update")) },
     MethodInfo { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/vitals")) },
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 38] = [
+pub const EVENT_NAMES: [&str; 42] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -8035,6 +9292,10 @@ pub const EVENT_NAMES: [&str; 38] = [
     "feed.failed",
     "feed.recovered",
     "presence.changed",
+    "prompter.changed",
+    "prompter.script.changed",
+    "guest.changed",
+    "fx.assigned",
     "health",
 ];
 
@@ -8090,7 +9351,7 @@ pub enum Event {
     ChannelRemoved(ChannelRemovedEvent),
     /// A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it.
     ChannelRefused(ChannelRefusedEvent),
-    /// Peak dBFS for the programme bus and every source, in one message at 10 per second. Replaces the two separate meter events on /ws.
+    /// Peak dBFS for the programme bus, every source and every audio bus, in one message at 10 per second. Replaces the separate meter events on /ws.
     Meters(Meters),
     /// Which sources are on programme, on preview, or off. Derived by the core so a Stream Deck does not have to.
     Tally(Tally),
@@ -8130,6 +9391,14 @@ pub enum Event {
     FeedRecovered(FeedRecoveredEvent),
     /// Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has.
     PresenceChanged(PresenceList),
+    /// The prompter moved: a script was loaded, it was played, paused, sped up, sent to a marker, or its look changed. Carries the whole state. Nothing is sent while it scrolls; a screen works out where it is from position, at_ms and speed.
+    PrompterChanged(PrompterState),
+    /// A script was saved or removed. The text is not carried: ask prompter.script.get, or prompter.rows for the one on the prompter.
+    PrompterScriptChanged(ScriptChanged),
+    /// An invite was made, revoked or ran out, a guest joined, went live or left, or talkback was held or let go. Carries the whole list, as guest.invite.list answers it, without any key.
+    GuestChanged(GuestList),
+    /// fx.assign changed the transition a take uses when it names none, for one scene or for every take. Carries every assignment, as fx.list answers them in assigned, so an open page follows a choice made on another.
+    FxAssigned(FxAssignedEvent),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -8278,6 +9547,22 @@ impl Event {
                 Ok(payload) => Event::PresenceChanged(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "prompter.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PrompterChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "prompter.script.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PrompterScriptChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "guest.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::GuestChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "fx.assigned" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::FxAssigned(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -8326,6 +9611,10 @@ impl Event {
             Event::FeedFailed(_) => "feed.failed",
             Event::FeedRecovered(_) => "feed.recovered",
             Event::PresenceChanged(_) => "presence.changed",
+            Event::PrompterChanged(_) => "prompter.changed",
+            Event::PrompterScriptChanged(_) => "prompter.script.changed",
+            Event::GuestChanged(_) => "guest.changed",
+            Event::FxAssigned(_) => "fx.assigned",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
@@ -8335,6 +9624,16 @@ impl Event {
 /// One method per protocol method. Thin wrappers over [`Client::call`], so a
 /// method the core gains is one regenerated line here.
 impl Client {
+    /// Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.
+    pub async fn account_change_password(&self, params: &AccountPasswordRequest) -> Result<SignedOut> {
+        self.call("account.change_password", params).await
+    }
+
+    /// Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.
+    pub async fn account_get(&self) -> Result<AccountInfo> {
+        self.call("account.get", &serde_json::json!({})).await
+    }
+
     /// Cut a running ad short, or disarm one that is scheduled.
     pub async fn adbreak_end(&self) -> Result<BTreeMap<String, Value>> {
         self.call("adbreak.end", &serde_json::json!({})).await
@@ -8358,6 +9657,46 @@ impl Client {
     /// The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.
     pub async fn agent_tools(&self) -> Result<Vec<Detected>> {
         self.call("agent.tools", &serde_json::json!({})).await
+    }
+
+    /// Add a bus beside the programme mix, live. Nothing is built for buses until the first one.
+    pub async fn audio_bus_add(&self, params: &BusConfig) -> Result<BusStatus> {
+        self.call("audio.bus.add", params).await
+    }
+
+    /// The programme master, every bus with its sends, and the sources marked cue.
+    pub async fn audio_bus_list(&self) -> Result<AudioStatus> {
+        self.call("audio.bus.list", &serde_json::json!({})).await
+    }
+
+    /// Take a bus out, live. Refused while an output takes its sound from it.
+    pub async fn audio_bus_remove(&self, params: &BusIdRequest) -> Result<BusIdRequest> {
+        self.call("audio.bus.remove", params).await
+    }
+
+    /// Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.
+    pub async fn audio_bus_set(&self, params: &BusSetRequest) -> Result<BusStatus> {
+        self.call("audio.bus.set", params).await
+    }
+
+    /// Mark or clear a source for the cue bus. `solo` clears every other mark first.
+    pub async fn audio_cue_set(&self, params: &CueSetRequest) -> Result<AudioStatus> {
+        self.call("audio.cue.set", params).await
+    }
+
+    /// The sound outputs on the mixer's machine that a bus can play on.
+    pub async fn audio_device_list(&self) -> Result<AudioDeviceList> {
+        self.call("audio.device.list", &serde_json::json!({})).await
+    }
+
+    /// Move the programme's master fader or mute. Only what is named moves.
+    pub async fn audio_master_set(&self, params: &MasterSetRequest) -> Result<MasterConfig> {
+        self.call("audio.master.set", params).await
+    }
+
+    /// Set how much of one source goes to one bus. 0 takes it off the bus.
+    pub async fn audio_send_set(&self, params: &SendSetRequest) -> Result<BusStatus> {
+        self.call("audio.send.set", params).await
     }
 
     /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.
@@ -8570,6 +9909,11 @@ impl Client {
         self.call("filter.add", params).await
     }
 
+    /// Whether the cutouts are ready: how many are still opening their model, and so draw nothing of the camera, and how many cut the person out.
+    pub async fn filter_cutout(&self) -> Result<CutoutReadiness> {
+        self.call("filter.cutout", &serde_json::json!({})).await
+    }
+
     /// Every filter in place, with what it is and where it sits.
     pub async fn filter_list(&self) -> Result<FilterListing> {
         self.call("filter.list", &serde_json::json!({})).await
@@ -8690,6 +10034,31 @@ impl Client {
         self.call("gpu.status", params).await
     }
 
+    /// Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.
+    pub async fn guest_invite_create(&self, params: &InviteCreateRequest) -> Result<InviteCreated> {
+        self.call("guest.invite.create", params).await
+    }
+
+    /// An invite's link and QR code again, to copy or show.
+    pub async fn guest_invite_link(&self, params: &InviteIdRequest) -> Result<InviteLink> {
+        self.call("guest.invite.link", params).await
+    }
+
+    /// Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.
+    pub async fn guest_invite_list(&self) -> Result<GuestList> {
+        self.call("guest.invite.list", &serde_json::json!({})).await
+    }
+
+    /// Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.
+    pub async fn guest_invite_revoke(&self, params: &InviteIdRequest) -> Result<InviteRevoked> {
+        self.call("guest.invite.revoke", params).await
+    }
+
+    /// Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.
+    pub async fn guest_talkback_set(&self, params: &TalkbackRequest) -> Result<GuestList> {
+        self.call("guest.talkback.set", params).await
+    }
+
     /// Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
     pub async fn headend_channel_add(&self, params: &ChannelAddRequest2) -> Result<ChannelChange> {
         self.call("headend.channel.add", params).await
@@ -8750,6 +10119,11 @@ impl Client {
         self.call("headend.status", &serde_json::json!({})).await
     }
 
+    /// A viewer link to one HLS output that stops working after a time, and can be held to one address.
+    pub async fn hls_sign(&self, params: &SignRequest) -> Result<SignedLink> {
+        self.call("hls.sign", params).await
+    }
+
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.
     pub async fn log_gst(&self, params: &LogGstRequest) -> Result<LogGstResult> {
         self.call("log.gst", params).await
@@ -8763,6 +10137,36 @@ impl Client {
     /// Change one instance's or one module's log level while the mixer runs.
     pub async fn log_set(&self, params: &LogSetRequest) -> Result<BTreeMap<String, Value>> {
         self.call("log.set", params).await
+    }
+
+    /// Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.
+    pub async fn lut_import(&self, params: &LutImportRequest) -> Result<LutImported> {
+        self.call("lut.import", params).await
+    }
+
+    /// Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.
+    pub async fn lut_list(&self, params: &LutListRequest) -> Result<LutList> {
+        self.call("lut.list", params).await
+    }
+
+    /// Delete a saved preset.
+    pub async fn lut_preset_remove(&self, params: &LutNameRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("lut.preset.remove", params).await
+    }
+
+    /// Save a look under a name: a LUT, how much of it, and a colour correction before it.
+    pub async fn lut_preset_save(&self, params: &LutPreset) -> Result<LutPreset> {
+        self.call("lut.preset.save", params).await
+    }
+
+    /// Small JPEG pictures of looks on a source, or on a test card, for a picker.
+    pub async fn lut_preview(&self, params: &LutPreviewRequest) -> Result<LutPreviews> {
+        self.call("lut.preview", params).await
+    }
+
+    /// Delete an imported LUT. The built in ones cannot be deleted.
+    pub async fn lut_remove(&self, params: &LutNameRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("lut.remove", params).await
     }
 
     /// The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
@@ -9040,6 +10444,16 @@ impl Client {
         self.call("program.history", params).await
     }
 
+    /// The downstream keys on air, bottom first.
+    pub async fn program_key_list(&self) -> Result<KeyListing> {
+        self.call("program.key.list", &serde_json::json!({})).await
+    }
+
+    /// Put a scene on air as a downstream key, above whatever is taken, or take it off.
+    pub async fn program_key_set(&self, params: &KeySetRequest) -> Result<KeyListing> {
+        self.call("program.key.set", params).await
+    }
+
     /// Take back to the shot before this one.
     pub async fn program_revert(&self) -> Result<ProgramState> {
         self.call("program.revert", &serde_json::json!({})).await
@@ -9070,6 +10484,66 @@ impl Client {
         self.call("project.import", params).await
     }
 
+    /// The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.
+    pub async fn prompter_get(&self) -> Result<PrompterState> {
+        self.call("prompter.get", &serde_json::json!({})).await
+    }
+
+    /// Put a script on the prompter, at the top and paused unless play is true.
+    pub async fn prompter_load(&self, params: &LoadRequest) -> Result<PrompterState> {
+        self.call("prompter.load", params).await
+    }
+
+    /// Stop the prompter where it is.
+    pub async fn prompter_pause(&self) -> Result<PrompterState> {
+        self.call("prompter.pause", &serde_json::json!({})).await
+    }
+
+    /// Start the prompter scrolling, at speed when given. From the end it starts again at the top.
+    pub async fn prompter_play(&self, params: &PlayRequest) -> Result<PrompterState> {
+        self.call("prompter.play", params).await
+    }
+
+    /// The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.
+    pub async fn prompter_rows(&self) -> Result<RowsAnswer> {
+        self.call("prompter.rows", &serde_json::json!({})).await
+    }
+
+    /// One prompter script with its text.
+    pub async fn prompter_script_get(&self, params: &ScriptIdRequest) -> Result<Script> {
+        self.call("prompter.script.get", params).await
+    }
+
+    /// Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.
+    pub async fn prompter_script_list(&self) -> Result<ScriptList> {
+        self.call("prompter.script.list", &serde_json::json!({})).await
+    }
+
+    /// Forget a prompter script. When it is on the prompter the screens go empty.
+    pub async fn prompter_script_remove(&self, params: &ScriptIdRequest) -> Result<ScriptChanged> {
+        self.call("prompter.script.remove", params).await
+    }
+
+    /// Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.
+    pub async fn prompter_script_save(&self, params: &ScriptSaveRequest) -> Result<Script> {
+        self.call("prompter.script.save", params).await
+    }
+
+    /// Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).
+    pub async fn prompter_seek(&self, params: &SeekRequest) -> Result<PrompterState> {
+        self.call("prompter.seek", params).await
+    }
+
+    /// Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.
+    pub async fn prompter_set(&self, params: &LookRequest) -> Result<PrompterState> {
+        self.call("prompter.set", params).await
+    }
+
+    /// Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.
+    pub async fn prompter_speed(&self, params: &SpeedRequest) -> Result<PrompterState> {
+        self.call("prompter.speed", params).await
+    }
+
     /// What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
     pub async fn rendition_plan(&self, params: &PlanRequest) -> Result<PlanView> {
         self.call("rendition.plan", params).await
@@ -9078,6 +10552,56 @@ impl Client {
     /// Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.
     pub async fn rendition_presets(&self) -> Result<PresetsResult> {
         self.call("rendition.presets", &serde_json::json!({})).await
+    }
+
+    /// Forget a replay event. The recording it pointed at is not touched.
+    pub async fn replay_event_delete(&self, params: &EventIdRequest) -> Result<EventIdRequest> {
+        self.call("replay.event.delete", params).await
+    }
+
+    /// Every replay event, oldest first.
+    pub async fn replay_event_list(&self) -> Result<EventList> {
+        self.call("replay.event.list", &serde_json::json!({})).await
+    }
+
+    /// Give a replay event a name.
+    pub async fn replay_event_rename(&self, params: &EventRenameRequest) -> Result<ReplayEvent> {
+        self.call("replay.event.rename", params).await
+    }
+
+    /// Whether replay is on, each angle's buffer depth and size, and every event.
+    pub async fn replay_get(&self) -> Result<ReplayStatus> {
+        self.call("replay.get", &serde_json::json!({})).await
+    }
+
+    /// Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.
+    pub async fn replay_mark(&self, params: &MarkRequest) -> Result<ReplayEvent> {
+        self.call("replay.mark", params).await
+    }
+
+    /// Play an event, or the last seconds of an angle, on a replay source, added if it is not there.
+    pub async fn replay_play(&self, params: &PlayRequest2) -> Result<PlayStatus> {
+        self.call("replay.play", params).await
+    }
+
+    /// Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.
+    pub async fn replay_save(&self, params: &SaveRequest2) -> Result<SaveStatus> {
+        self.call("replay.save", params).await
+    }
+
+    /// Change a playing replay's angle or speed, from the frame it is on.
+    pub async fn replay_set(&self, params: &ReplaySetRequest) -> Result<PlayStatus> {
+        self.call("replay.set", params).await
+    }
+
+    /// Record these angles, each the last `seconds`. Called again, it changes them in place.
+    pub async fn replay_start(&self, params: &ReplayConfig) -> Result<ReplayStatus> {
+        self.call("replay.start", params).await
+    }
+
+    /// Stop recording, free every buffer and forget every event.
+    pub async fn replay_stop(&self) -> Result<ReplayStatus> {
+        self.call("replay.stop", &serde_json::json!({})).await
     }
 
     /// Make an empty scene, or one built from a set of sources.
@@ -9136,7 +10660,7 @@ impl Client {
     }
 
     /// Group the changes that follow into one undo step, until the next mark. This is what makes a drag of forty moves one Ctrl+Z.
-    pub async fn scene_history_mark(&self, params: &MarkRequest) -> Result<BTreeMap<String, Value>> {
+    pub async fn scene_history_mark(&self, params: &MarkRequest2) -> Result<BTreeMap<String, Value>> {
         self.call("scene.history.mark", params).await
     }
 
@@ -9280,7 +10804,7 @@ impl Client {
         self.call("scene.preview.frame", params).await
     }
 
-    /// Arm a scene. The armed scene is the preview, and program.take with no argument takes it.
+    /// Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.
     pub async fn scene_preview_set(&self, params: &PreviewRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.preview.set", params).await
     }
@@ -9573,6 +11097,41 @@ impl Client {
     /// Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
     pub async fn tool_call(&self, params: &ToolCallRequest) -> Result<BTreeMap<String, Value>> {
         self.call("tool.call", params).await
+    }
+
+    /// Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.
+    pub async fn user_add(&self, params: &UserAddRequest) -> Result<UserChanged> {
+        self.call("user.add", params).await
+    }
+
+    /// Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.
+    pub async fn user_list(&self) -> Result<UserList> {
+        self.call("user.list", &serde_json::json!({})).await
+    }
+
+    /// Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.
+    pub async fn user_remove(&self, params: &UserNameRequest) -> Result<UserChanged> {
+        self.call("user.remove", params).await
+    }
+
+    /// Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.
+    pub async fn user_reset_password(&self, params: &UserPasswordRequest) -> Result<UserChanged> {
+        self.call("user.reset_password", params).await
+    }
+
+    /// The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.
+    pub async fn user_sessions(&self, params: &UserSessionsRequest) -> Result<SessionList> {
+        self.call("user.sessions", params).await
+    }
+
+    /// End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.
+    pub async fn user_sign_out(&self, params: &UserSignOutRequest) -> Result<SignedOut> {
+        self.call("user.sign_out", params).await
+    }
+
+    /// Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.
+    pub async fn user_update(&self, params: &UserUpdateRequest) -> Result<UserChanged> {
+        self.call("user.update", params).await
     }
 
     /// This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.

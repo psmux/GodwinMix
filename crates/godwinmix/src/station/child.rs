@@ -45,6 +45,9 @@ pub fn command(launch: &Launch, start: &Start) -> Command {
     }
     // The station's device tokens, so a phone the station let in is let in
     // by the show its calls are relayed to.
+    if let Some(path) = crate::accounts::station_file() {
+        cmd.env(crate::accounts::PATH_ENV, path);
+    }
     if let Some(path) = crate::devices::station_file() {
         cmd.env(crate::devices::PATH_ENV, path);
     }

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "list",
+  "description": "List the connected switchers, whether each is up, why not when it is not, and its mode.",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false
+}

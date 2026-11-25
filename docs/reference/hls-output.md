@@ -197,6 +197,13 @@ nothing else on the port changes:
   `/api`, not `/rpc`.
 * a control token with the `read` scope, as `Authorization: Bearer` or
   `?token=`, the same rule as the preview streams.
+* a **signed link** from `hls.sign {output, ttl_secs, ip}`: `?exp=` (Unix
+  seconds), `&sig=` and, when it was made for one viewer, `&ip=`. It works
+  until `exp` and, with `ip`, from that address only. The signature is an HMAC
+  of the output, the expiry and the address under the output's viewer key, so
+  changing the viewer key ends every signed link to it. `ttl_secs` is 3600
+  when left out and 2592000 (thirty days) at most. A link that has run out, or
+  was made for another output or address, is a 401 that says so.
 
 We chose a viewer key per output rather than leaving HLS open, so a mixer
 with a control token does not serve its programme to anyone who guesses an
@@ -206,7 +213,8 @@ restart and a link that was handed out keeps working. To change a link that
 leaked, give the output a new name or set `params.viewer_key`. On a mixer
 with no control token at all, `/hls/` is open like the rest of the port.
 
-Whatever a player presented in the query (`key`, `token`) is written onto
+Whatever a player presented in the query (`key`, `token`, and a signed
+link's `exp`, `sig` and `ip`) is written onto
 every URI in every playlist it is given, so a player that cannot send a
 header keeps presenting it. A refusal is 401 (no key, wrong key, no token)
 or 403 (a token without `read`), with a JSON body whose `error` says where

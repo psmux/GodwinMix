@@ -37,7 +37,7 @@ const PREVIEW_BUDGET_MS: i64 = 90;
 async fn the_preview_path_adds_no_more_than_its_budget() {
     let _ = gst::init();
     let mut cfg: crate::config::Config = toml::from_str("").unwrap();
-    cfg.canvas = crate::config::Canvas { width: 640, height: 360, fps: 30, sample_rate: 48000, channels: 2 };
+    cfg.canvas = crate::config::Canvas { width: 640, height: 360, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 };
     cfg.multiview = MultiviewConfig { width: 640, height: 360, fps: 8, linger_secs: 0, ..Default::default() };
     cfg.sources = vec![crate::config::SourceConfig::bare(ID, "test://smpte")];
     let (mut mix, handle, cmd_rx, _bus_rx) = crate::mixer::Mixer::build(cfg).unwrap();
@@ -54,6 +54,7 @@ async fn the_preview_path_adds_no_more_than_its_budget() {
         rotation: 0.0,
         crop: (0.0, 0.0, 0.0, 0.0),
         sizing: Default::default(),
+        filters: Vec::new(),
     }]);
     let slack = crate::plugin::harness::timing_slack();
     let source = wait_for_source(Duration::from_secs(10).mul_f64(slack)).await;

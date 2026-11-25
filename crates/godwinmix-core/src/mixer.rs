@@ -410,6 +410,9 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
 mod allocation;
+mod audio_desk;
+mod replay_desk;
+pub use replay_desk::{ReplayAnswer, ReplayReply};
 mod catch_up;
 mod clip_act;
 mod clip_end;
@@ -418,6 +421,7 @@ mod backoff;
 mod cue;
 mod exited;
 pub mod failover;
+mod fx_open;
 mod fx_take;
 mod generation;
 mod keyed;
@@ -427,6 +431,8 @@ mod memwatch;
 mod motion;
 mod on_time;
 mod page;
+mod mosaic_build;
+mod preview_draw;
 pub use page::PageCall;
 pub(crate) mod offload;
 mod patience;
@@ -486,6 +492,9 @@ pub enum Command {
     /// An fx clip transition's clip has its first frame, or has had long
     /// enough: bind the cut and start the window now. Never sent by the API.
     FxReady { transition: u64 },
+    /// The worker opening a clip transition's clip is back, with the player
+    /// or with why not. See `fx_open`. Never sent by the API.
+    FxOpened { transition: u64, opened: std::result::Result<fx_open::Opened, String> },
     /// Interrupt the programme with an ad, then return to live.
     ///
     /// `return_to` defaults to whatever is on program when the break starts.
@@ -570,6 +579,11 @@ pub enum Command {
         media: Vec<Option<f64>>,
         reply: oneshot::Sender<AudioOutcome>,
     },
+    /// One `audio.*` call: the master, the buses, the sends and cue. See
+    /// `crate::buses`. No reply for one the mixer sends itself.
+    Audio(crate::buses::AudioCall, Option<audio_desk::AudioReply>),
+    /// One `replay.*` call. See `crate::replay`.
+    Replay(crate::replay::ReplayCall, Option<replay_desk::ReplayReply>),
     /// Move a seekable source to a position, in milliseconds from its start.
     Seek {
         source: SourceId,
@@ -632,6 +646,9 @@ pub enum Command {
     /// subscriber generation it was decided at, so one that has been overtaken
     /// is refused rather than applied. See `multiview.rs`.
     Multiview(DemandAt),
+    /// The worker building or taking down the mosaic is back. See
+    /// `mosaic_build`. Never sent by the API.
+    MosaicBuilt(Box<mosaic_build::Back>),
     /// Start or stop the programme encode chain. Sent by `EncoderHandle` when
     /// the first consumer arrives or the last one leaves, never by the API.
     /// See `encoder.rs`.
@@ -652,6 +669,16 @@ pub struct FilterStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceId>,
     pub side: String,
+    /// The settings in force, as `filter.set` last left them.
+    #[serde(default, skip_serializing_if = "crate::config::Params::is_empty")]
+    pub params: crate::config::Params,
+}
+
+/// A change to the configured filter list. See `Mixer::remember_filter`.
+enum FilterChange<'a> {
+    Added(&'a crate::config::FilterConfig),
+    Set(&'a str, &'a crate::config::Params),
+    Removed(&'a str),
 }
 
 /// What `filter.set` answers with.
@@ -676,6 +703,8 @@ pub struct MixerHandle {
     heard: Arc<AtomicBool>,
     /// The memory guard's alarm while it holds. See `mixer::memguard`.
     memory: Arc<parking_lot::Mutex<Option<memguard::Pressure>>>,
+    /// The replay rings and events, read off the mixer thread.
+    replay: Arc<crate::replay::Shared>,
 }
 
 impl MixerHandle {
@@ -692,6 +721,7 @@ impl MixerHandle {
             running: Arc::new(Running::default()),
             heard: Arc::default(),
             memory: Arc::default(),
+            replay: Arc::default(),
         };
         (handle, rx)
     }
@@ -814,6 +844,16 @@ impl MixerHandle {
     ) -> Result<AudioOutcome> {
         let (tx, rx) = oneshot::channel();
         self.ask(Command::SetAudio { source, gain, muted, page, media, reply: tx }, rx).await
+    }
+
+    /// One `audio.*` call, answered with the whole desk or the refusal. See
+    /// `crate::buses`.
+    pub async fn audio(
+        &self,
+        call: crate::buses::AudioCall,
+    ) -> Result<Result<godwinmix_protocol::buses::AudioStatus, crate::buses::Refusal>> {
+        let (tx, rx) = oneshot::channel();
+        self.ask(Command::Audio(call, Some(tx)), rx).await
     }
 
     /// Move a source and get back where it actually landed. Waits on a value
@@ -1173,6 +1213,13 @@ pub struct Mixer {
 
     program: gst::Pipeline,
     amix: gst::Element,
+    /// The master, the buses and cue. Nothing in it is built until a bus is
+    /// asked for. See `crate::buses`.
+    desk: crate::buses::Desk,
+    /// Instant replay. Empty until replay is turned on. See `crate::replay`.
+    replay: crate::replay::Desk,
+    /// The programme encoder, held while the programme is a replay angle.
+    replay_lease: Option<crate::encoder::Lease>,
     venc_tee: gst::Element,
     aenc_tee: gst::Element,
     /// The raw programme tees, where a preview or monitoring branch hangs off.
@@ -1354,6 +1401,11 @@ pub struct Mixer {
     /// The armed scene, in canvas pixels, as the control plane last said. The
     /// preview compositor draws these when one exists.
     preview_cells: Vec<crate::multiview::preview::Cell>,
+    /// The preview's filter chains being built off the loop. See
+    /// `preview_draw`.
+    preview_build: preview_draw::Building,
+    /// The mosaic job out on a worker, if any. See `mosaic_build`.
+    mosaic: mosaic_build::Mosaic,
     /// Which sources have a backup, and which backup is drawn in whose place
     /// now. Empty, and asked nothing, on a mixer with no `on_loss`. See
     /// `crate::failover` and `mixer::failover`.
@@ -1483,12 +1535,14 @@ const FREEZE_HOLD: Duration = Duration::from_secs(45);
 /// The running configuration in the units the catalogue's `{unit, from}`
 /// properties name.
 fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
-    let fps = cfg.canvas.fps.max(1) as i64;
+    // Whole frames for whatever counts in frames; the keyframe interval is
+    // worked out from the true rate, so 29.97 gets 60 frames in 2 s and not 58.
+    let fps = cfg.canvas.fps.rounded().max(1) as i64;
     crate::catalogue::apply::Vars {
         video_bitrate_kbps: cfg.program.video_bitrate_kbps as i64,
         audio_bitrate_kbps: cfg.program.audio_bitrate_kbps as i64,
         keyframe_secs: cfg.program.keyframe_interval_secs as i64,
-        keyframe_frames: fps * cfg.program.keyframe_interval_secs as i64,
+        keyframe_frames: (cfg.canvas.fps.as_f64() * cfg.program.keyframe_interval_secs as f64).round().max(1.0) as i64,
         fps,
         cpu_count: crate::catalogue::apply::cpu_count(),
     }
@@ -1663,6 +1717,13 @@ impl Mixer {
         let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
         let (bus_tx, bus_rx) = mpsc::channel(BUS_QUEUE);
         let events = EventBus::new(256);
+        // Nothing of replay is built here: the desk is empty until replay is
+        // turned on, and a source kind finds it by this instant.
+        let origin = Instant::now();
+        let replay = crate::replay::Desk::new(
+            origin,
+            crate::replay::angle::EncodeWith { video: sel.video_encode.clone(), audio: sel.audio_encode.clone(), vars },
+        );
         let handle = MixerHandle {
             tx,
             events: events.clone(),
@@ -1670,6 +1731,7 @@ impl Mixer {
             running: Arc::new(Running::default()),
             heard: Arc::default(),
             memory: Arc::default(),
+            replay: replay.shared().clone(),
         };
 
         let program = gst::Pipeline::with_name("program");
@@ -1771,6 +1833,9 @@ impl Mixer {
         crate::probe::set_bool(&amix, "ignore-inactive-pads", true);
         crate::probe::set_int(&amix, "min-upstream-latency", MIN_UPSTREAM_LATENCY_NS);
         let amix_caps = gstutil::capsfilter("amix-caps", &canvas.audio())?;
+        // The programme master. At unity and unmuted a `volume` passes its
+        // buffers through untouched, so this costs nothing until it is moved.
+        let master = make("volume", "pgm-master")?;
         let araw_tee = make("tee", "araw-tee")?;
         araw_tee.set_property("allow-not-linked", true);
 
@@ -1834,7 +1899,7 @@ impl Mixer {
         let mut slate_chain: Vec<gst::Element> = vec![slate.clone(), slate_caps.clone()];
         slate_chain.extend(upload_bridge(gfx, "slate")?);
 
-        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &level, &araw_tee, &silence, &silence_caps];
+        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &master, &level, &araw_tee, &silence, &silence_caps];
         let all: Vec<&gst::Element> = fixed
             .into_iter()
             .chain(vchain.iter())
@@ -1850,7 +1915,7 @@ impl Mixer {
         gst::Element::link_many(rchain.iter().collect::<Vec<_>>())
             .context("linking program return video")?;
 
-        gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
+        gst::Element::link_many([&amix, &amix_caps, &master, &level, &araw_tee])
             .context("linking audio mixer")?;
         link_from(&araw_tee, &achain).context("linking audio encoder")?;
 
@@ -1973,13 +2038,31 @@ impl Mixer {
             rendered::programme_info(&cfg),
         );
 
+        let mut desk = crate::buses::Desk::new(
+            &program,
+            &canvas,
+            MIN_UPSTREAM_LATENCY_NS,
+            crate::buses::encode::EncodeWith { chosen: sel.audio_encode.clone(), vars },
+            master,
+            cfg.audio.clone(),
+        );
+        desk.set_notify({
+            let h = handle.clone();
+            Arc::new(move |call| {
+                let _ = h.send(Command::Audio(call, None));
+            })
+        });
+
         let mixer = Self {
             cfg,
             canvas,
             backends,
-            origin: Instant::now(),
+            origin,
             program,
             amix,
+            desk,
+            replay,
+            replay_lease: None,
             venc_tee,
             aenc_tee,
             vraw_tee: vraw_tee.clone(),
@@ -2046,6 +2129,8 @@ impl Mixer {
             program_scene: None,
             ramp: None,
             preview_cells: Vec::new(),
+            preview_build: preview_draw::Building::default(),
+            mosaic: mosaic_build::Mosaic::default(),
             backups: Default::default(),
         };
         Ok((mixer, handle, rx, bus_rx))
@@ -2078,28 +2163,20 @@ impl Mixer {
     /// when the first client subscribes through `MultiviewHandle` and goes
     /// again when the last one leaves. See `multiview.rs`.
     pub fn start(&mut self) -> Result<()> {
-        for out in self.cfg.outputs.clone() {
-            if !out.enabled {
-                self.hold(&out);
-                continue;
-            }
-            match self.attach_output(&out) {
-                Ok(slot) => self.outputs.push(slot),
-                // Kept and tried again from the tick: a show started again
-                // on a busy machine can be refused a rendition for a few
-                // seconds, and the output must come back once there is room.
-                // See `mixer::unattached`.
-                Err(e) => {
-                    error!(output = %out.id, ?e, "failed to attach output; it is kept and tried again");
-                    self.keep_unattached(&out, &e);
-                }
-            }
-        }
-        self.note_on_air();
-
         self.watches
             .push(gstutil::watch_bus(&self.program, gstutil::BusOwner::Programme, self.bus_tx.clone())?);
         self.program.set_state(gst::State::Playing).context("starting program pipeline")?;
+        // The configured buses, before the sources: each source joins them as
+        // it is added.
+        self.desk.start();
+        // The configured outputs, once the programme is playing and the buses
+        // are built: an output takes the programme's clock and base time as
+        // it is built (`output::follow_programme_clock`), and there are none
+        // before PLAYING, and an output on a bus needs the bus.
+        self.start_configured_outputs();
+        // Replay as the config sets it. Each source angle joins as its
+        // source is added below.
+        self.start_configured_replay();
 
         for src in self.cfg.sources.clone() {
             let id = src.id.clone();
@@ -2261,7 +2338,9 @@ impl Mixer {
         // Nothing runs unless asked, and a source nobody is looking at should
         // not be scaling a picture for nobody. It can be attached later on a
         // running source without a rebuild; see `attach_thumb_end`.
-        let wants_thumb = in_multiview && self.multiview.is_some();
+        // A mosaic a worker is building counts: its tile for this source is
+        // added when it comes back. See `mosaic_build`.
+        let wants_thumb = in_multiview && (self.multiview.is_some() || self.mosaic_building().is_some());
         let input = InputPipeline::build_kind(
             cfg,
             &self.canvas,
@@ -2426,6 +2505,8 @@ impl Mixer {
             }
         }
         info!(source = %cfg.id, kind = %self.sources.last().map(|s| s.input.type_id()).unwrap_or_default(), "source added");
+        self.join_buses(&cfg.id);
+        self.replay_join(&cfg.id);
         // An id that is live again has nothing left to restore under it.
         self.removed.retain(|c| c.id != cfg.id);
         self.unstarted.forget(&cfg.id);
@@ -2631,19 +2712,48 @@ impl Mixer {
                 type_id: f.spec.type_id.clone(),
                 source: None,
                 side: f.spec.side.as_str().to_string(),
+                params: self.configured_params(f.id()).unwrap_or_else(|| f.spec.params.clone()),
             })
             .collect();
         for slot in &self.sources {
             for f in slot.input.filters() {
+                let params = self.configured_params(&f.0).unwrap_or_default();
                 all.push(FilterStatus {
                     id: f.0,
                     type_id: f.1,
                     source: Some(slot.input.id.clone()),
                     side: f.2,
+                    params,
                 });
             }
         }
         all
+    }
+
+    /// A filter's settings as the configured list holds them.
+    fn configured_params(&self, id: &str) -> Option<crate::config::Params> {
+        self.cfg.filters.iter().find(|f| f.id == id).map(|f| f.params.clone())
+    }
+
+    fn start_configured_outputs(&mut self) {
+        for out in self.cfg.outputs.clone() {
+            if !out.enabled {
+                self.hold(&out);
+                continue;
+            }
+            match self.attach_output(&out) {
+                Ok(slot) => self.outputs.push(slot),
+                // Kept and tried again from the tick: a show started again
+                // on a busy machine can be refused a rendition for a few
+                // seconds, and the output must come back once there is room.
+                // See `mixer::unattached`.
+                Err(e) => {
+                    error!(output = %out.id, ?e, "failed to attach output; it is kept and tried again");
+                    self.keep_unattached(&out, &e);
+                }
+            }
+        }
+        self.note_on_air();
     }
 
     /// Put a source pipeline on the programme's clock and base time.
@@ -2662,6 +2772,29 @@ impl Mixer {
         if let Some(base) = self.program.base_time() {
             pipeline.set_base_time(base);
         }
+    }
+
+    /// Keep the configured filter list in step with what was put in place,
+    /// and save it. That list is what a source rebuilt after a stall puts back
+    /// on, and what the next start reads from the runtime store, so a
+    /// microphone's EQ set from the desk outlives a restart of either.
+    fn remember_filter(&mut self, change: FilterChange<'_>) {
+        let list = &mut self.cfg.filters;
+        match change {
+            FilterChange::Added(cfg) => {
+                list.retain(|f| f.id != cfg.id);
+                list.push(cfg.clone());
+            }
+            FilterChange::Set(id, params) => {
+                if let Some(f) = list.iter_mut().find(|f| f.id == id) {
+                    for (k, v) in params {
+                        f.params.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            FilterChange::Removed(id) => list.retain(|f| f.id != id),
+        }
+        self.persist_runtime();
     }
 
     /// The configured filters that name one source.
@@ -2826,6 +2959,9 @@ impl Mixer {
             anyhow::bail!("no such source {id}");
         };
         self.detach_source_feed(id);
+        // Off the buses first, so the held branch is the one it always was.
+        self.desk.leave_source(id);
+        self.replay_leave(id);
         let slot = self.sources.remove(pos);
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
@@ -3049,6 +3185,9 @@ impl Mixer {
             crate::slow_step!("take off programme", id, self.take(None, None))?;
         }
         self.detach_source_feed(id);
+        // Off every bus before the branch comes down. See `buses::send`.
+        crate::slow_step!("desk.leave_source", id, self.desk.leave_source(id));
+        self.replay_leave(id);
         let slot = self.sources.remove(pos);
         self.overlay.detach(id);
         if let Some(mv) = &mut self.multiview {
@@ -3372,17 +3511,25 @@ impl Mixer {
         let RuntimeConfigs { sources: mut live, outputs, .. } = self.runtime_configs();
         // A recording is for this run only. See `config::recordings`.
         let outputs = crate::config::recordings::kept_across_restart(&outputs);
+        // A guest's source and return come and go with an invite.
+        let outputs: Vec<OutputConfig> = outputs.into_iter().filter(|o| !crate::guest::made_for_a_guest_output(o)).collect();
         // A source that could not start this time is still wanted next time.
         for cfg in self.unstarted.configs() {
             if !live.iter().any(|c| c.id == cfg.id) {
                 live.push(cfg.clone());
             }
         }
+        live.retain(|c| !crate::guest::made_for_a_guest_source(c));
 
         #[derive(serde::Serialize)]
         struct Stored<'a> {
             sources: &'a [SourceConfig],
             outputs: &'a [OutputConfig],
+            filters: &'a [crate::config::FilterConfig],
+            #[serde(skip_serializing_if = "godwinmix_protocol::buses::AudioConfig::is_default")]
+            audio: &'a godwinmix_protocol::buses::AudioConfig,
+            #[serde(skip_serializing_if = "godwinmix_protocol::replay::ReplayConfig::is_default")]
+            replay: &'a godwinmix_protocol::replay::ReplayConfig,
             /// The `[ui]` section `gmx preset apply` wrote, carried through
             /// untouched. Without this, adding one source from the UI would
             /// throw away the layout and theme the preset chose.
@@ -3393,9 +3540,9 @@ impl Mixer {
             .ok()
             .and_then(|text| text.parse::<toml::Table>().ok())
             .and_then(|table| table.get("ui").cloned());
-        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, ui }) {
+        let body = match toml::to_string_pretty(&Stored { sources: &live, outputs: &outputs, filters: &self.cfg.filters, audio: &self.cfg.audio, replay: &self.cfg.replay, ui }) {
             Ok(b) => format!(
-                "# Sources and outputs managed from the GodwinMix UI or API.\n\
+                "# Sources, outputs and filters managed from the GodwinMix UI or API.\n\
                  # These lists take precedence over the ones in the config file.\n\
                  # Delete this file to go back to the config file's lists.\n\n{b}"
             ),
@@ -3549,6 +3696,7 @@ impl Mixer {
         // Whatever the last take was doing, it is over. Settling leaves every
         // pad where that transition's curves ended rather than halfway.
         self.settle_transition();
+        crate::observe::laps::mark("transition settled");
         let mut took = transition::Kind::Cut;
         let mut duration = 0u64;
         match crossing {
@@ -3575,7 +3723,9 @@ impl Mixer {
             }
         }
 
+        crate::observe::laps::mark("scene applied");
         self.show_held_clips_again();
+        crate::observe::laps::mark("held clips shown");
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(
             scene = %name,
@@ -3610,10 +3760,13 @@ impl Mixer {
     ) -> Result<()> {
         let arriving = self.current_placements();
         let clip = self.stinger_clip(spec)?;
+        crate::observe::laps::mark("stinger clip");
         let branches: Vec<(&SourceId, &ProgrammeBranch)> =
             self.sources.iter().map(|s| (&s.input.id, &s.branch)).collect();
         let crossed = self.pool.begin_transition(&arriving, &branches)?;
+        crate::observe::laps::mark("pool transition begun");
         let cover = clip.as_ref().and_then(|id| self.cover_leg(id));
+        crate::observe::laps::mark("cover leg");
         let duration = gst::ClockTime::from_mseconds(spec.duration().as_millis() as u64);
         let mut x = transition::Crossing {
             out: crossed.out,
@@ -3633,9 +3786,11 @@ impl Mixer {
         }
         let lead = self.fx_lead(spec, &mut x);
         let (curves, longest) = self.crossing_curves(spec, &x)?;
+        crate::observe::laps::mark("curves");
         let slate = self.tint_slate(&spec.kind);
         self.bind_window(id, spec.kind.name(), curves, x.start, longest + lead, slate);
         let fx = self.start_fx(spec, &x);
+        crate::observe::laps::mark("fx started");
         if let Some(running) = self.running_transition.as_mut() {
             running.clip = clip;
             running.fx = fx;
@@ -3825,15 +3980,18 @@ impl Mixer {
     }
 
     /// The source id a scene is shorthand for, when it is one full canvas item
-    /// of one source and nothing else.
+    /// of one source and nothing else, or that source under downstream keys:
+    /// a source taken while a key is up is named after the source, which
+    /// fills the canvas beneath the key's items.
     fn shorthand_source(&self, scene: &ProgramScene) -> Option<SourceId> {
-        let [only] = scene.placements.as_slice() else { return None };
-        let full = only.xpos == 0
-            && only.ypos == 0
-            && only.width == self.canvas.width
-            && only.height == self.canvas.height
-            && only.alpha >= 1.0;
-        full.then(|| only.source.clone())
+        let full = |p: &Placement| {
+            p.xpos == 0 && p.ypos == 0 && p.width == self.canvas.width && p.height == self.canvas.height && p.alpha >= 1.0
+        };
+        match scene.placements.as_slice() {
+            [only] if full(only) => Some(only.source.clone()),
+            [first, ..] if full(first) && first.source == scene.name => Some(first.source.clone()),
+            _ => None,
+        }
     }
 
     fn schedule_scene_take(
@@ -3918,6 +4076,7 @@ impl Mixer {
             Some(_) => self.pool.apply_ramped(&placements, &branches),
             None => self.pool.apply(&placements, &branches),
         };
+        crate::observe::laps::mark("pool applied");
         match applied {
             Ok(applied) => {
                 if !applied.missing.is_empty() {
@@ -3938,6 +4097,7 @@ impl Mixer {
             }
         }
         self.cue_sources(&placements);
+        crate::observe::laps::mark("sources cued");
 
         // Audio follows video per item: a source is heard when any live item
         // of it says `follow` and is visible, or says `always`. This is OBS's
@@ -3991,7 +4151,7 @@ impl Mixer {
         }
         let id = self.take_generation.load(Ordering::SeqCst);
         let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
-        let frame = gst::ClockTime::from_mseconds(1000 / self.canvas.fps.numer().max(1) as u64);
+        let frame = self.canvas.frame_duration();
         let end = self
             .schedule_command(Command::TransitionEnd { transition: id }, (now + duration + frame).mseconds())
             .ok();
@@ -4183,6 +4343,7 @@ impl Mixer {
             Command::TransitionEnd { .. } => "transition.end",
             Command::FireFx { .. } => "fx.fire",
             Command::FxReady { .. } => "fx.ready",
+            Command::FxOpened { .. } => "fx.opened",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -4220,8 +4381,11 @@ impl Mixer {
             Command::Tick => "tick",
             Command::PositionTick => "position tick",
             Command::Multiview(_) => "multiview demand",
+            Command::MosaicBuilt(_) => "multiview built",
             Command::Encoder(_) => "encoder demand",
             Command::Preview(_) => "preview demand",
+            Command::Audio(..) => "audio",
+            Command::Replay(..) => "replay",
             Command::Shutdown => "core.shutdown",
         }
     }
@@ -4269,6 +4433,7 @@ impl Mixer {
                 }
             }
             Command::FxReady { transition } => self.fx_ready(transition),
+            Command::FxOpened { transition, opened } => self.fx_opened(transition, opened),
             Command::FireFx { plan, opacity, ack } => {
                 let r = self.fire_fx(&plan, opacity);
                 reply(ack, &r);
@@ -4290,6 +4455,7 @@ impl Mixer {
                 r?;
             }
             Command::Multiview(d) => self.multiview_demand(d)?,
+            Command::MosaicBuilt(back) => self.mosaic_built(*back)?,
             Command::Encoder(d) => self.encoder.demand(d)?,
             Command::Preview(d) => self.preview_demand(d),
             Command::AddSource(cfg, ack) => {
@@ -4362,6 +4528,8 @@ impl Mixer {
             Command::Seek { source, position_ms, reply } => {
                 let _ = reply.send(self.seek(&source, position_ms));
             }
+            Command::Audio(call, reply) => self.audio_call(call, reply),
+            Command::Replay(call, reply) => self.replay_call(call, reply),
             Command::SourceInput { source, reply } => {
                 let _ = reply.send(self.sources.iter().find(|s| s.input.id == source).map(|s| s.input.clone()));
             }
@@ -4421,14 +4589,24 @@ impl Mixer {
             }
             Command::AddFilter(cfg, ack) => {
                 let r = self.add_filter(&cfg);
+                if r.is_ok() {
+                    self.remember_filter(FilterChange::Added(&cfg));
+                }
                 reply(ack, &r);
                 r?;
             }
             Command::SetFilter { id, params, reply } => {
-                let _ = reply.send(self.set_filter(&id, &params));
+                let outcome = self.set_filter(&id, &params);
+                if outcome == FilterOutcome::Applied {
+                    self.remember_filter(FilterChange::Set(&id, &params));
+                }
+                let _ = reply.send(outcome);
             }
             Command::RemoveFilter(id, ack) => {
                 let r = self.remove_filter(&id);
+                if r.is_ok() {
+                    self.remember_filter(FilterChange::Removed(&id));
+                }
                 reply(ack, &r);
                 r?;
             }
@@ -4521,6 +4699,7 @@ impl Mixer {
                 // would attribute `pgm-alevel-cam-1` to a source called `cam`.
                 if src == "pgm-level" {
                     let _ = self.events.send(Event::AudioLevel { peak_db });
+                } else if self.bus_level(&src, &peak_db) {
                 } else if let Some(slot) = self.sources.iter().find(|s| s.branch.owns_meter(&src)) {
                     let _ = self.events.send(Event::SourceAudioLevel {
                         source: slot.input.id.clone(),
@@ -4575,26 +4754,31 @@ impl Mixer {
         // An add waiting on a stop that finished, or that has waited long
         // enough, goes ahead.
         self.release_stopped();
+        crate::observe::laps::mark("stopped adds released");
         // What the governor says to give up, or that there is room again.
         self.rendition_tick();
         // Outputs refused at start, asked for again once their wait is up.
         self.retry_unattached();
+        crate::observe::laps::mark("outputs retried");
 
 
         // A plugin process that died by itself is restarted now rather than
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
         self.relay_plugin_logs();
+        crate::observe::laps::mark("plugins looked at");
 
         // A line in the log every five minutes with the mixer's own size, and
         // every five seconds a look at whether it is past its guard.
         self.watch_memory();
         self.guard_memory();
+        crate::observe::laps::mark("memory guarded");
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
         // than here.
         self.release_retired(None);
+        crate::observe::laps::mark("held frames released");
 
         let mut restart = Vec::new();
         // Sources whose first picture has just arrived, and sources that have
@@ -4668,6 +4852,7 @@ impl Mixer {
         for id in swaps {
             self.swap_client_off_thread(&id);
         }
+        crate::observe::laps::mark("sources swept");
         for id in first_picture {
             // The rebuilt source draws now, so the frame held for it is done.
             self.release_retired(Some(&id));
@@ -4676,12 +4861,15 @@ impl Mixer {
         for id in judged_stalled {
             self.log_timeline(&id, "judged stalled", true);
         }
+        crate::observe::laps::mark("timelines logged");
         self.report_states();
+        crate::observe::laps::mark("states reported");
         for id in restart {
             self.arm_stall_restart(id);
         }
         // Deadlines the stall sweep cannot see. See `mixer::supervise`.
         self.supervise(now);
+        crate::observe::laps::mark("supervised");
         // A live source whose frames all wait before they are due is moved
         // back to its newest frame. See `mixer::catch_up`.
         for slot in &self.sources {
@@ -4692,6 +4880,7 @@ impl Mixer {
         for id in forgiven {
             info!(source = %id, "the source has stayed live since its last restart; its backoff starts again from nothing");
         }
+        crate::observe::laps::mark("caught up");
 
         for slot in &self.sources {
             let id = &slot.input.id;
@@ -4716,6 +4905,7 @@ impl Mixer {
                 self.output_attempts.insert(out.id().clone(), 0);
             }
         }
+        crate::observe::laps::mark("outputs refreshed");
 
         let overflowing: Vec<_> = self
             .outputs
@@ -4920,6 +5110,8 @@ impl Mixer {
         if let Some(gain) = gain {
             slot.set_gain(gain);
         }
+        // A talkback source stays off the programme however it is asked.
+        let muted = if self.desk.is_talker(id) { muted.map(|_| true) } else { muted };
         if let Some(muted) = muted {
             slot.set_muted(muted);
         }
@@ -5196,6 +5388,7 @@ impl Mixer {
             uptime_secs: self.origin.elapsed().as_secs(),
             running_time_ms: self.running_time().map(|t| t.mseconds()).unwrap_or(0),
             ad: self.ad.clone(),
+            audio: Some(self.audio_status()),
             backend: BackendInfo {
                 video_decoder: self.backends.video_decode.element.to_string(),
                 video_encoder: self.backends.video_encode.element.to_string(),
@@ -5283,7 +5476,8 @@ impl Mixer {
     /// at the 25 the page asks for on a machine with eight threads or more, so
     /// they moved at a third of the rate of everything else.
     fn mosaic_fps(&self) -> i32 {
-        self.multiview.as_ref().map_or(self.cfg.multiview.fps, |mv| mv.shape().fps).max(1)
+        let shape = self.multiview.as_ref().map(|mv| mv.shape()).or(self.mosaic_building());
+        shape.map_or(self.cfg.multiview.fps, |s| s.fps).max(1)
     }
 
     /// Give the programme return the mosaic's rate. Only while it is off the
@@ -5333,8 +5527,10 @@ impl Mixer {
     /// Take a lease for an output and act on it here and now.
     ///
     /// The lease also posts a `Command::Encoder` on the queue, which this
-    /// thread will read later and find nothing to do. Reconciling inline means
-    /// the chain is up before the output's first buffer could want it.
+    /// thread will read later and find nothing to do. Reconciling inline
+    /// starts the chain coming up now rather than after whatever is queued;
+    /// it comes up on a thread of its own (`encoder::raise`) and is joined to
+    /// the tee when it is, so this never waits on an encoder opening.
     fn hold_encoder_for(&mut self, id: &OutputId) {
         self.output_leases.insert(id.clone(), self.enc.lease("output"));
         self.sync_encoder();
@@ -5342,7 +5538,15 @@ impl Mixer {
 
     fn release_encoder_for(&mut self, id: &OutputId) {
         self.output_leases.remove(id);
+        self.desk.release_output(id);
         self.sync_encoder();
+    }
+
+    /// See `Encoder::finish_start`.
+    #[cfg(test)]
+    pub(crate) fn finish_encoder_start(&mut self) {
+        let wanted = self.enc.wanted();
+        self.encoder.finish_start(wanted);
     }
 
     fn sync_encoder(&mut self) {
@@ -5377,59 +5581,15 @@ impl Mixer {
         }
         match at.demand {
             Demand::Build(shape) => {
-                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
+                if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) || self.mosaic_out() {
+                    // Kept, or a worker is out and looks again when it is
+                    // back.
                     return self.preview_settled();
                 }
-                // A rebuild at another size drops the old one first, so there
-                // is never a moment with two mosaic encoders running.
-                self.drop_mosaic();
-                let mut mv = Multiview::build(&self.mv, shape, &self.pgm_video_proxy)
-                    .context("building multiview")?;
-                mv.attach_watch(gstutil::watch_bus(
-                    mv.pipeline(),
-                    gstutil::BusOwner::Multiview,
-                    self.bus_tx.clone(),
-                )?);
-                for slot in &self.sources {
-                    if slot.input.id == AD_ID {
-                        continue;
-                    }
-                    // A source pays for its thumbnail branch only while a
-                    // mosaic exists to show it; the end is attached to the
-                    // running source here and taken back at teardown.
-                    let proxy = slot
-                        .input
-                        .attach_thumb_end(&self.canvas, shape.fps)
-                        .context("attaching a thumbnail end for the mosaic")?;
-                    mv.add_tile_with(Some(slot.input.id.clone()), &proxy, |pad| {
-                        if let Some(a) = &slot.aligner {
-                            a.follow_tile(pad);
-                        }
-                        if slot.clip_end.is_some() {
-                            clip_end::ClipEnd::keep_last_frame(pad);
-                        }
-                    })
-                    .context("adding multiview tile")?;
-                }
-                mv.follow_clock_of(&self.program);
-                // Marked built before the first frame can leave it: a
-                // subscriber that reads `is_built` the moment its frame lands
-                // must find it true, and on Windows the frame beat the flag.
-                self.mv.mark_built(Some(shape));
-                if let Err(e) = mv.start() {
-                    self.mv.mark_built(None);
-                    return Err(e.context("starting multiview"));
-                }
-                self.multiview = Some(mv);
-                // Last, once the mosaic is running. The branch ends at a
-                // `proxysink`, and a proxysink pushing into a `proxysrc` whose
-                // pipeline has not started yet has nowhere to put the buffer:
-                // it waits, holding the tee branch, and the mosaic's return
-                // cell never fills.
-                self.attach_programme_return()
-                    .context("attaching the programme return branch for the mosaic")?;
-                self.show_held_clips_again();
-                info!(?shape, "multiview built for a subscriber");
+                // A rebuild at another size takes the old one down first, on
+                // the same worker, so there is never a moment with two mosaic
+                // encoders running.
+                self.send_mosaic_job(Some(shape))?;
             }
             Demand::Preview => {}
             Demand::Teardown => {
@@ -5439,13 +5599,13 @@ impl Mixer {
                     debug!("a subscriber arrived before the teardown landed, keeping the mosaic");
                     return Ok(());
                 }
-                self.detach_programme_return();
-                self.drop_mosaic()
+                self.send_mosaic_job(None)?;
             }
         }
         // The preview lives in the mosaic's pipeline, so a mosaic that has
         // just been built or rebuilt has to be told what is armed.
         self.preview_demand_now()?;
+        crate::observe::laps::mark("preview reconciled");
         // Clients learn the grid from the status document, and the grid has
         // just changed: a mosaic was built, torn down, or given a preview
         // cell. Nothing else announces that. A client subscribing before the
@@ -5479,7 +5639,7 @@ impl Mixer {
     /// verb decided somewhere else a moment ago.
     fn preview_demand_now(&mut self) -> Result<()> {
         let wanted = self.mv.preview_wanted(&self.canvas);
-        let cells = self.preview_cells_now();
+        let cells = self.preview_cells.len();
         let Some(mv) = self.multiview.as_mut() else {
             // No mosaic, so there is nowhere for a preview to live. The demand
             // that built the mosaic is behind this one and will come back here.
@@ -5490,10 +5650,10 @@ impl Mixer {
             Some(shape) => {
                 mv.preview_on(shape, self.mv.preview_publisher())
                     .context("building the preview compositor")?;
+                crate::observe::laps::mark("preview on");
                 self.mv.mark_preview_built(Some(shape));
-                mv.apply_preview(&self.canvas, &cells).context("drawing the armed scene")?;
-                info!(?shape, items = cells.len(), "preview composited for a subscriber");
-                self.show_held_clips_again();
+                info!(?shape, items = cells, "preview composited for a subscriber");
+                self.draw_preview();
             }
             None => {
                 mv.preview_off();
@@ -5511,17 +5671,7 @@ impl Mixer {
     /// `Vec` and nothing else.
     pub fn set_preview_cells(&mut self, cells: Vec<crate::multiview::preview::Cell>) {
         self.preview_cells = cells;
-        // Drawn as the programme would draw it: a source that is down shows
-        // its backup here too.
-        let cells = self.preview_cells_now();
-        if let Some(mv) = self.multiview.as_mut() {
-            if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
-                warn!(?e, "the armed scene could not be drawn in the preview");
-            }
-        }
-        if self.multiview.is_some() {
-            self.show_held_clips_again();
-        }
+        self.draw_preview();
     }
 
     /// What the control plane holds to open a preview or monitoring stream.
@@ -5557,6 +5707,7 @@ impl Mixer {
             }
             P::CloseLocal { target } => self.close_local_preview(&target),
             P::Scene { cells } => self.set_preview_cells(cells),
+            P::Built { built } => self.preview_built(built),
             P::Thumb(true) => {
                 if let Err(e) = self.thumb_branch.attach() {
                     warn!(?e, "the programme thumbnail branch could not be attached");
@@ -5592,6 +5743,8 @@ impl Mixer {
         // source's, which lives in that source's pipeline.
         let (pipeline, tee) = if target == "program" || target == "programme" {
             (self.program.clone(), self.araw_tee.clone())
+        } else if let Some(bus) = crate::buses::bus_of_target(target) {
+            (self.program.clone(), self.bus_tap_tee(bus)?)
         } else {
             let slot = self
                 .sources
@@ -5716,6 +5869,9 @@ impl Mixer {
         self.drop_source_feeds();
         self.pool.teardown();
         self.audio_taps.clear();
+        self.desk.shutdown();
+        self.replay.shutdown();
+        self.replay_lease = None;
         #[cfg(unix)]
         self.local_previews.clear();
         self.output_leases.clear();
@@ -5897,6 +6053,7 @@ pub fn spawn(
                 // say what the loop is inside. One uncontended lock on a path
                 // that is about to do a GStreamer state change.
                 running.begin(label);
+                crate::observe::laps::open(label);
                 // A net under every command. The programme's encoder lives in
                 // GStreamer's own threads and a panic here does not stop it,
                 // but without this the mixer thread dies and every command
@@ -5911,6 +6068,7 @@ pub fn spawn(
                 let outcome =
                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| mixer.handle(cmd)));
                 running.finish();
+                crate::observe::laps::close();
                 match outcome {
                     Ok(Ok(true)) => {}
                     Ok(Ok(false)) => break,
@@ -5968,9 +6126,15 @@ mod tests {
     mod recording_store;
     mod restart;
     mod rtsp_live;
+    mod filter_waits;
+    mod mosaic_off_loop;
     mod preview_churn;
     mod preview_rate;
     mod slow_restart;
+    mod buses;
+    mod buses_outlets;
+    mod bus_encoder_start;
+    mod buses_talk;
     mod sound_only;
     mod supervision;
     mod stale_work;
@@ -5979,6 +6143,7 @@ mod tests {
     mod refused_output;
     mod replug;
     mod slow_output;
+    mod slow_encoder_start;
     mod stuck_detach;
     mod thumb;
     mod ts_beside_flv;
@@ -6215,6 +6380,8 @@ mod tests {
             sources: vec![],
             outputs: vec![],
             filters: vec![],
+            audio: Default::default(),
+            replay: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
@@ -6235,7 +6402,7 @@ mod tests {
             canvas: crate::config::Canvas {
                 width: 320,
                 height: 180,
-                fps: 30,
+                fps: crate::config::FrameRate::whole(30),
                 sample_rate: 48000,
                 channels: 2,
             },
@@ -6256,6 +6423,8 @@ mod tests {
             sources: vec![],
             outputs: vec![],
             filters: vec![],
+            audio: Default::default(),
+            replay: Default::default(),
             plugins: Default::default(),
             source_path: Default::default(),
             tokens: vec![],
@@ -7102,7 +7271,7 @@ mod tests {
             full: false,
         });
         let shape = mix.mv.wanted().expect("a preview subscriber wants a mosaic too");
-        mix.multiview_demand(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
+        mix.multiview_demand_inline(DemandAt { demand: Demand::Build(shape), generation: mix.mv.generation() })
             .expect("building the mosaic");
         mix.set_preview_cells(vec![
             crate::multiview::preview::Cell {
@@ -7112,7 +7281,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height / 2,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
             crate::multiview::preview::Cell {
                 source: "cam2".into(),
@@ -7121,7 +7290,7 @@ mod tests {
                 width: canvas.width / 2,
                 height: canvas.height / 2,
                 alpha: 1.0,
-                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(),
+                rotation: 0.0, crop: (0.0, 0.0, 0.0, 0.0), sizing: Default::default(), filters: Vec::new(),
             },
         ]);
         let drawn = mix.multiview.as_ref().map(|mv| mv.preview_drawn()).unwrap_or(0);
@@ -7648,6 +7817,7 @@ mod tests {
             running: Arc::new(Running::default()),
             heard: Arc::default(),
             memory: Arc::default(),
+            replay: Arc::default(),
         };
         (handle, rx)
     }
@@ -7777,7 +7947,7 @@ mod tests {
         let mut events = mix.events.subscribe();
         assert!(mix.status().multiview.cells.is_empty(), "no cells before a mosaic");
 
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Build(crate::multiview::MultiviewShape { fps: 8, width: 320, height: 180 }),
             generation: mix.mv.generation(),
         })
@@ -7818,7 +7988,7 @@ mod tests {
         );
 
         mix.start().expect("the programme starts");
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Build(crate::multiview::MultiviewShape {
                 fps: 5,
                 width: 320,
@@ -7830,7 +8000,7 @@ mod tests {
         assert!(mix.return_pad.is_some(), "the mosaic was built without the programme return");
         assert!(q.static_pad("sink").and_then(|p| p.peer()).is_some());
 
-        mix.multiview_demand(crate::multiview::DemandAt {
+        mix.multiview_demand_inline(crate::multiview::DemandAt {
             demand: Demand::Teardown,
             generation: 0,
         })

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "exposure",
+  "description": "Exposure, where the protocol has it: the mode (auto, manual, shutter, iris) and the iris, shutter and gain in the camera's own steps as its manual numbers them. Only what is given changes.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "manual",
+        "shutter",
+        "iris"
+      ],
+      "description": "The exposure mode.",
+      "examples": [
+        "manual"
+      ]
+    },
+    "iris": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The camera's iris step.",
+      "examples": [
+        11
+      ]
+    },
+    "shutter": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The camera's shutter step.",
+      "examples": [
+        7
+      ]
+    },
+    "gain": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The camera's gain step.",
+      "examples": [
+        0
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

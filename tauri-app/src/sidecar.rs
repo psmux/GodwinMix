@@ -29,6 +29,11 @@ use crate::core_link::{self, Target};
 /// config to read and a GStreamer registry to scan, which on a cold Raspberry
 /// Pi is the slow part.
 const START_TIMEOUT: Duration = Duration::from_secs(25);
+/// The longest a daemon that keeps writing to its log is waited for. The first
+/// start after an install rebuilds the GStreamer registry, which took 19 s of a
+/// 26 s start on a Windows laptop, and killing it then left the app with no
+/// mixer at all.
+const START_CEILING: Duration = Duration::from_secs(120);
 /// How long a stopping daemon gets to close its outputs before it is killed.
 /// It closes them in milliseconds when it is well; this is the budget for one
 /// that is not, and it is spent while the app is on its way out.
@@ -195,12 +200,26 @@ fn log_tail(path: &std::path::Path, lines: usize) -> String {
     format!("\nThe last lines of it:\n{}", kept.join("\n"))
 }
 
+/// The size of a log in bytes, or 0 if it cannot be read.
+fn log_len(path: &std::path::Path) -> u64 {
+    std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+}
+
 /// Poll until the daemon answers, it dies, or the clock runs out.
 async fn wait_until_answering(app: &AppHandle, local: &Local) -> Result<(), String> {
     let http = app.state::<crate::Shell>().http.clone();
-    let deadline = Instant::now() + START_TIMEOUT;
+    let began = Instant::now();
+    let mut deadline = began + START_TIMEOUT;
+    let mut written = log_len(&local.log);
     let mut last = String::new();
     while Instant::now() < deadline {
+        // A daemon still writing its log is still starting: give it another
+        // full timeout from now, up to the ceiling.
+        let now_written = log_len(&local.log);
+        if now_written > written {
+            written = now_written;
+            deadline = (Instant::now() + START_TIMEOUT).min(began + START_CEILING);
+        }
         if !local.is_running() {
             // The last lines of the log go into the message: a headless check
             // on a CI runner has nowhere else to show them, and the person
@@ -219,7 +238,7 @@ async fn wait_until_answering(app: &AppHandle, local: &Local) -> Result<(), Stri
     }
     Err(format!(
         "The mixer did not answer within {} seconds. {last} What it said is in {}.",
-        START_TIMEOUT.as_secs(),
+        began.elapsed().as_secs(),
         local.log.display()
     ))
 }

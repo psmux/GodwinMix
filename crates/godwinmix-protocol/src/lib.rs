@@ -42,8 +42,10 @@
 //!
 //! See `README.md` beside this file for how another module adds a method.
 
+pub mod accounts;
 pub mod action;
 pub mod backup;
+pub mod buses;
 pub mod destination;
 pub mod devices;
 pub mod rendition;
@@ -55,8 +57,10 @@ pub mod feeds;
 pub mod fx;
 pub mod gallery;
 pub mod graphics;
+pub mod guests;
 pub mod headend;
 pub mod health;
+pub mod lut;
 pub mod idempotency;
 pub mod machine;
 pub mod media;
@@ -69,6 +73,8 @@ pub mod output_error;
 pub mod page;
 pub mod plugin;
 pub mod presence;
+pub mod prompter;
+pub mod replay;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;

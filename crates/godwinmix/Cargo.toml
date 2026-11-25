@@ -93,13 +93,17 @@ sha1 = "0.10"
 # SHA-256 of a device token, so the file that keeps them holds no secret.
 # Already compiled for rustls and the engine; this adds nothing to a build.
 ring = { workspace = true }
+argon2 = "0.6"
 
 [features]
-default = ["matte"]
+default = ["matte", "denoise"]
 # The person cutout with no green screen. On by default: the model and the
 # runtime are loaded only when somebody adds the filter. See
 # godwinmix-core/src/plugin/filters/matte/.
 matte = ["godwinmix-core/matte"]
+# Noise suppression for a microphone, `denoise/filter`. Pure Rust, about
+# 100 kB, and nothing runs until somebody adds the filter.
+denoise = ["godwinmix-core/denoise"]
 # Run `service` and `transition` plugins as WebAssembly components inside the
 # core (tier W). Off by default: it adds 11.9 MB to a release binary on
 # macos-aarch64 and takes the whole binary to 30.4 MB, and 09 section 4 item 4
@@ -109,3 +113,6 @@ wasm = ["dep:godwinmix-wasm"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+# A guest's browser in the guest tests: already in the tree through the core.
+gstreamer-webrtc = "0.24"
+gstreamer-sdp = "0.24"

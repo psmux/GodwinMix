@@ -21,6 +21,24 @@ from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 API_LEVEL = 1
 API_COMPATIBLE = 1
 
+class AccountInfo(TypedDict, total=False):
+    """`account.get`: who this call is, in a person's terms."""
+
+    accounts: bool
+    # True when the mixer has at least one account, so the page signs people in with a username rather than a token.
+    role: Union[Role, None]
+    user: Optional[str]
+    # The account this call signed in as. Absent for a token.
+    via: str
+    # `session` for a sign in, `token` for a bearer token, `open` for a mixer that asks for nothing.
+
+class AccountPasswordRequest(TypedDict, total=False):
+    """`account.change_password`."""
+
+    current: str
+    password: str
+    # At least 8 characters.
+
 class AdBreakRequest(TypedDict, total=False):
     """`adbreak.start`."""
 
@@ -165,6 +183,24 @@ class AlarmSettings(TypedDict, total=False):
     # The peak level under which sound counts as quiet.
     silence_ms: Optional[int]
 
+class AngleStatus(TypedDict, total=False):
+    """One angle's ring, as it stands."""
+
+    bytes: int
+    # Bytes of encoded picture and sound held.
+    dropped: int
+    # Frames the angle's encoder could not keep up with and dropped. The source and the programme lose none.
+    encoder: str
+    # The encoder this angle is written with, or `shared` when it reads the programme encoder's own output.
+    gops: int
+    # Whole groups of pictures held. The ring drops the oldest one at a time.
+    held_secs: float
+    # Seconds of picture held, from the oldest keyframe to the newest frame.
+    id: str
+    # The source id, or `programme`.
+    waiting: Optional[str]
+    # Why this angle holds nothing, when it does not: the source is not there, or has not sent a picture yet.
+
 class ApplyDraftRequest(TypedDict, total=False):
     """`scene.edit.apply`."""
 
@@ -234,6 +270,22 @@ class Asset(TypedDict, total=False):
     sha256: Optional[str]
     size: Optional[int]
 
+class AudioDevice(TypedDict, total=False):
+    """One sound card a bus can be played on."""
+
+    api: Optional[str]
+    # The platform's sound API, when it says: `osxaudio`, `wasapi2`, `pulse`, `alsa`.
+    id: str
+    # The id `device` takes, the most stable thing the platform says about it.
+    index: int
+    # Its number in this list, which `device` also takes.
+    name: str
+
+class AudioDeviceList(TypedDict, total=False):
+    """`audio.device.list`."""
+
+    devices: List[AudioDevice]
+
 class AudioSetParams(TypedDict, total=False):
     """`source.audio.set` takes an id as well as the levels: the id comes off the path on REST and out of the params on `/rpc`, and both land in one object."""
 
@@ -256,6 +308,14 @@ class AudioShape(TypedDict, total=False):
     channels: int
     codec: AudioCodec
     sample_rate: int
+
+class AudioStatus(TypedDict, total=False):
+    """The audio desk as `audio.bus.list` and the status snapshot report it."""
+
+    buses: List[BusStatus]
+    cue: List[str]
+    # The sources marked cue, in the order they were marked.
+    master: MasterConfig
 
 class AudioWant(TypedDict, total=False):
     """The audio an output wants. Every field left out is taken from the source."""
@@ -406,6 +466,67 @@ class BundleAsset(TypedDict, total=False):
     sha256: str
     size: int
 
+class BusConfig(TypedDict, total=False):
+    """One bus: a mix of its own beside the programme. Three kinds, decided by two keys. With neither, it carries each source at the level its `sends` give it (a source with no send is not on it). With `minus`, it is the programme as heard, without that one source: a guest's return. With `cue`, it carries the sources marked cue at unity, and the programme while nothing is marked."""
+
+    cue: bool
+    # Make this the cue bus.
+    device: Optional[str]
+    # Play the bus on a sound card here: `default`, a device name, its id, or its number in `audio.device.list`.
+    gain: float
+    # The bus master, 0.0 to 10.0.
+    id: str
+    # A slug: `monitor`, `guest-return`, `recording-b`.
+    minus: Optional[str]
+    # Make this bus the programme without this source.
+    muted: bool
+    name: Optional[str]
+    # What the desk shows. The id when left out.
+    sends: Dict[str, Any]
+    # Level per source id, 0.0 to 10.0, after the source's own fader and mute. Read only on a bus with neither `minus` nor `cue`.
+
+class BusIdRequest(TypedDict, total=False):
+    """`audio.bus.remove`, and anything else that names one bus."""
+
+    id: str
+
+class BusSetRequest(TypedDict, total=False):
+    """`audio.bus.set`. Only what is named moves. `device: ""` stops playing it on a sound card, and `minus: ""` makes a mix minus bus an ordinary one."""
+
+    device: Optional[str]
+    gain: Optional[float]
+    id: str
+    minus: Optional[str]
+    muted: Optional[bool]
+    name: Optional[str]
+
+class BusStatus(TypedDict, total=False):
+    """One bus and what is using it."""
+
+    cue: bool
+    # Make this the cue bus.
+    device: Optional[str]
+    # Play the bus on a sound card here: `default`, a device name, its id, or its number in `audio.device.list`.
+    device_state: Optional[str]
+    # The device it is playing on, once it opened, or why it is not.
+    gain: float
+    # The bus master, 0.0 to 10.0.
+    id: str
+    # A slug: `monitor`, `guest-return`, `recording-b`.
+    kind: str
+    # `sends`, `minus` or `cue`.
+    listen: str
+    # Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.
+    minus: Optional[str]
+    # Make this bus the programme without this source.
+    muted: bool
+    name: Optional[str]
+    # What the desk shows. The id when left out.
+    outputs: List[str]
+    # The outputs that take their sound from this bus.
+    sends: Dict[str, Any]
+    # Level per source id, 0.0 to 10.0, after the source's own fader and mute. Read only on a bus with neither `minus` nor `cue`.
+
 class CalibrateRequest(TypedDict, total=False):
     """`governor.calibrate`."""
 
@@ -426,6 +547,9 @@ class CanvasInfo(TypedDict, total=False):
     """The canvas every source is scaled onto and every output leaves by."""
 
     fps: int
+    # Frames a second to the nearest whole frame: 30 for 29.97.
+    fps_fraction: Optional[List[int]]
+    # The exact rate as numerator and denominator, when it is not whole: `[30000, 1001]` for 29.97. Absent for a whole rate.
     height: int
     width: int
 
@@ -914,6 +1038,24 @@ class Crop(TypedDict, total=False):
     right: float
     top: float
 
+class CueSetRequest(TypedDict, total=False):
+    """`audio.cue.set`: mark or clear one source for the cue bus."""
+
+    cue: bool
+    solo: bool
+    # Clear every other mark first, so only this source is heard: solo.
+    source: str
+
+class CutoutReadiness(TypedDict, total=False):
+    """`filter.cutout`. A page asks while a cutout it can see is new, so it can say the cutout is on its way rather than show a camera that looks as if nothing happened."""
+
+    error: Optional[str]
+    # Why the last cutout that failed could not start, until one starts.
+    preparing: int
+    # Cutouts whose model is opening or has not answered a frame yet. Each draws nothing of the camera until it has. Preview's copy of a scene counts as well as the programme's.
+    running: int
+    # Cutouts cutting the person out now.
+
 class Destination(TypedDict, total=False):
     """One destination as a client sees it. The key never appears: `has_key` says whether there is one."""
 
@@ -1116,6 +1258,22 @@ class ErrorAction(TypedDict, total=False):
     value: Any
     # `set-config`: the value to send.
 
+class EventIdRequest(TypedDict, total=False):
+    """`replay.event.delete`, and anything else that names one event."""
+
+    id: str
+
+class EventList(TypedDict, total=False):
+    """`replay.event.list`."""
+
+    events: List[ReplayEvent]
+
+class EventRenameRequest(TypedDict, total=False):
+    """`replay.event.rename`."""
+
+    id: str
+    name: str
+
 class ExportRequest(TypedDict, total=False):
     include_media: bool
     # Put the clips themselves in, as base64, rather than their names and sizes. Refused past 256 MB: copy the media folder instead.
@@ -1308,6 +1466,8 @@ class FilterRecord(TypedDict, total=False):
     """One filter as the core reports it."""
 
     id: str
+    params: Dict[str, Any]
+    # The settings in force, as `filter.set` last left them.
     side: str
     source: Optional[str]
     # Absent on a programme filter.
@@ -2002,6 +2162,14 @@ class GroupSourcesRequest(TypedDict, total=False):
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
 
+class GuestList(TypedDict, total=False):
+    """What `guest.invite.list` answers, and the payload of `event/guest.changed`."""
+
+    guests: List[Invite]
+    max_guests: int
+    # The most guests this show takes at once.
+    talkback: TalkbackState
+
 class HeadendChannel(TypedDict, total=False):
     """One channel."""
 
@@ -2199,6 +2367,8 @@ class ImportObsRequest(TypedDict, total=False):
 class ImportReport(TypedDict, total=False):
     config_toml: Optional[str]
     # The `[[sources]]` block for a config file. Only for an import that did not add the sources itself, which is what the command line wants.
+    filters_added: Optional[List[str]]
+    # With `add_sources`: the sound filters put on the added sources, by id. A sound filter stays on its source, as in OBS; one the mixer refused is in `skipped` with its reason.
     filters_duplicated: List[FilterReport]
     # OBS attaches a filter to a source, so a camera keyed in one scene is keyed in all of them. Here filters belong to the item, so a source filter is copied onto each placement and each copy is named here. This is the one thing an import changes the meaning of, so it is reported rather than left for somebody to find on air.
     items: int
@@ -2306,6 +2476,70 @@ class InstanceRecord(TypedDict, total=False):
     rss_bytes: Optional[int]
     state: str
 
+class Invite(TypedDict, total=False):
+    """One invite, without its key."""
+
+    bus: str
+    # The mix minus bus the guest hears, `guest-<id>`: the programme without the guest, with talkback added while it is held.
+    created: str
+    # When it was made, RFC 3339.
+    expires: str
+    # When it stops letting the guest in, RFC 3339. The guest is let go then.
+    id: str
+    # A slug, made from the name unless one was given.
+    name: str
+    # What the guest is called on screen and in the desk.
+    source: str
+    # The mixer source the guest's camera is, `guest-<id>`. It exists from the guest's first offer until the invite goes.
+    state: GuestState
+    talkback: bool
+    # Whether talkback is held into this guest's return now.
+
+class InviteCreateRequest(TypedDict, total=False):
+    """`guest.invite.create`."""
+
+    base: Optional[str]
+    # The address the link starts with, such as `https://studio.example.com`, for a mixer reached through a name or a tunnel. Left out, the first https address of this machine that is not loopback.
+    expires_in_secs: Optional[int]
+    # How long the invite lasts, in seconds. One day when left out; at most thirty days.
+    id: Optional[str]
+    # A slug for the invite. Made from the name when left out.
+    name: str
+    # The guest's name, as it should appear on screen. 1 to 64 characters.
+
+class InviteCreated(TypedDict, total=False):
+    """What `guest.invite.create` answers."""
+
+    id: str
+    invite: Invite
+    link: str
+    # The `/join/` page with the guest's id and key in the fragment, which a browser never sends to a server.
+    note: Optional[str]
+    # Set when no guest on another device could open the link as it stands, with what to change.
+    qr_svg: str
+    # The link as a QR code, an SVG document a page can show as it is.
+
+class InviteIdRequest(TypedDict, total=False):
+    """`guest.invite.revoke` and `guest.invite.link`."""
+
+    id: str
+
+class InviteLink(TypedDict, total=False):
+    """The link to send a guest, and the same as a QR code."""
+
+    id: str
+    link: str
+    # The `/join/` page with the guest's id and key in the fragment, which a browser never sends to a server.
+    note: Optional[str]
+    # Set when no guest on another device could open the link as it stands, with what to change.
+    qr_svg: str
+    # The link as a QR code, an SVG document a page can show as it is.
+
+class InviteRevoked(TypedDict, total=False):
+    """What `guest.invite.revoke` answers."""
+
+    revoked: Invite
+
 class ItemFilterRequest(TypedDict, total=False):
     """`scene.item.filter.set` and `remove`."""
 
@@ -2408,10 +2642,29 @@ class KeyColorRequest(TypedDict, total=False):
     y: Optional[float]
     # 0 to 1 down the source's picture.
 
+class KeyListing(TypedDict, total=False):
+    """The keys on air, bottom first."""
+
+    keys: List[KeyRecord]
+
+class KeyRecord(TypedDict, total=False):
+    id: str
+    name: str
+
 class KeyRevealed(TypedDict, total=False):
     """What `channel.key.reveal` answers: the key itself, and nothing a list would carry."""
 
     secret: str
+
+class KeySetRequest(TypedDict, total=False):
+    """`program.key.set`."""
+
+    on: bool
+    # True to put it on air, false to take it off.
+    scene: str
+    # The scene to put on air as a key, or take off, by name or by id.
+    transition: Union[Transition, None]
+    # How the key comes and goes: a name or {type, duration_ms, params}, as in `program.take`. A fade of 300 ms when absent; `"cut"` for none.
 
 class LadderRef(TypedDict, total=False):
     """A custom ladder."""
@@ -2488,6 +2741,13 @@ class Listener(TypedDict, total=False):
     transport: str
     # `tcp` or `udp`.
 
+class LoadRequest(TypedDict, total=False):
+    """`prompter.load`: put a script on the prompter, paused at the top."""
+
+    id: str
+    play: bool
+    # Start playing at once.
+
 class LogGstRequest(TypedDict, total=False):
     """`log.gst`."""
 
@@ -2514,6 +2774,118 @@ class LogSetRequest(TypedDict, total=False):
     target: Optional[str]
     # A module path prefix such as `godwinmix::mixer`. The longest match wins, so a more specific override still beats a broader one.
 
+class LookRequest(TypedDict, total=False):
+    """`prompter.set`: change how the text looks. Only what is named changes."""
+
+    cue: Optional[float]
+    # Where the cue line sits, 0.1 to 0.9 of the height from the top.
+    line_chars: Optional[int]
+    # Characters a row holds, 12 to 80. Fewer is bigger.
+    margin: Optional[float]
+    # Percent of the width left on each side, 0 to 30.
+    mirror: Optional[bool]
+
+class LutEntry(TypedDict, total=False):
+    """One LUT the library has."""
+
+    about: str
+    # For a built in, what it is for.
+    group: str
+    # `camera` for a log to Rec.709 conversion, `look` for a built in grade, `imported` for one brought in with `lut.import`.
+    name: str
+    # The slug a filter names it by: `lut = "teal-orange"`.
+    size: int
+    # Points a side of its cube, or the length of a 1D table.
+    title: str
+
+class LutImportRequest(TypedDict, total=False):
+    """`lut.import`: a file on the mixer's machine."""
+
+    name: Optional[str]
+    # The slug to keep it under. Taken from the file name when absent.
+    path: str
+    # An absolute path, or a name in the media library (where `media.upload` puts a file): a `.cube`, a `.3dl` or a `.png`.
+    title: Optional[str]
+    # What the UI calls it. The file's own title, or its name, when absent.
+
+class LutImported(TypedDict, total=False):
+    lut: LutEntry
+
+class LutList(TypedDict, total=False):
+    errors: List[str]
+    # Files in the library that would not read, each with the reason.
+    formats: List[str]
+    # What `lut.import` reads.
+    luts: List[LutEntry]
+    presets: List[LutPreset]
+
+class LutListRequest(TypedDict, total=False):
+    """`lut.list`."""
+
+    group: Optional[str]
+    # `camera`, `look` or `imported` to see only those.
+
+class LutNameRequest(TypedDict, total=False):
+    """`lut.remove` and `lut.preset.remove`."""
+
+    name: str
+
+class LutPreset(TypedDict, total=False):
+    """A saved look: a LUT, how much of it, and a colour correction before it. Anything left out is the filter's default."""
+
+    amount: Optional[float]
+    # 0 to 1.
+    brightness: Optional[float]
+    # -1 to 1.
+    contrast: Optional[float]
+    # -4 to 4.
+    gamma: Optional[float]
+    # -3 to 3.
+    hue_shift: Optional[float]
+    # -180 to 180.
+    lut: Optional[str]
+    # The LUT, by name.
+    name: str
+    # A slug, made from what is given: "Church Warm" is kept as `church-warm`.
+    saturation: Optional[float]
+    # -1 to 5.
+    tint: Optional[float]
+    # -1 greener to 1 more magenta.
+    title: str
+    warmth: Optional[float]
+    # -1 cooler to 1 warmer.
+
+class LutPreview(TypedDict, total=False):
+    image: str
+    # A JPEG as a data URL, ready for an `<img src>`.
+    kind: str
+    # `lut` or `preset`.
+    name: str
+    # The LUT or preset name.
+
+class LutPreviewRequest(TypedDict, total=False):
+    """`lut.preview`: small pictures of looks, on a source or on a test card."""
+
+    amount: Optional[float]
+    # The amount each LUT is shown at, 0 to 1. 1 when absent.
+    luts: Optional[List[str]]
+    # LUT names. Every LUT in the library when absent.
+    presets: List[str]
+    # Preset names, previewed after the LUTs.
+    source: Optional[str]
+    # The source to show them on. A test card of skin, sky, foliage and greys when absent or when the source has no picture yet.
+    width: Optional[int]
+    # Width of each picture in pixels, 64 to 640. 240 when absent.
+
+class LutPreviews(TypedDict, total=False):
+    log_like: Optional[bool]
+    # For a source, whether its picture looks like a log recording (flat, grey, no deep blacks). The camera conversions are for those only: on a normal camera they push skin bright and red.
+    original: str
+    # The picture with no look, to compare against.
+    previews: List[LutPreview]
+    source: Optional[str]
+    # The source the pictures show, or absent for the test card.
+
 class MachineStatus(TypedDict, total=False):
     """`machine.status`'s answer: the box, not one process."""
 
@@ -2531,10 +2903,42 @@ class MachineStatus(TypedDict, total=False):
     # Since the machine booted.
 
 class MarkRequest(TypedDict, total=False):
+    """`replay.mark`. With `point` it sets an in or an out point; with `seconds` alone it makes a whole event of the last that many seconds."""
+
+    angle: Optional[str]
+    # The angle it was seen on, which playback starts from.
+    name: Optional[str]
+    # A name for the event. Its id when left out.
+    point: Union[MarkPoint, None]
+    seconds: Optional[float]
+    # For an in point, how many seconds before now it goes. For a whole event, how long it is. 0 is now.
+
+class MarkRequest2(TypedDict, total=False):
     """`scene.history.mark`."""
 
     label: Optional[str]
     # What to call the group of changes that follows. Omit it to end the group, so the next change is its own undo step.
+
+class Marker(TypedDict, total=False):
+    """A place in a script a person can jump to: a line that starts with `#`."""
+
+    name: str
+    # The words after the `#`, or `marker <n>` for a bare `#`.
+    row: int
+    # The row it starts on.
+
+class MasterConfig(TypedDict, total=False):
+    """A master fader and mute."""
+
+    gain: float
+    # 0.0 silent, 1.0 unity, up to 10.0.
+    muted: bool
+
+class MasterSetRequest(TypedDict, total=False):
+    """`audio.master.set`. Only what is named moves."""
+
+    gain: Optional[float]
+    muted: Optional[bool]
 
 class MatchSource(TypedDict, total=False):
     """A rendition that follows a larger source's size, up to a limit."""
@@ -2696,6 +3100,8 @@ class MediaTagged(TypedDict, total=False):
 class Meters(TypedDict, total=False):
     """`event/meters`: the programme bus and every source, in one message at 10 per second, rather than one message per meter as the legacy stream sends."""
 
+    buses: Dict[str, Any]
+    # Peak dBFS per channel, per audio bus id, after the bus master. Left out while there are no buses.
     program: List[float]
     # Peak dBFS per channel on the programme bus.
     sources: Dict[str, Any]
@@ -2724,6 +3130,8 @@ class MissingSource(TypedDict, total=False):
 class MixerStatus(TypedDict, total=False):
     ad: Union[AdStatus, None]
     # Present while an ad break is armed or running.
+    audio: Union[AudioStatus, None]
+    # The programme master, the buses and the cue marks. Left out by a core that has no audio desk.
     backend: BackendInfo
     multiview: MultiviewStatus
     outputs: List[OutputStatus]
@@ -3076,6 +3484,43 @@ class PlanView(TypedDict, total=False):
     nodes: List[PlanNode]
     totals: PlanTotals
 
+class PlayRequest(TypedDict, total=False):
+    """`prompter.play`."""
+
+    speed: Optional[float]
+    # Rows a second to play at. Left out keeps the speed it has.
+
+class PlayRequest2(TypedDict, total=False):
+    """`replay.play`: load an event, or the last seconds of an angle, into a replay source and play it from the start."""
+
+    angle: Optional[str]
+    # The angle to show. The event's own angle, then the first angle.
+    event: Optional[str]
+    # The event to play. Without one, the last `seconds` of the angle.
+    seconds: Optional[float]
+    # How far back to start when no event is named. 10 when left out.
+    source: Optional[str]
+    # The source to play it on, added if it is not there. `replay` when left out.
+    speed: Optional[float]
+    # 1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.
+    take: bool
+    # Put it on air once it is loaded, as `program.take` would.
+    transition: Union[Transition, None]
+    # The transition for that take: a name such as `"fade"` or a stinger's object. A cut when left out.
+
+class PlayStatus(TypedDict, total=False):
+    """What `replay.play` and `replay.set` answer with."""
+
+    angle: str
+    duration_ms: int
+    # How long it plays at this speed.
+    event: Optional[str]
+    position_ms: int
+    # Where it is, in milliseconds of playback.
+    source: str
+    # The source it plays on.
+    speed: float
+
 class Playback(TypedDict, total=False):
     """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
@@ -3243,6 +3688,8 @@ class PreviewOpenRequest(TypedDict, total=False):
 class PreviewRequest(TypedDict, total=False):
     """`scene.preview.set`."""
 
+    after_take: Union[AfterTake, None]
+    # What Preview holds after a Take, for every client of this core: `same` (the default) keeps the scene just taken, `swap` arms the scene it replaced when the armed scene is taken. `program.take {}` takes what this leaves armed. Sent alone it changes the setting and nothing else; nothing is disarmed.
     draft: Optional[str]
     # A draft from `scene.edit.begin` for the preview to draw in place of the armed scene, which is how a designer sees what it is laying out. What is armed is left as it is, and `scene` is ignored. An empty string goes back to the armed scene; so does applying or discarding the draft.
     scene: Optional[str]
@@ -3283,6 +3730,8 @@ class ProgramState(TypedDict, total=False):
     # Present while an ad break is armed or on air.
     missing: List[str]
     # Sources the scene on air draws that this mixer does not have. The take went ahead without them and they draw nothing, so the slate or whatever sits under them shows through, until they are added back. Left out when every source is here.
+    on_air: Optional[str]
+    # What is on air, in one name: the scene when a scene is, whatever it holds, else the source, and null for the slate. `program` is null under a scene of more than one item, so read this to say what is up.
     preview: Optional[str]
     # The scene armed for the next `program.take` with no argument.
     previous: Optional[str]
@@ -3293,6 +3742,38 @@ class ProgramState(TypedDict, total=False):
     # Programme pipeline running time, in milliseconds.
     scene: Optional[str]
     # The scene on air, when one was taken by name.
+
+class PrompterState(TypedDict, total=False):
+    """`prompter.get`, and the payload of `event/prompter.changed`."""
+
+    at_ms: int
+    # When `position` was true, on the mixer's clock.
+    cue: float
+    # Where the cue line sits, as a fraction of the screen's height from the top. The row at `position` is drawn on it. 0.1 to 0.9.
+    line_chars: int
+    # The text size, as how many characters a row holds. Fewer is bigger. Every screen fits this many across its own width, so all of them break the rows in the same places. 12 to 80; 32 to start.
+    margin: float
+    # Space left on each side, as a percentage of the screen's width. 0 to 30.
+    markers: List[Marker]
+    mirror: bool
+    # Flip the text left to right, for a screen read through beam splitter glass. A screen may override it for itself.
+    now_ms: int
+    # The mixer's clock as this was written, so a screen can tell how far its own clock is from it.
+    playing: bool
+    position: float
+    # Where the prompter was at `at_ms`, in rows from the top. 2.5 is half way through the third row.
+    revision: int
+    # Moves on every change, so a screen can drop an answer older than the last event it applied.
+    rows: int
+    # How many rows it makes at `line_chars`.
+    script: Optional[str]
+    # The script on the prompter, or null when none is loaded.
+    speed: float
+    # Rows a second. Negative scrolls back. It applies only while `playing`.
+    title: Optional[str]
+    # Its title.
+    updated_ms: int
+    # When its text last changed, in milliseconds since the Unix epoch. A screen asks `prompter.rows` again when this or `line_chars` moves.
 
 class PublishAddress(TypedDict, total=False):
     """Where an encoder is pointed for one protocol."""
@@ -3421,6 +3902,49 @@ class ReorderRequest(TypedDict, total=False):
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch.
 
+class ReplayConfig(TypedDict, total=False):
+    """The `[replay]` table. With no angles nothing is built."""
+
+    angles: List[str]
+    # The angles to record: source ids, and `programme` for the programme itself. Empty turns replay off.
+    bitrate_kbps: int
+    # The bitrate a source angle is encoded at, in kbit/s. 0 or left out is the programme's own bitrate.
+    seconds: int
+    # Seconds each angle keeps, 1 to 1800. 60 when left out.
+
+class ReplayEvent(TypedDict, total=False):
+    """One event: a stretch of time between an in point and an out point, the same stretch on every angle."""
+
+    angle: Optional[str]
+    # The angle it was marked on, which playback starts from.
+    id: str
+    # A slug the mixer gives it: `replay-1`, `replay-2`.
+    in_ms: int
+    # The in point, in milliseconds of the mixer's clock.
+    name: str
+    # What the desk shows. The id until it is renamed.
+    out_ms: Optional[int]
+    # The out point. Absent while the event is still open (marked in and not out yet).
+
+class ReplaySetRequest(TypedDict, total=False):
+    """`replay.set`: change the angle or the speed of a replay that is playing, from the frame it is on."""
+
+    angle: Optional[str]
+    source: Optional[str]
+    speed: Optional[float]
+
+class ReplayStatus(TypedDict, total=False):
+    """`replay.get`: everything about replay on this mixer."""
+
+    angles: List[AngleStatus]
+    config: ReplayConfig
+    events: List[ReplayEvent]
+    # Every event, oldest first. An event whose stretch has left every ring is still listed until it is deleted, and plays nothing.
+    now_ms: int
+    # The mixer's clock now, in the same milliseconds as an event's points.
+    on: bool
+    # Whether anything is being recorded.
+
 class Report(TypedDict, total=False):
     """What `project.import` answers with."""
 
@@ -3471,6 +3995,25 @@ class Resync(TypedDict, total=False):
     from_seq: int
     # The last sequence number the client is known to have. Everything after it was dropped; re-subscribe for a fresh snapshot.
 
+class Row(TypedDict, total=False):
+    """One row of a script."""
+
+    line: int
+    # The line it came from, counting from 0.
+    marker: bool
+    # True for the rows of a marker line, drawn as a heading.
+    text: str
+    # The words, with any asterisks still in them.
+
+class RowsAnswer(TypedDict, total=False):
+    """`prompter.rows`: the script on the prompter, broken into rows."""
+
+    line_chars: int
+    # The width the rows were made at.
+    rows: List[Row]
+    script: Optional[str]
+    updated_ms: int
+
 class RtmpInfo(TypedDict, total=False):
     """The RTMP port every channel shares."""
 
@@ -3494,6 +4037,27 @@ class SaveRequest(TypedDict, total=False):
     # The new preset's name. A slug: lower case letters, digits and hyphens.
     out: Optional[str]
     # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
+class SaveRequest2(TypedDict, total=False):
+    """`replay.save`: write an event, or the whole buffer of one angle, to an MP4 in the media folder without encoding it again."""
+
+    angle: Optional[str]
+    # The angle to save. The event's own, then `programme` if it is recorded, then the first angle.
+    event: Optional[str]
+    # The event to save. The whole buffer when left out.
+    name: Optional[str]
+    # The file's name, without a folder. Made from the time when left out.
+
+class SaveStatus(TypedDict, total=False):
+    """What `replay.save` answers with once the file is written."""
+
+    angle: str
+    bytes: int
+    duration_ms: int
+    name: str
+    # The file, as the media library names it: `Replays/<name>.mp4`.
+    path: str
+    # Its absolute path on the mixer's machine.
 
 class ScanRequest(TypedDict, total=False):
     """`headend.scan`."""
@@ -3590,6 +4154,59 @@ class SceneView(TypedDict, total=False):
     records: List[Record]
     # The scene's own record and one per item, parents before children.
 
+class Script(TypedDict, total=False):
+    """One script, as `prompter.script.get` and `prompter.script.save` answer."""
+
+    id: str
+    # A slug: `evening-news`.
+    text: str
+    # Plain text. A line starting with `#` is a marker, `*word*` is drawn in italics and `**word**` in bold.
+    title: str
+    updated_ms: int
+    # When it was last saved, in milliseconds since the Unix epoch.
+
+class ScriptChanged(TypedDict, total=False):
+    """`event/prompter.script.changed`."""
+
+    id: str
+    removed: bool
+    # True when the script was removed.
+    updated_ms: int
+
+class ScriptIdRequest(TypedDict, total=False):
+    """`prompter.script.get` and `prompter.script.remove`."""
+
+    id: str
+
+class ScriptList(TypedDict, total=False):
+    """`prompter.script.list`."""
+
+    on: Optional[str]
+    # The one on the prompter now.
+    scripts: List[ScriptSummary]
+    # Every script, by id.
+
+class ScriptSaveRequest(TypedDict, total=False):
+    """`prompter.script.save`: make a script, or replace one with the same id."""
+
+    id: Optional[str]
+    # A slug. Made from the title when left out: "Evening news" is `evening-news`.
+    text: str
+    # The words. A line starting with `#` is a marker.
+    title: str
+
+class ScriptSummary(TypedDict, total=False):
+    """One script in `prompter.script.list`, without its text."""
+
+    bytes: int
+    id: str
+    lines: int
+    # Lines as written, blank ones included.
+    markers: List[str]
+    # The names of its markers, in order.
+    title: str
+    updated_ms: int
+
 class SearchRequest(TypedDict, total=False):
     """`plugin.search`."""
 
@@ -3626,6 +4243,52 @@ class SeekParams(TypedDict, total=False):
     # Source id.
     position_ms: float
     # Milliseconds from the start of the clip. Off either end is clamped rather than refused, so a scrubber flicked past the end lands there.
+
+class SeekRequest(TypedDict, total=False):
+    """`prompter.seek`: exactly one of these."""
+
+    by: Optional[float]
+    # Move this many rows on, or back when negative.
+    fraction: Optional[float]
+    # A fraction of the way through: 0 is the top, 1 the end.
+    marker: Optional[str]
+    # A marker by name, or by its number counting from 1 as a string ("2").
+    row: Optional[float]
+    # A row, from 0. 2.5 is half way through the third row.
+    step: Optional[int]
+    # Move this many markers on (1 is the next, -1 the one before). From inside a section, -1 goes to the start of that section.
+
+class SendSetRequest(TypedDict, total=False):
+    """`audio.send.set`: how much of one source goes to one bus."""
+
+    bus: str
+    level: float
+    # 0.0 takes the source off the bus, 1.0 is unity, up to 10.0.
+    source: str
+
+class SessionInfo(TypedDict, total=False):
+    """One signed in browser or device."""
+
+    address: str
+    # The address it signed in from, as the mixer saw it.
+    created: str
+    # When it signed in, RFC 3339 in UTC.
+    current: bool
+    # True for the session that made this call.
+    device: str
+    # The browser's own description of itself, shortened.
+    expires: str
+    # When it stops working unless the person signs in again.
+    id: str
+    # A short id for this session, to end it with `user.sign_out`. Never the secret.
+    last_seen: Optional[str]
+    # When this mixer last saw it, since the mixer started. Absent when it has not been seen since then.
+    user: str
+
+class SessionList(TypedDict, total=False):
+    """`user.sessions`."""
+
+    sessions: List[SessionInfo]
 
 class SessionLogRequest(TypedDict, total=False):
     """`core.session_log`."""
@@ -4046,6 +4709,25 @@ class ShowStatsRequest(TypedDict, total=False):
     ids: Optional[List[str]]
     # Left out: every show.
 
+class SignRequest(TypedDict, total=False):
+    ip: Optional[str]
+    # An address the link opens from and from nowhere else, for a link meant for one viewer.
+    output: str
+    # The HLS output, by id.
+    ttl_secs: Optional[int]
+    # How long the link works, in seconds: 3600 when left out, at most 2592000 (thirty days).
+
+class SignedLink(TypedDict, total=False):
+    expires: int
+    # When it stops working, in Unix seconds.
+    master_url_path: str
+    # The multivariant playlist's path with the signed query on it. Put the page's origin in front of it for a link.
+
+class SignedOut(TypedDict, total=False):
+    """`user.sign_out`."""
+
+    sessions_ended: int
+
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
 
@@ -4133,6 +4815,14 @@ class SourceStatus(TypedDict, total=False):
     video_idle_ms: Optional[int]
     # Milliseconds since the last video buffer, or None if none has arrived.
 
+class SpeedRequest(TypedDict, total=False):
+    """`prompter.speed`: one of `speed` or `by`. Shaped for something that follows the speaker as well as for a person: a plugin listening to the voice sends `speed` as often as it likes, and the screens follow without a jump, since the position carries on from where it was at the moment of the change."""
+
+    by: Optional[float]
+    # Add this to the speed it has: what a key or a Stream Deck button sends.
+    speed: Optional[float]
+    # Rows a second, -20 to 20. Negative scrolls back.
+
 class StatsListing(TypedDict, total=False):
     instances: List[InstanceRecord]
 
@@ -4206,6 +4896,26 @@ class TakeRequest(TypedDict, total=False):
     # Id of the source to put on air.
     transition: Union[Transition, None]
     # "fade", or {type, duration_ms, params}. Absent is a cut.
+
+class TalkbackRequest(TypedDict, total=False):
+    """`guest.talkback.set`."""
+
+    guest: Optional[str]
+    # The guest to talk to. Left out, every guest that is live or joining.
+    on: bool
+    # Hold talkback (true) or let it go (false).
+    source: Optional[str]
+    # Another input to talk with, such as a microphone on the mixer. It is muted on the programme from then on, for as long as it is the talkback source. Left out, the source stays what it was.
+
+class TalkbackState(TypedDict, total=False):
+    """Talkback as it stands."""
+
+    held: List[str]
+    # The guests it is held into now.
+    present: bool
+    # Whether that source is in the mixer now.
+    source: str
+    # The source that talks: `guest-talkback` (the operator's browser microphone, published to `/guest/talkback/whip`) unless another input was chosen. It is kept muted on the programme.
 
 class Tally(TypedDict, total=False):
     """`event/tally`."""
@@ -4447,6 +5157,13 @@ class TokenRevoked(TypedDict, total=False):
 
     revoked: DeviceToken
 
+class TokenSafety(TypedDict, total=False):
+    """A token's own safety numbers, `[[tokens]] safety = { .. }`. The core's `[safety]` table is the default. A human token may move any of these in either direction; a token marked `agent` may only make them harder, which is enforced in `godwinmix_core::safety`. Held here rather than in the engine because the dispatcher has the token and not the config."""
+
+    flash_guard: Optional[bool]
+    max_takes_per_minute: Optional[int]
+    min_hold_ms: Optional[int]
+
 class ToolCallRequest(TypedDict, total=False):
     """`tool.call`."""
 
@@ -4559,6 +5276,77 @@ class UpdatePluginRequest(TypedDict, total=False):
     id: str
     source: Optional[str]
     # Where the new build comes from. Defaults to wherever this plugin was installed from last time.
+
+class UserAddRequest(TypedDict, total=False):
+    """`user.add`."""
+
+    confirm: ConfirmPolicy
+    name: str
+    # Lower case letters, digits, `.`, `-` and `_`, up to 32 characters.
+    password: str
+    # At least 8 characters.
+    role: Role
+    # `view`, `operate` (the default) or `admin`.
+
+class UserChanged(TypedDict, total=False):
+    """What `user.add`, `user.update`, `user.reset_password` and `user.remove` answer with."""
+
+    sessions_ended: int
+    # How many sessions the change ended.
+    user: UserInfo
+
+class UserInfo(TypedDict, total=False):
+    """One account, without its password."""
+
+    confirm: ConfirmPolicy
+    # `required` asks for a confirmation before a destructive call.
+    created: str
+    # When it was made, RFC 3339 in UTC.
+    disabled: bool
+    # A disabled account cannot sign in, and its sessions are ended.
+    name: str
+    # The username. Also the id every take is recorded against in `program.history`.
+    role: Role
+    safety: Union[TokenSafety, None]
+    sessions: int
+    # How many sessions are signed in now.
+
+class UserList(TypedDict, total=False):
+    """`user.list`."""
+
+    users: List[UserInfo]
+
+class UserNameRequest(TypedDict, total=False):
+    """`user.remove` and `user.sessions`."""
+
+    name: str
+
+class UserPasswordRequest(TypedDict, total=False):
+    """`user.reset_password`."""
+
+    name: str
+    password: str
+    # The new password, at least 8 characters.
+
+class UserSessionsRequest(TypedDict, total=False):
+    """`user.sessions` with no name lists everybody's."""
+
+    name: Optional[str]
+
+class UserSignOutRequest(TypedDict, total=False):
+    """`user.sign_out`: one session by its id, or every session of one user."""
+
+    name: Optional[str]
+    session: Optional[str]
+
+class UserUpdateRequest(TypedDict, total=False):
+    """`user.update`: whatever is given changes, the rest stays."""
+
+    confirm: Union[ConfirmPolicy, None]
+    disabled: Optional[bool]
+    # True ends every session of the account at once and refuses its sign in.
+    name: str
+    role: Union[Role, None]
 
 class ValidateRequest(TypedDict, total=False):
     scene: Optional[str]
@@ -4778,6 +5566,12 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+class FxAssignedEvent(TypedDict, total=False):
+    assigned: FxAssignments
+
+# What Preview holds after a Take. See the module.
+AfterTake = Literal['same', 'swap']
+
 # What an alarm is about.
 AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
 
@@ -4853,6 +5647,9 @@ BridgeTransport = Literal['rtp', 'srt', 'whip']
 # A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart because it has a port of its own.
 ChannelProtocol = Literal['rtmp', 'srt', 'whip']
 
+# Whether destructive calls need a confirm round trip first.
+ConfirmPolicy = Literal['none', 'required']
+
 # Whether an interlaced picture is made progressive.
 Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
 
@@ -4907,6 +5704,9 @@ GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 't
 # Which NVIDIA GPU a rendition's decode, scale and encode run on: a CUDA device index (0 is the first card), or `"auto"`, the card with the least work when the channel starts. All three steps stay on that one card, so a picture never crosses from one card's memory to another's.
 GpuPick = Union[int, GpuWord]
 
+# Where a guest is.
+GuestState = Literal['invited', 'joining', 'live', 'gone']
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
@@ -4915,6 +5715,9 @@ Id = str
 
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
+
+# Which point `replay.mark` sets.
+MarkPoint = Literal['in', 'out']
 
 # Why a source is not running.
 MissingWhy = Literal['failed', 'not_started', 'removed', 'unknown']
@@ -4956,6 +5759,9 @@ RestartHow = Literal['supervised', 'none']
 # How the programme goes back to a source that came back.
 ReturnMode = Literal['auto', 'manual']
 
+# What an account may do. The same ladder as a token's scopes, in the words a person picking one for a colleague would use.
+Role = Literal['view', 'operate', 'admin']
+
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
 
@@ -4996,11 +5802,21 @@ VideoCodec = Union[Literal['h264', 'h265', 'av1', 'vp8', 'vp9', 'mpeg2', 'prores
 Zone = Literal['full', 'lower-third', 'bug', 'top', 'bottom', 'center', 'overlay']
 
 METHODS = (
+    {"name": "account.change_password", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/account/change_password"), "summary": "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused."},
+    {"name": "account.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/account"), "summary": 'Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.'},
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "agent.tools", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/agent/tools"), "summary": 'The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.'},
+    {"name": "audio.bus.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/bus/add"), "summary": 'Add a bus beside the programme mix, live. Nothing is built for buses until the first one.'},
+    {"name": "audio.bus.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/audio/bus/list"), "summary": 'The programme master, every bus with its sends, and the sources marked cue.'},
+    {"name": "audio.bus.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/audio/bus/remove"), "summary": 'Take a bus out, live. Refused while an output takes its sound from it.'},
+    {"name": "audio.bus.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/bus/set"), "summary": 'Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.'},
+    {"name": "audio.cue.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/cue/set"), "summary": 'Mark or clear a source for the cue bus. `solo` clears every other mark first.'},
+    {"name": "audio.device.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/audio/device/list"), "summary": "The sound outputs on the mixer's machine that a bus can play on."},
+    {"name": "audio.master.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/master/set"), "summary": "Move the programme's master fader or mute. Only what is named moves."},
+    {"name": "audio.send.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/audio/send/set"), "summary": 'Set how much of one source goes to one bus. 0 takes it off the bus.'},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer\'s programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.'},
     {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
     {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
@@ -5043,6 +5859,7 @@ METHODS = (
     {"name": "feed.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/set"), "summary": 'Change a feed\'s address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one.'},
     {"name": "feed.test", "scope": "operate", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/feed/test"), "summary": 'Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.'},
     {"name": "filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters"), "summary": 'Hang a filter on one source or on the programme, live.'},
+    {"name": "filter.cutout", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/cutout"), "summary": 'Whether the cutouts are ready: how many are still opening their model, and so draw nothing of the camera, and how many cut the person out.'},
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
@@ -5067,6 +5884,11 @@ METHODS = (
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "gpu.rebalance", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gpu/rebalance"), "summary": 'Even the NVIDIA cards out: move the fewest channels placed by gpu auto from the busiest card to the idlest, by the work the governor holds on each. A channel placed by auto stays on its card while it runs, so this is the only thing that moves one, and each move restarts its encode. only limits it to some shows or channels; dry_run answers the moves and makes none. A station answers it.'},
     {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes, and from a station the shows and channels converting on each. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
+    {"name": "guest.invite.create", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/invite/create"), "summary": "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."},
+    {"name": "guest.invite.link", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/invite/link"), "summary": "An invite's link and QR code again, to copy or show."},
+    {"name": "guest.invite.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/guest/invite/list"), "summary": "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."},
+    {"name": "guest.invite.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/guest/invite/revoke"), "summary": "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."},
+    {"name": "guest.talkback.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/guest/talkback/set"), "summary": 'Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.'},
     {"name": "headend.channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/add"), "summary": "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."},
     {"name": "headend.channel.bulk", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/bulk"), "summary": 'The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.'},
     {"name": "headend.channel.follow", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/follow"), "summary": 'Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.'},
@@ -5079,9 +5901,16 @@ METHODS = (
     {"name": "headend.profile.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/profile/save"), "summary": 'Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.'},
     {"name": "headend.scan", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/headend/scan"), "summary": "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add."},
     {"name": "headend.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/status"), "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."},
+    {"name": "hls.sign", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/hls/sign"), "summary": 'A viewer link to one HLS output that stops working after a time, and can be held to one address.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
+    {"name": "lut.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/lut/import"), "summary": "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library."},
+    {"name": "lut.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/lut/list"), "summary": 'Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.'},
+    {"name": "lut.preset.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/lut/preset/remove"), "summary": 'Delete a saved preset.'},
+    {"name": "lut.preset.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/lut/preset/save"), "summary": 'Save a look under a name: a LUT, how much of it, and a colour correction before it.'},
+    {"name": "lut.preview", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/lut/preview"), "summary": 'Small JPEG pictures of looks on a source, or on a test card, for a picker.'},
+    {"name": "lut.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/lut/remove"), "summary": 'Delete an imported LUT. The built in ones cannot be deleted.'},
     {"name": "machine.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/machine/status"), "summary": 'The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.'},
     {"name": "media.convert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/convert"), "summary": 'Transcode a library file to a web safe copy, in the background.'},
     {"name": "media.folder.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/folder/add"), "summary": 'Make a folder in the media library, inside another when the name has a / in it.'},
@@ -5137,14 +5966,38 @@ METHODS = (
     {"name": "program.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program"), "summary": 'What is on air, the programme running time, and what revert would go back to.'},
     {"name": "program.golive", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/golive"), "summary": 'One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.'},
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
+    {"name": "program.key.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/key/list"), "summary": 'The downstream keys on air, bottom first.'},
+    {"name": "program.key.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/key/set"), "summary": 'Put a scene on air as a downstream key, above whatever is taken, or take it off.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
     {"name": "program.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/thumbnail"), "summary": 'What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.'},
     {"name": "program.transitions", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/program/transitions"), "summary": "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be."},
     {"name": "project.export", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/project/export"), "summary": "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."},
     {"name": "project.import", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/project/import"), "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."},
+    {"name": "prompter.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/prompter"), "summary": "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look."},
+    {"name": "prompter.load", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/load"), "summary": 'Put a script on the prompter, at the top and paused unless play is true.'},
+    {"name": "prompter.pause", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/pause"), "summary": 'Stop the prompter where it is.'},
+    {"name": "prompter.play", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/play"), "summary": 'Start the prompter scrolling, at speed when given. From the end it starts again at the top.'},
+    {"name": "prompter.rows", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/prompter/rows"), "summary": 'The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.'},
+    {"name": "prompter.script.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/prompter/script/get"), "summary": 'One prompter script with its text.'},
+    {"name": "prompter.script.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/prompter/script/list"), "summary": 'Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.'},
+    {"name": "prompter.script.remove", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/script/remove"), "summary": 'Forget a prompter script. When it is on the prompter the screens go empty.'},
+    {"name": "prompter.script.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/script/save"), "summary": 'Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.'},
+    {"name": "prompter.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/seek"), "summary": 'Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).'},
+    {"name": "prompter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/set"), "summary": 'Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.'},
+    {"name": "prompter.speed", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/prompter/speed"), "summary": 'Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.'},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
     {"name": "rendition.presets", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/presets"), "summary": 'Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.'},
+    {"name": "replay.event.delete", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/event/delete"), "summary": 'Forget a replay event. The recording it pointed at is not touched.'},
+    {"name": "replay.event.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/replay/event/list"), "summary": 'Every replay event, oldest first.'},
+    {"name": "replay.event.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/event/rename"), "summary": 'Give a replay event a name.'},
+    {"name": "replay.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/replay"), "summary": "Whether replay is on, each angle's buffer depth and size, and every event."},
+    {"name": "replay.mark", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/mark"), "summary": 'Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.'},
+    {"name": "replay.play", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/play"), "summary": 'Play an event, or the last seconds of an angle, on a replay source, added if it is not there.'},
+    {"name": "replay.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/save"), "summary": 'Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.'},
+    {"name": "replay.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/set"), "summary": "Change a playing replay's angle or speed, from the frame it is on."},
+    {"name": "replay.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/replay/start"), "summary": 'Record these angles, each the last `seconds`. Called again, it changes them in place.'},
+    {"name": "replay.stop", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/replay/stop"), "summary": 'Stop recording, free every buffer and forget every event.'},
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
     {"name": "scene.apply_graphic", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_graphic"), "summary": 'Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.'},
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
@@ -5185,7 +6038,7 @@ METHODS = (
     {"name": "scene.params.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/params/get"), "summary": "The collection's typed parameters, readable without their values, so a client discovers what is fillable before filling it."},
     {"name": "scene.params.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/params/set"), "summary": "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it."},
     {"name": "scene.preview.frame", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/preview/frame"), "summary": 'A still of the armed scene as base64 JPEG, the floor every client has.'},
-    {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it.'},
+    {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.'},
     {"name": "scene.redo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/redo"), "summary": 'Put back what your undo took away.'},
     {"name": "scene.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/scenes/{id}"), "summary": 'Delete a scene. What is on air is not touched.'},
     {"name": "scene.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/rename"), "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones."},
@@ -5244,6 +6097,13 @@ METHODS = (
     {"name": "token.list", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/token/list"), "summary": 'Every device token: its id, label, scope and when it was made. Never a secret.'},
     {"name": "token.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/token/revoke"), "summary": "Take a device token back. The device's next call is refused, including on a connection it already has open."},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
+    {"name": "user.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/add"), "summary": 'Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.'},
+    {"name": "user.list", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/user/list"), "summary": 'Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.'},
+    {"name": "user.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/user/remove"), "summary": 'Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.'},
+    {"name": "user.reset_password", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/reset_password"), "summary": 'Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.'},
+    {"name": "user.sessions", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/user/sessions"), "summary": "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen."},
+    {"name": "user.sign_out", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/sign_out"), "summary": 'End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.'},
+    {"name": "user.update", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/user/update"), "summary": "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role."},
     {"name": "vitals.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/vitals"), "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."},
     {"name": "vitals.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/vitals/set"), "summary": 'Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.'},
 )
@@ -5286,6 +6146,10 @@ EVENT_NAMES = (
     "feed.failed",
     "feed.recovered",
     "presence.changed",
+    "prompter.changed",
+    "prompter.script.changed",
+    "guest.changed",
+    "fx.assigned",
     "health",
 )
 
@@ -5313,6 +6177,24 @@ class GeneratedMethods:
         raise NotImplementedError(
             "this object has no transport: build it with godwinmix.connect()"
         )
+
+    async def account_change_password(
+        self,
+        current: str,
+        password: str,
+    ) -> SignedOut:
+        """Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused."""
+        params: Dict[str, Any] = {}
+        params["current"] = current
+        params["password"] = password
+        return await self._call("account.change_password", params)
+
+    async def account_get(
+        self,
+    ) -> AccountInfo:
+        """Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all."""
+        params: Dict[str, Any] = {}
+        return await self._call("account.get", params)
 
     async def adbreak_end(
         self,
@@ -5376,6 +6258,127 @@ class GeneratedMethods:
         """The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder."""
         params: Dict[str, Any] = {}
         return await self._call("agent.tools", params)
+
+    async def audio_bus_add(
+        self,
+        id: str,
+        *,
+        cue: Optional[bool] = None,
+        device: Optional[str] = None,
+        gain: Optional[float] = None,
+        minus: Optional[str] = None,
+        muted: Optional[bool] = None,
+        name: Optional[str] = None,
+        sends: Optional[Dict[str, Any]] = None,
+    ) -> BusStatus:
+        """Add a bus beside the programme mix, live. Nothing is built for buses until the first one."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if cue is not None:
+            params["cue"] = cue
+        if device is not None:
+            params["device"] = device
+        if gain is not None:
+            params["gain"] = gain
+        if minus is not None:
+            params["minus"] = minus
+        if muted is not None:
+            params["muted"] = muted
+        if name is not None:
+            params["name"] = name
+        if sends is not None:
+            params["sends"] = sends
+        return await self._call("audio.bus.add", params)
+
+    async def audio_bus_list(
+        self,
+    ) -> AudioStatus:
+        """The programme master, every bus with its sends, and the sources marked cue."""
+        params: Dict[str, Any] = {}
+        return await self._call("audio.bus.list", params)
+
+    async def audio_bus_remove(
+        self,
+        id: str,
+    ) -> BusIdRequest:
+        """Take a bus out, live. Refused while an output takes its sound from it."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("audio.bus.remove", params)
+
+    async def audio_bus_set(
+        self,
+        id: str,
+        *,
+        device: Optional[str] = None,
+        gain: Optional[float] = None,
+        minus: Optional[str] = None,
+        muted: Optional[bool] = None,
+        name: Optional[str] = None,
+    ) -> BusStatus:
+        """Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if device is not None:
+            params["device"] = device
+        if gain is not None:
+            params["gain"] = gain
+        if minus is not None:
+            params["minus"] = minus
+        if muted is not None:
+            params["muted"] = muted
+        if name is not None:
+            params["name"] = name
+        return await self._call("audio.bus.set", params)
+
+    async def audio_cue_set(
+        self,
+        cue: bool,
+        source: str,
+        *,
+        solo: Optional[bool] = None,
+    ) -> AudioStatus:
+        """Mark or clear a source for the cue bus. `solo` clears every other mark first."""
+        params: Dict[str, Any] = {}
+        params["cue"] = cue
+        params["source"] = source
+        if solo is not None:
+            params["solo"] = solo
+        return await self._call("audio.cue.set", params)
+
+    async def audio_device_list(
+        self,
+    ) -> AudioDeviceList:
+        """The sound outputs on the mixer's machine that a bus can play on."""
+        params: Dict[str, Any] = {}
+        return await self._call("audio.device.list", params)
+
+    async def audio_master_set(
+        self,
+        *,
+        gain: Optional[float] = None,
+        muted: Optional[bool] = None,
+    ) -> MasterConfig:
+        """Move the programme's master fader or mute. Only what is named moves."""
+        params: Dict[str, Any] = {}
+        if gain is not None:
+            params["gain"] = gain
+        if muted is not None:
+            params["muted"] = muted
+        return await self._call("audio.master.set", params)
+
+    async def audio_send_set(
+        self,
+        bus: str,
+        level: float,
+        source: str,
+    ) -> BusStatus:
+        """Set how much of one source goes to one bus. 0 takes it off the bus."""
+        params: Dict[str, Any] = {}
+        params["bus"] = bus
+        params["level"] = level
+        params["source"] = source
+        return await self._call("audio.send.set", params)
 
     async def channel_add(
         self,
@@ -5997,6 +7000,13 @@ class GeneratedMethods:
             params["source"] = source
         return await self._call("filter.add", params)
 
+    async def filter_cutout(
+        self,
+    ) -> CutoutReadiness:
+        """Whether the cutouts are ready: how many are still opening their model, and so draw nothing of the camera, and how many cut the person out."""
+        params: Dict[str, Any] = {}
+        return await self._call("filter.cutout", params)
+
     async def filter_list(
         self,
     ) -> FilterListing:
@@ -6417,6 +7427,66 @@ class GeneratedMethods:
             params["since_ms"] = since_ms
         return await self._call("gpu.status", params)
 
+    async def guest_invite_create(
+        self,
+        name: str,
+        *,
+        base: Optional[str] = None,
+        expires_in_secs: Optional[int] = None,
+        id: Optional[str] = None,
+    ) -> InviteCreated:
+        """Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if base is not None:
+            params["base"] = base
+        if expires_in_secs is not None:
+            params["expires_in_secs"] = expires_in_secs
+        if id is not None:
+            params["id"] = id
+        return await self._call("guest.invite.create", params)
+
+    async def guest_invite_link(
+        self,
+        id: str,
+    ) -> InviteLink:
+        """An invite's link and QR code again, to copy or show."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("guest.invite.link", params)
+
+    async def guest_invite_list(
+        self,
+    ) -> GuestList:
+        """Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback."""
+        params: Dict[str, Any] = {}
+        return await self._call("guest.invite.list", params)
+
+    async def guest_invite_revoke(
+        self,
+        id: str,
+    ) -> InviteRevoked:
+        """Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("guest.invite.revoke", params)
+
+    async def guest_talkback_set(
+        self,
+        on: bool,
+        *,
+        guest: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> GuestList:
+        """Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with."""
+        params: Dict[str, Any] = {}
+        params["on"] = on
+        if guest is not None:
+            params["guest"] = guest
+        if source is not None:
+            params["source"] = source
+        return await self._call("guest.talkback.set", params)
+
     async def headend_channel_add(
         self,
         channels: List[HeadendChannel],
@@ -6569,6 +7639,22 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         return await self._call("headend.status", params)
 
+    async def hls_sign(
+        self,
+        output: str,
+        *,
+        ip: Optional[str] = None,
+        ttl_secs: Optional[int] = None,
+    ) -> SignedLink:
+        """A viewer link to one HLS output that stops working after a time, and can be held to one address."""
+        params: Dict[str, Any] = {}
+        params["output"] = output
+        if ip is not None:
+            params["ip"] = ip
+        if ttl_secs is not None:
+            params["ttl_secs"] = ttl_secs
+        return await self._call("hls.sign", params)
+
     async def log_gst(
         self,
         categories: str,
@@ -6607,6 +7693,114 @@ class GeneratedMethods:
         if target is not None:
             params["target"] = target
         return await self._call("log.set", params)
+
+    async def lut_import(
+        self,
+        path: str,
+        *,
+        name: Optional[str] = None,
+        title: Optional[str] = None,
+    ) -> LutImported:
+        """Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library."""
+        params: Dict[str, Any] = {}
+        params["path"] = path
+        if name is not None:
+            params["name"] = name
+        if title is not None:
+            params["title"] = title
+        return await self._call("lut.import", params)
+
+    async def lut_list(
+        self,
+        *,
+        group: Optional[str] = None,
+    ) -> LutList:
+        """Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets."""
+        params: Dict[str, Any] = {}
+        if group is not None:
+            params["group"] = group
+        return await self._call("lut.list", params)
+
+    async def lut_preset_remove(
+        self,
+        name: str,
+    ) -> Dict[str, Any]:
+        """Delete a saved preset."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("lut.preset.remove", params)
+
+    async def lut_preset_save(
+        self,
+        name: str,
+        *,
+        amount: Optional[float] = None,
+        brightness: Optional[float] = None,
+        contrast: Optional[float] = None,
+        gamma: Optional[float] = None,
+        hue_shift: Optional[float] = None,
+        lut: Optional[str] = None,
+        saturation: Optional[float] = None,
+        tint: Optional[float] = None,
+        title: Optional[str] = None,
+        warmth: Optional[float] = None,
+    ) -> LutPreset:
+        """Save a look under a name: a LUT, how much of it, and a colour correction before it."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if amount is not None:
+            params["amount"] = amount
+        if brightness is not None:
+            params["brightness"] = brightness
+        if contrast is not None:
+            params["contrast"] = contrast
+        if gamma is not None:
+            params["gamma"] = gamma
+        if hue_shift is not None:
+            params["hue_shift"] = hue_shift
+        if lut is not None:
+            params["lut"] = lut
+        if saturation is not None:
+            params["saturation"] = saturation
+        if tint is not None:
+            params["tint"] = tint
+        if title is not None:
+            params["title"] = title
+        if warmth is not None:
+            params["warmth"] = warmth
+        return await self._call("lut.preset.save", params)
+
+    async def lut_preview(
+        self,
+        *,
+        amount: Optional[float] = None,
+        luts: Optional[List[str]] = None,
+        presets: Optional[List[str]] = None,
+        source: Optional[str] = None,
+        width: Optional[int] = None,
+    ) -> LutPreviews:
+        """Small JPEG pictures of looks on a source, or on a test card, for a picker."""
+        params: Dict[str, Any] = {}
+        if amount is not None:
+            params["amount"] = amount
+        if luts is not None:
+            params["luts"] = luts
+        if presets is not None:
+            params["presets"] = presets
+        if source is not None:
+            params["source"] = source
+        if width is not None:
+            params["width"] = width
+        return await self._call("lut.preview", params)
+
+    async def lut_remove(
+        self,
+        name: str,
+    ) -> Dict[str, Any]:
+        """Delete an imported LUT. The built in ones cannot be deleted."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("lut.remove", params)
 
     async def machine_status(
         self,
@@ -7228,6 +8422,28 @@ class GeneratedMethods:
             params["limit"] = limit
         return await self._call("program.history", params)
 
+    async def program_key_list(
+        self,
+    ) -> KeyListing:
+        """The downstream keys on air, bottom first."""
+        params: Dict[str, Any] = {}
+        return await self._call("program.key.list", params)
+
+    async def program_key_set(
+        self,
+        on: bool,
+        scene: str,
+        *,
+        transition: Optional[Union[Transition, None]] = None,
+    ) -> KeyListing:
+        """Put a scene on air as a downstream key, above whatever is taken, or take it off."""
+        params: Dict[str, Any] = {}
+        params["on"] = on
+        params["scene"] = scene
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("program.key.set", params)
+
     async def program_revert(
         self,
     ) -> ProgramState:
@@ -7312,6 +8528,148 @@ class GeneratedMethods:
             params["mode"] = mode
         return await self._call("project.import", params)
 
+    async def prompter_get(
+        self,
+    ) -> PrompterState:
+        """The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.get", params)
+
+    async def prompter_load(
+        self,
+        id: str,
+        *,
+        play: Optional[bool] = None,
+    ) -> PrompterState:
+        """Put a script on the prompter, at the top and paused unless play is true."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if play is not None:
+            params["play"] = play
+        return await self._call("prompter.load", params)
+
+    async def prompter_pause(
+        self,
+    ) -> PrompterState:
+        """Stop the prompter where it is."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.pause", params)
+
+    async def prompter_play(
+        self,
+        *,
+        speed: Optional[float] = None,
+    ) -> PrompterState:
+        """Start the prompter scrolling, at speed when given. From the end it starts again at the top."""
+        params: Dict[str, Any] = {}
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("prompter.play", params)
+
+    async def prompter_rows(
+        self,
+    ) -> RowsAnswer:
+        """The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.rows", params)
+
+    async def prompter_script_get(
+        self,
+        id: str,
+    ) -> Script:
+        """One prompter script with its text."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("prompter.script.get", params)
+
+    async def prompter_script_list(
+        self,
+    ) -> ScriptList:
+        """Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text."""
+        params: Dict[str, Any] = {}
+        return await self._call("prompter.script.list", params)
+
+    async def prompter_script_remove(
+        self,
+        id: str,
+    ) -> ScriptChanged:
+        """Forget a prompter script. When it is on the prompter the screens go empty."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("prompter.script.remove", params)
+
+    async def prompter_script_save(
+        self,
+        text: str,
+        title: str,
+        *,
+        id: Optional[str] = None,
+    ) -> Script:
+        """Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place."""
+        params: Dict[str, Any] = {}
+        params["text"] = text
+        params["title"] = title
+        if id is not None:
+            params["id"] = id
+        return await self._call("prompter.script.save", params)
+
+    async def prompter_seek(
+        self,
+        *,
+        by: Optional[float] = None,
+        fraction: Optional[float] = None,
+        marker: Optional[str] = None,
+        row: Optional[float] = None,
+        step: Optional[int] = None,
+    ) -> PrompterState:
+        """Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by)."""
+        params: Dict[str, Any] = {}
+        if by is not None:
+            params["by"] = by
+        if fraction is not None:
+            params["fraction"] = fraction
+        if marker is not None:
+            params["marker"] = marker
+        if row is not None:
+            params["row"] = row
+        if step is not None:
+            params["step"] = step
+        return await self._call("prompter.seek", params)
+
+    async def prompter_set(
+        self,
+        *,
+        cue: Optional[float] = None,
+        line_chars: Optional[int] = None,
+        margin: Optional[float] = None,
+        mirror: Optional[bool] = None,
+    ) -> PrompterState:
+        """Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes."""
+        params: Dict[str, Any] = {}
+        if cue is not None:
+            params["cue"] = cue
+        if line_chars is not None:
+            params["line_chars"] = line_chars
+        if margin is not None:
+            params["margin"] = margin
+        if mirror is not None:
+            params["mirror"] = mirror
+        return await self._call("prompter.set", params)
+
+    async def prompter_speed(
+        self,
+        *,
+        by: Optional[float] = None,
+        speed: Optional[float] = None,
+    ) -> PrompterState:
+        """Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted."""
+        params: Dict[str, Any] = {}
+        if by is not None:
+            params["by"] = by
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("prompter.speed", params)
+
     async def rendition_plan(
         self,
         *,
@@ -7329,6 +8687,147 @@ class GeneratedMethods:
         """Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why."""
         params: Dict[str, Any] = {}
         return await self._call("rendition.presets", params)
+
+    async def replay_event_delete(
+        self,
+        id: str,
+    ) -> EventIdRequest:
+        """Forget a replay event. The recording it pointed at is not touched."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("replay.event.delete", params)
+
+    async def replay_event_list(
+        self,
+    ) -> EventList:
+        """Every replay event, oldest first."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.event.list", params)
+
+    async def replay_event_rename(
+        self,
+        id: str,
+        name: str,
+    ) -> ReplayEvent:
+        """Give a replay event a name."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["name"] = name
+        return await self._call("replay.event.rename", params)
+
+    async def replay_get(
+        self,
+    ) -> ReplayStatus:
+        """Whether replay is on, each angle's buffer depth and size, and every event."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.get", params)
+
+    async def replay_mark(
+        self,
+        *,
+        angle: Optional[str] = None,
+        name: Optional[str] = None,
+        point: Optional[Union[MarkPoint, None]] = None,
+        seconds: Optional[float] = None,
+    ) -> ReplayEvent:
+        """Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if name is not None:
+            params["name"] = name
+        if point is not None:
+            params["point"] = point
+        if seconds is not None:
+            params["seconds"] = seconds
+        return await self._call("replay.mark", params)
+
+    async def replay_play(
+        self,
+        *,
+        angle: Optional[str] = None,
+        event: Optional[str] = None,
+        seconds: Optional[float] = None,
+        source: Optional[str] = None,
+        speed: Optional[float] = None,
+        take: Optional[bool] = None,
+        transition: Optional[Union[Transition, None]] = None,
+    ) -> PlayStatus:
+        """Play an event, or the last seconds of an angle, on a replay source, added if it is not there."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if event is not None:
+            params["event"] = event
+        if seconds is not None:
+            params["seconds"] = seconds
+        if source is not None:
+            params["source"] = source
+        if speed is not None:
+            params["speed"] = speed
+        if take is not None:
+            params["take"] = take
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("replay.play", params)
+
+    async def replay_save(
+        self,
+        *,
+        angle: Optional[str] = None,
+        event: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> SaveStatus:
+        """Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if event is not None:
+            params["event"] = event
+        if name is not None:
+            params["name"] = name
+        return await self._call("replay.save", params)
+
+    async def replay_set(
+        self,
+        *,
+        angle: Optional[str] = None,
+        source: Optional[str] = None,
+        speed: Optional[float] = None,
+    ) -> PlayStatus:
+        """Change a playing replay's angle or speed, from the frame it is on."""
+        params: Dict[str, Any] = {}
+        if angle is not None:
+            params["angle"] = angle
+        if source is not None:
+            params["source"] = source
+        if speed is not None:
+            params["speed"] = speed
+        return await self._call("replay.set", params)
+
+    async def replay_start(
+        self,
+        *,
+        angles: Optional[List[str]] = None,
+        bitrate_kbps: Optional[int] = None,
+        seconds: Optional[int] = None,
+    ) -> ReplayStatus:
+        """Record these angles, each the last `seconds`. Called again, it changes them in place."""
+        params: Dict[str, Any] = {}
+        if angles is not None:
+            params["angles"] = angles
+        if bitrate_kbps is not None:
+            params["bitrate_kbps"] = bitrate_kbps
+        if seconds is not None:
+            params["seconds"] = seconds
+        return await self._call("replay.start", params)
+
+    async def replay_stop(
+        self,
+    ) -> ReplayStatus:
+        """Stop recording, free every buffer and forget every event."""
+        params: Dict[str, Any] = {}
+        return await self._call("replay.stop", params)
 
     async def scene_add(
         self,
@@ -8110,11 +9609,14 @@ class GeneratedMethods:
     async def scene_preview_set(
         self,
         *,
+        after_take: Optional[Union[AfterTake, None]] = None,
         draft: Optional[str] = None,
         scene: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Arm a scene. The armed scene is the preview, and program.take with no argument takes it."""
+        """Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client."""
         params: Dict[str, Any] = {}
+        if after_take is not None:
+            params["after_take"] = after_take
         if draft is not None:
             params["draft"] = draft
         if scene is not None:
@@ -8869,6 +10371,95 @@ class GeneratedMethods:
         if source is not None:
             params["source"] = source
         return await self._call("tool.call", params)
+
+    async def user_add(
+        self,
+        name: str,
+        password: str,
+        *,
+        confirm: Optional[ConfirmPolicy] = None,
+        role: Optional[Role] = None,
+    ) -> UserChanged:
+        """Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        params["password"] = password
+        if confirm is not None:
+            params["confirm"] = confirm
+        if role is not None:
+            params["role"] = role
+        return await self._call("user.add", params)
+
+    async def user_list(
+        self,
+    ) -> UserList:
+        """Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password."""
+        params: Dict[str, Any] = {}
+        return await self._call("user.list", params)
+
+    async def user_remove(
+        self,
+        name: str,
+    ) -> UserChanged:
+        """Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("user.remove", params)
+
+    async def user_reset_password(
+        self,
+        name: str,
+        password: str,
+    ) -> UserChanged:
+        """Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        params["password"] = password
+        return await self._call("user.reset_password", params)
+
+    async def user_sessions(
+        self,
+        *,
+        name: Optional[str] = None,
+    ) -> SessionList:
+        """The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen."""
+        params: Dict[str, Any] = {}
+        if name is not None:
+            params["name"] = name
+        return await self._call("user.sessions", params)
+
+    async def user_sign_out(
+        self,
+        *,
+        name: Optional[str] = None,
+        session: Optional[str] = None,
+    ) -> SignedOut:
+        """End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call."""
+        params: Dict[str, Any] = {}
+        if name is not None:
+            params["name"] = name
+        if session is not None:
+            params["session"] = session
+        return await self._call("user.sign_out", params)
+
+    async def user_update(
+        self,
+        name: str,
+        *,
+        confirm: Optional[Union[ConfirmPolicy, None]] = None,
+        disabled: Optional[bool] = None,
+        role: Optional[Union[Role, None]] = None,
+    ) -> UserChanged:
+        """Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if confirm is not None:
+            params["confirm"] = confirm
+        if disabled is not None:
+            params["disabled"] = disabled
+        if role is not None:
+            params["role"] = role
+        return await self._call("user.update", params)
 
     async def vitals_get(
         self,

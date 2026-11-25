@@ -414,6 +414,15 @@ Illustration:
 {"jsonrpc":"2.0","id":14,"result":{"content":[{"type":"text","text":"1 sender"}],"structuredContent":{"senders":[{"name":"CAM 1 (Studio)"}]}}}
 ```
 
+The core may send the next `tool.call` before this one is answered, and
+matches answers by `id`, so a plugin may answer them out of order. A slow
+tool (a camera storing a preset) then never holds up a quick one (a
+joystick move that must arrive within 300 ms). The Rust SDK answers calls
+in order by default; a service that wants this overrides
+`Service::tool_call_later` and answers through the `Reply` it is handed,
+from any thread. A `Reply` dropped without an answer answers with an error,
+so no call is left waiting. The `ptz` plugin does this.
+
 ## Notifications a plugin may send
 
 None of these want an answer, and none carries an id.

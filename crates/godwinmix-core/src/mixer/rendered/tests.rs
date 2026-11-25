@@ -17,7 +17,7 @@ use std::time::Duration;
 
 pub(super) fn config() -> Config {
     let mut cfg: Config = toml::from_str("").unwrap();
-    cfg.canvas = crate::config::Canvas { width: 320, height: 180, fps: 30, sample_rate: 48000, channels: 2 };
+    cfg.canvas = crate::config::Canvas { width: 320, height: 180, fps: crate::config::FrameRate::whole(30), sample_rate: 48000, channels: 2 };
     cfg.multiview.enabled = false;
     // x264, so the test means the same on a machine with no GPU.
     cfg.hardware.encode = Accel::Software;
@@ -128,6 +128,8 @@ async fn a_rung_comes_and_goes_and_nothing_else_drops_a_buffer() {
     let mut mix = mixer(config()).await;
     mix.add_output(&output("plain", None)).unwrap();
     mix.add_output(&output("steady", Some(want(144, 400)))).unwrap();
+    // No command loop here to read the demand a finished start sends.
+    mix.finish_encoder_start();
     let programme = Arc::new(Gaps::default());
     programme.watch(&mix.venc_tee.static_pad("sink").unwrap());
     let steady_tee = mix.rendition_taps("steady")[0].video_tee.clone().unwrap();

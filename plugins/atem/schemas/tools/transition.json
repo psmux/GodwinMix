@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "transition",
+  "description": "Set the next transition's style, its rate in frames, or move the bar (0 to 1). Rates are set for mix, dip and wipe.",
+  "type": "object",
+  "properties": {
+    "switcher": {
+      "type": "string",
+      "title": "Switcher",
+      "description": "The switcher's id. May be left out when only one is connected.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "me": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "title": "M/E",
+      "description": "The mix effect bus, counted from 0."
+    },
+    "style": {
+      "type": "string",
+      "enum": [
+        "mix",
+        "dip",
+        "wipe",
+        "dve",
+        "sting"
+      ]
+    },
+    "rate": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 250,
+      "description": "Frames, for the style given or the current one."
+    },
+    "position": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Where the transition bar sits, 1 at the end."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

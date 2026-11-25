@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "move",
+  "description": "The joystick: pan, tilt and zoom at these speeds, -1 to 1, for 300 ms. Call it again every 100 ms or so while the stick is held; when the calls stop the camera stops by itself, so a closed tab never leaves a camera turning. While it is held the follow loop's speeds are ignored.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    },
+    "pan": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "Right is positive.",
+      "examples": [
+        0.5
+      ]
+    },
+    "tilt": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "Up is positive.",
+      "examples": [
+        -0.1
+      ]
+    },
+    "zoom": {
+      "type": "number",
+      "minimum": -1,
+      "maximum": 1,
+      "description": "Tighter is positive.",
+      "examples": [
+        0
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

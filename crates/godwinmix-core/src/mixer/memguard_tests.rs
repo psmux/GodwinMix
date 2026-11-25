@@ -3,19 +3,29 @@ use crate::gstutil::{make, queue_thread};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
+/// A queue full by its backstop, the kind the guard may blame.
 fn held(element: &str, mb: u64, source: Option<&str>) -> Held {
-    Held { pipeline: "programme".into(), element: element.into(), bytes: mb * MB, source: source.map(str::to_string) }
+    Held { pipeline: "programme".into(), element: element.into(), bytes: mb * MB, source: source.map(str::to_string), backstop: true }
+}
+
+/// A queue full to its time limit: the programme below it is behind.
+fn by_time(element: &str, mb: u64, source: &str) -> Held {
+    Held { backstop: false, ..held(element, mb, Some(source)) }
+}
+
+fn any(_: &str) -> bool {
+    true
 }
 
 #[test]
 fn the_fullest_queue_with_a_source_is_blamed_once_it_holds_enough() {
     let queues = [held("venc-q", 900, None), held("pgm-vq-cam-a", 700, Some("cam-a")), held("slot-q-1", 80, Some("cam-b"))];
-    let (q, source) = blame(&queues).expect("a source to blame");
+    let (q, source) = blame(&queues, any).expect("a source to blame");
     assert_eq!((q.element.as_str(), source), ("pgm-vq-cam-a", "cam-a"), "the encoder is never restarted");
     let small = [held("pgm-vq-cam-a", 10, Some("cam-a"))];
-    assert!(blame(&small).is_none(), "ten megabytes is a normal queue, not the culprit");
+    assert!(blame(&small, any).is_none(), "ten megabytes is a normal queue, not the culprit");
     let nobody = [held("venc-q", 900, None)];
-    assert!(blame(&nobody).is_none());
+    assert!(blame(&nobody, any).is_none());
 }
 
 #[test]
@@ -49,4 +59,43 @@ fn the_log_names_the_fullest_queues_and_says_so_when_there_are_none() {
     let queues = [held("pgm-vq-cam-a", 700, Some("cam-a")), held("venc-q", 3, None)];
     assert_eq!(describe(&queues), "pgm-vq-cam-a in programme: 700.0 MB, venc-q in programme: 3.0 MB");
     assert_eq!(describe(&[]), "no queue holds anything");
+}
+
+/// The 0.3.25 cascade: with the programme behind, every source's queue was
+/// full to its second and colour bars were as "guilty" as the newsroom set.
+/// A queue full by time is never blamed; only one full by its backstop is.
+#[test]
+fn a_queue_full_to_its_time_limit_is_not_a_source_to_restart() {
+    let behind = [by_time("colour-bars-vprog-q", 89, "colour-bars"), by_time("screen-vprog-q", 89, "screen")];
+    assert!(blame(&behind, any).is_none(), "a healthy source was blamed for a programme that is behind");
+    assert!(all_by_time(&behind));
+    let mixed = [by_time("colour-bars-vprog-q", 120, "colour-bars"), held("pgm-vq-set@6", 100, Some("set"))];
+    let (q, source) = blame(&mixed, any).expect("the backstop queue");
+    assert_eq!((q.element.as_str(), source), ("pgm-vq-set@6", "set"));
+    assert!(!all_by_time(&mixed));
+    assert!(!all_by_time(&[held("small", 3, Some("x"))]), "nothing over the line says nothing");
+}
+
+/// A source the guard restarted is not restarted again within minutes; the
+/// next queue full by its backstop is, if there is one.
+#[test]
+fn a_source_restarted_lately_is_left_alone() {
+    let restarts = Restarts::default();
+    let queues = [held("pgm-vq-set@6", 180, Some("set")), held("slot-q-7", 120, Some("guest"))];
+    let (_, first) = blame(&queues, |s| restarts.rested(s)).unwrap();
+    assert_eq!(first, "set");
+    restarts.note(first);
+    let (_, second) = blame(&queues, |s| restarts.rested(s)).unwrap();
+    assert_eq!(second, "guest");
+    restarts.note(second);
+    assert!(blame(&queues, |s| restarts.rested(s)).is_none(), "the same two were restarted again");
+}
+
+/// An empty queue is not held by its backstop. The full cases are read off
+/// real queues in `gstutil::decode_time`'s tests.
+#[test]
+fn a_real_queue_says_whether_its_backstop_holds_it() {
+    let _ = gst::init();
+    let q = queue_thread("idle").unwrap();
+    assert!(!crate::gstutil::backstop::held_by_backstop(&q), "an empty queue is at its backstop");
 }

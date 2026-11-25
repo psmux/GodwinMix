@@ -272,6 +272,7 @@ impl OutputSlot {
 
         let pipeline = gst::Pipeline::with_name(&format!("output-{id}"));
         crate::observe::register_pipeline(&format!("output-{id}"), &pipeline);
+        follow_programme_clock(&pipeline, &self.program);
 
         let vsrc = make("proxysrc", &format!("out-{id}-vsrc-{gen}"))?;
         vsrc.set_property("proxysink", &*self.vproxy.lock());
@@ -428,6 +429,12 @@ impl OutputSlot {
         result?;
         self.failed.store(false, Ordering::Relaxed);
         Ok(())
+    }
+
+    /// The output's own pipeline while it has one, for a test.
+    #[cfg(test)]
+    pub fn current_pipeline(&self) -> Option<gst::Pipeline> {
+        self.pipeline.lock().as_ref().map(|l| l.pipeline.clone())
     }
 
     /// Bus messages from this output's pipeline carry this label.
@@ -733,6 +740,22 @@ fn hold_audio_until_video_caps(
         gst::PadProbeReturn::Remove
     });
     Ok(())
+}
+
+/// Put an output pipeline on the programme's clock and base time.
+///
+/// What crosses the proxy carries the programme's running times. A pipeline
+/// with a base time of its own starts its running time at zero when it goes to
+/// PLAYING, so to anything in it that waits on the clock every buffer looked
+/// as far in the future as the programme had been up. The `clocksync` inside
+/// each `webrtcbin` does wait: a WHEP viewer, and so every guest's return,
+/// connected and then waited that long for its first packet, which on a show
+/// that had been running for an hour was an hour of black and silence. The
+/// sinks of the other outputs do not sync, so sharing costs them nothing.
+fn follow_programme_clock(pipeline: &gst::Pipeline, program: &gst::Pipeline) {
+    if let Some(clock) = program.clock() {
+        crate::node::clock::adopt(pipeline, &clock, program.base_time());
+    }
 }
 
 fn link_tee_to(tee: &gst::Element, dest: &gst::Element) -> Result<gst::Pad> {

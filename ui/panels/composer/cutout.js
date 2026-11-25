@@ -8,13 +8,14 @@
 import { el, on } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { withParam } from "./key.js";
+import { cutoutReadiness, onCutoutReadiness, watchCutouts } from "../../shell/cutout-ready.js";
 
 /** The choices: param, label, options and what each means. */
 export const CHOICES = [
   ["quality", "Model", [
     ["auto", "Automatic: fine on a GPU, fast without one"],
     ["fast", "Fast: any computer, softer edge"],
-    ["fine", "Fine: hair and hands, wants a GPU"],
+    ["fine", "Fine: more edge detail, slower on the CPU"],
   ]],
   ["device", "Runs on", [
     ["auto", "Automatic: the GPU if there is one"],
@@ -25,9 +26,9 @@ export const CHOICES = [
 
 /** The sliders: param, label, the default the core uses, and the range. */
 export const SLIDERS = [
-  ["cutoff", "Edge position", 0.5, 0, 1, "Lower keeps more around the person, higher keeps less"],
-  ["softness", "Edge softness", 0.3, 0, 1, "How wide the soft band at the edge is; 0 is a hard edge"],
-  ["steady", "Steadiness", 0.5, 0, 0.95, "How much the edge carries from one frame to the next; higher shimmers less and follows fast movement later"],
+  ["cutoff", "Edge position", 0.6, 0, 1, "Lower keeps more around the person, higher keeps less"],
+  ["softness", "Edge softness", 0.2, 0, 1, "How wide the soft band at the edge is; 0 is a hard edge"],
+  ["steady", "Steadiness", 0.5, 0, 0.95, "How much small edge changes carry between frames; large changes follow movement immediately"],
   ["feather", "Feather", 0, 0, 20, "Pixels the edge is softened over, inwards"],
   ["matte_left", "Matte left", 0, 0, 0.9, "Cut off this much of the picture on the left, whatever the model says"],
   ["matte_right", "Matte right", 0, 0, 0.9, "And on the right"],
@@ -71,7 +72,35 @@ export function cutoutEditor(o) {
   });
   return el("div.col.key-editor", {}, [
     el("p.sm.dim", { text: "The person is cut out by a model, with no screen behind them. Put a picture, a clip or a page below this item and it becomes the background." }),
+    readinessLine(o),
     ...choices,
     ...sliders,
   ]);
+}
+
+/** What the cutout is doing, said while its model opens. */
+export function readinessText(readiness, enabled = true) {
+  if (!enabled || !readiness) return "";
+  if (readiness.preparing > 0) return "Preparing the cutout. The person appears once the model is ready, which takes a few seconds the first time.";
+  if (readiness.error && !readiness.running) return `The cutout could not start: ${readiness.error}`;
+  return "";
+}
+
+/** A status line that follows the core's count, asked for while it is new. */
+function readinessLine(o) {
+  const line = el("p.sm.cutout-status", { role: "status", hidden: true });
+  const enabled = o.filter.enabled !== false;
+  const paint = (r) => {
+    line.textContent = readinessText(r, enabled);
+    line.hidden = !line.textContent;
+  };
+  paint(cutoutReadiness());
+  const off = onCutoutReadiness((r) => {
+    // Gone with the inspector that drew it.
+    if (!line.isConnected && line.dataset.shown) return off();
+    line.dataset.shown = "1";
+    paint(r);
+  });
+  if (enabled) watchCutouts(o.client);
+  return line;
 }

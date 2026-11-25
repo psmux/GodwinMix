@@ -105,6 +105,11 @@ export class SceneMirror {
   reset(views) {
     this.records.clear();
     this.unknown = 0;
+    // A fresh read starts the count again. A core that restarted numbers its
+    // patches from one, and a mirror that kept the old number dropped every
+    // one as a duplicate, so the page showed the scenes from before the
+    // restart until it was reloaded.
+    this.seq = 0;
     for (const view of views || []) this.applyView(view);
   }
 

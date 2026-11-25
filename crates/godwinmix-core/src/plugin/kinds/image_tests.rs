@@ -83,3 +83,14 @@ fn a_sequence_passes_them_too() {
     let _ = std::fs::remove_dir_all(&dir);
     report.into_result().expect("a sequence is conformant");
 }
+
+/// A shipped gallery poster, a 480 by 270 baseline JPEG. On a Mac the
+/// hardware decoder took it and reported no valid frames, so the card stayed
+/// blank and the studio sets had no picture to pick.
+#[test]
+fn a_shipped_poster_jpeg_decodes_on_every_machine() {
+    let _ = gst::init();
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../graphics/starters/background-gradient/preview.jpg");
+    let pic = super::super::image_decode::raster(&crate::input::to_uri(path)).expect("the poster decodes");
+    assert_eq!((pic.width, pic.height), (480, 270));
+}

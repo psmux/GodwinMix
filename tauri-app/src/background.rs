@@ -47,9 +47,16 @@ pub fn watch(app: &AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             refresh(app.clone());
+            crate::permissions::check(&app);
             tokio::time::sleep(EVERY).await;
         }
     });
+}
+
+/// Whether anything is going out right now: a destination or a channel.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub async fn is_streaming(app: &AppHandle) -> bool {
+    known(app).await.is_some_and(|k| !k.outgoing().is_empty())
 }
 
 async fn known(app: &AppHandle) -> Option<Known> {

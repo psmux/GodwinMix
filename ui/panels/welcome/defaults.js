@@ -28,6 +28,7 @@ const PANEL_IDS = {
   outputs: "core/outputs",
   media: "core/media",
   alerts: "core/alerts",
+  prompter: "core/prompter",
   welcome: "core/welcome",
 };
 

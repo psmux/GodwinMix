@@ -128,3 +128,13 @@ fn a_write_keeps_the_comments_and_one_that_would_not_load_writes_nothing() {
     assert!(!std::fs::read_to_string(&path).unwrap().contains("width"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn the_frame_rate_takes_a_broadcast_rate_and_a_whole_one() {
+    assert!(check("canvas.fps", &json!(29.97)).is_ok());
+    assert!(check("canvas.fps", &json!(30)).is_ok());
+    assert!(check("canvas.fps", &json!("fast")).is_err(), "text is not a rate");
+    let cfg: Config = toml::from_str("[canvas]\nfps = 59.94\n").unwrap();
+    assert_eq!(cfg.canvas.fps.to_string(), "59.94");
+    assert_eq!(crate::caps::CanvasCaps::new(&cfg.canvas).fps, gstreamer::Fraction::new(60000, 1001));
+}

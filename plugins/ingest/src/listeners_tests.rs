@@ -137,3 +137,26 @@ fn a_port_another_program_holds_on_loopback_is_never_taken_for_the_relay() {
     assert!(rows.iter().any(|r| r["problem"].is_string()), "the rows say what is wrong: {rows:?}");
     drop(other);
 }
+
+#[test]
+fn the_warning_goes_once_the_rtmp_port_answers_this_plugin_again() {
+    // As on a relay whose port first sat on one outside address, or behind a
+    // plugin still exiting: the cause was found once and has since gone.
+    let rtmp = free_tcp();
+    let mut l = listeners(rtmp, free_udp());
+    l.readers = vec!["ch101".into()];
+    l.relay_why = Some("127.0.0.1 reaches another program".into());
+    l.apply(&Table::default());
+    let rows = l.rows();
+    assert!(rows.iter().all(|r| !r["problem"].is_string()), "no problem is left once loopback reaches this plugin: {rows:?}");
+}
+
+#[test]
+fn only_an_address_127_0_0_1_can_reach_is_checked_on_the_loopback() {
+    for bind in ["0.0.0.0", "::", "127.0.0.1", "localhost"] {
+        assert!(super::reaches_loopback(bind), "{bind}");
+    }
+    for bind in ["192.227.116.253", "10.36.0.2", "::1"] {
+        assert!(!super::reaches_loopback(bind), "{bind}");
+    }
+}

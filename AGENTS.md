@@ -49,6 +49,7 @@ cargo test -p godwinmix-sdk --features gst   # and the GStreamer backed half
 | `crates/godwinmix-wasm/` | the tier W host: wasmtime with the component model, behind the binary's `wasm` feature. Optional, off by default |
 | `crates/godwinmix-sdk-wasm/` | what a WebAssembly plugin author depends on. Outside the workspace: built for `wasm32-wasip2` only, by `dev/build-wasm.sh` |
 | `crates/godwinmix/` | the binaries (`godwinmix` and `gmx`), the control server, the CLI, the MCP server |
+| `crates/godwinmix-atem/` | a client for Blackmagic ATEM switchers: the UDP session sans IO, the state, the commands, a tokio task per switcher. No media stack. `plugins/atem` puts it behind tools |
 | `templates/` | six plugin templates, one per language. Five are source plugins; `wasm/` is a sandboxed service |
 | `examples/` | `zero-dep-source.py`, a whole plugin in Python with no imports outside the standard library |
 | `skills/` | the `godwinmix-operate` and `godwinmix-develop` skills, installed by `gmx skill install` |

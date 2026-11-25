@@ -58,6 +58,58 @@
       }
     },
     "schemas": {
+      "AccountInfo": {
+        "description": "`account.get`: who this call is, in a person's terms.",
+        "properties": {
+          "accounts": {
+            "description": "True when the mixer has at least one account, so the page signs people\nin with a username rather than a token.",
+            "type": "boolean"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "description": "The account this call signed in as. Absent for a token.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "via": {
+            "description": "`session` for a sign in, `token` for a bearer token, `open` for a\nmixer that asks for nothing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accounts",
+          "via"
+        ],
+        "type": "object"
+      },
+      "AccountPasswordRequest": {
+        "description": "`account.change_password`.",
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "password": {
+            "description": "At least 8 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current",
+          "password"
+        ],
+        "type": "object"
+      },
       "Action": {
         "description": "What a write does to a file.",
         "oneOf": [
@@ -471,6 +523,14 @@
         ],
         "type": "object"
       },
+      "AfterTake": {
+        "description": "What Preview holds after a Take. See the module.",
+        "enum": [
+          "same",
+          "swap"
+        ],
+        "type": "string"
+      },
       "AgentStateRequest": {
         "properties": {
           "response_format": {
@@ -602,6 +662,58 @@
           "bottom-right"
         ],
         "type": "string"
+      },
+      "AngleStatus": {
+        "description": "One angle's ring, as it stands.",
+        "properties": {
+          "bytes": {
+            "description": "Bytes of encoded picture and sound held.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "dropped": {
+            "description": "Frames the angle's encoder could not keep up with and dropped. The\nsource and the programme lose none.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "encoder": {
+            "description": "The encoder this angle is written with, or `shared` when it reads the\nprogramme encoder's own output.",
+            "type": "string"
+          },
+          "gops": {
+            "description": "Whole groups of pictures held. The ring drops the oldest one at a time.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "held_secs": {
+            "description": "Seconds of picture held, from the oldest keyframe to the newest frame.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "The source id, or `programme`.",
+            "type": "string"
+          },
+          "waiting": {
+            "description": "Why this angle holds nothing, when it does not: the source is not\nthere, or has not sent a picture yet.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "held_secs",
+          "bytes",
+          "gops",
+          "encoder",
+          "dropped"
+        ],
+        "type": "object"
       },
       "Applies": {
         "description": "When a change to a key takes effect.",
@@ -849,6 +961,52 @@
         ],
         "type": "string"
       },
+      "AudioDevice": {
+        "description": "One sound card a bus can be played on.",
+        "properties": {
+          "api": {
+            "description": "The platform's sound API, when it says: `osxaudio`, `wasapi2`,\n`pulse`, `alsa`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "The id `device` takes, the most stable thing the platform says about it.",
+            "type": "string"
+          },
+          "index": {
+            "description": "Its number in this list, which `device` also takes.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "AudioDeviceList": {
+        "description": "`audio.device.list`.",
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/AudioDevice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices"
+        ],
+        "type": "object"
+      },
       "AudioSetParams": {
         "description": "`source.audio.set` takes an id as well as the levels: the id comes off the\npath on REST and out of the params on `/rpc`, and both land in one object.",
         "properties": {
@@ -925,6 +1083,32 @@
           "channels",
           "sample_rate",
           "bitrate_kbps"
+        ],
+        "type": "object"
+      },
+      "AudioStatus": {
+        "description": "The audio desk as `audio.bus.list` and the status snapshot report it.",
+        "properties": {
+          "buses": {
+            "items": {
+              "$ref": "#/components/schemas/BusStatus"
+            },
+            "type": "array"
+          },
+          "cue": {
+            "description": "The sources marked cue, in the order they were marked.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "master": {
+            "$ref": "#/components/schemas/MasterConfig"
+          }
+        },
+        "required": [
+          "master",
+          "buses"
         ],
         "type": "object"
       },
@@ -1547,6 +1731,193 @@
         ],
         "type": "object"
       },
+      "BusConfig": {
+        "description": "One bus: a mix of its own beside the programme.\n\nThree kinds, decided by two keys. With neither, it carries each source at\nthe level its `sends` give it (a source with no send is not on it). With\n`minus`, it is the programme as heard, without that one source: a guest's\nreturn. With `cue`, it carries the sources marked cue at unity, and the\nprogramme while nothing is marked.",
+        "properties": {
+          "cue": {
+            "description": "Make this the cue bus.",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "description": "The bus master, 0.0 to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+            "type": "string"
+          },
+          "minus": {
+            "description": "Make this bus the programme without this source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What the desk shows. The id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sends": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusIdRequest": {
+        "description": "`audio.bus.remove`, and anything else that names one bus.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusSetRequest": {
+        "description": "`audio.bus.set`. Only what is named moves. `device: \"\"` stops playing it\non a sound card, and `minus: \"\"` makes a mix minus bus an ordinary one.",
+        "properties": {
+          "device": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "minus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "BusStatus": {
+        "description": "One bus and what is using it.",
+        "properties": {
+          "cue": {
+            "description": "Make this the cue bus.",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Play the bus on a sound card here: `default`, a device name, its id,\nor its number in `audio.device.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_state": {
+            "description": "The device it is playing on, once it opened, or why it is not.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gain": {
+            "description": "The bus master, 0.0 to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "id": {
+            "description": "A slug: `monitor`, `guest-return`, `recording-b`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`sends`, `minus` or `cue`.",
+            "type": "string"
+          },
+          "listen": {
+            "description": "Where to hear it in a browser: `/pcm/bus:<id>` or `/opus/bus:<id>`.",
+            "type": "string"
+          },
+          "minus": {
+            "description": "Make this bus the programme without this source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "name": {
+            "description": "What the desk shows. The id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputs": {
+            "description": "The outputs that take their sound from this bus.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sends": {
+            "additionalProperties": {
+              "format": "double",
+              "type": "number"
+            },
+            "description": "Level per source id, 0.0 to 10.0, after the source's own fader and\nmute. Read only on a bus with neither `minus` nor `cue`.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "listen"
+        ],
+        "type": "object"
+      },
       "CalibrateRequest": {
         "description": "`governor.calibrate`.",
         "properties": {
@@ -1600,8 +1971,22 @@
         "description": "The canvas every source is scaled onto and every output leaves by.",
         "properties": {
           "fps": {
+            "description": "Frames a second to the nearest whole frame: 30 for 29.97.",
             "format": "int32",
             "type": "integer"
+          },
+          "fps_fraction": {
+            "description": "The exact rate as numerator and denominator, when it is not whole:\n`[30000, 1001]` for 29.97. Absent for a whole rate.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "height": {
             "format": "int32",
@@ -2914,6 +3299,21 @@
         ],
         "type": "object"
       },
+      "ConfirmPolicy": {
+        "description": "Whether destructive calls need a confirm round trip first.",
+        "oneOf": [
+          {
+            "const": "none",
+            "description": "Destructive calls go straight through. The default, and what the single\nbearer token has always done.",
+            "type": "string"
+          },
+          {
+            "const": "required",
+            "description": "A destructive call is refused once with `-32020` and a token valid for\n30 seconds; the repeat carrying `confirm` proceeds.",
+            "type": "string"
+          }
+        ]
+      },
       "Container": {
         "description": "How the bytes leave. Decides which codecs are allowed: FLV carries H.264\n(and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.",
         "enum": [
@@ -3295,6 +3695,55 @@
           "top",
           "right",
           "bottom"
+        ],
+        "type": "object"
+      },
+      "CueSetRequest": {
+        "description": "`audio.cue.set`: mark or clear one source for the cue bus.",
+        "properties": {
+          "cue": {
+            "type": "boolean"
+          },
+          "solo": {
+            "description": "Clear every other mark first, so only this source is heard: solo.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "cue"
+        ],
+        "type": "object"
+      },
+      "CutoutReadiness": {
+        "description": "`filter.cutout`. A page asks while a cutout it can see is new, so it can\nsay the cutout is on its way rather than show a camera that looks as if\nnothing happened.",
+        "properties": {
+          "error": {
+            "description": "Why the last cutout that failed could not start, until one starts.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preparing": {
+            "description": "Cutouts whose model is opening or has not answered a frame yet. Each\ndraws nothing of the camera until it has. Preview's copy of a scene counts\nas well as the programme's.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "description": "Cutouts cutting the person out now.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "preparing",
+          "running"
         ],
         "type": "object"
       },
@@ -4098,6 +4547,49 @@
         ],
         "type": "object"
       },
+      "EventIdRequest": {
+        "description": "`replay.event.delete`, and anything else that names one event.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "EventList": {
+        "description": "`replay.event.list`.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayEvent"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "type": "object"
+      },
+      "EventRenameRequest": {
+        "description": "`replay.event.rename`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "ExportRequest": {
         "properties": {
           "include_media": {
@@ -4820,6 +5312,11 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "description": "The settings in force, as `filter.set` last left them.",
+            "type": "object"
           },
           "side": {
             "type": "string"
@@ -7308,6 +7805,57 @@
         ],
         "type": "object"
       },
+      "GuestList": {
+        "description": "What `guest.invite.list` answers, and the payload of `event/guest.changed`.",
+        "properties": {
+          "guests": {
+            "items": {
+              "$ref": "#/components/schemas/Invite"
+            },
+            "type": "array"
+          },
+          "max_guests": {
+            "description": "The most guests this show takes at once.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "talkback": {
+            "$ref": "#/components/schemas/TalkbackState"
+          }
+        },
+        "required": [
+          "guests",
+          "talkback",
+          "max_guests"
+        ],
+        "type": "object"
+      },
+      "GuestState": {
+        "description": "Where a guest is.",
+        "oneOf": [
+          {
+            "const": "invited",
+            "description": "The invite exists and nobody has opened it yet.",
+            "type": "string"
+          },
+          {
+            "const": "joining",
+            "description": "The guest's browser has offered and the connection is being made.",
+            "type": "string"
+          },
+          {
+            "const": "live",
+            "description": "The guest's picture and sound are arriving.",
+            "type": "string"
+          },
+          {
+            "const": "gone",
+            "description": "The guest was live and has left, or lost the network. The invite still\nworks, and the same link brings them back.",
+            "type": "string"
+          }
+        ]
+      },
       "HeadendChannel": {
         "additionalProperties": false,
         "description": "One channel.",
@@ -7948,6 +8496,16 @@
               "null"
             ]
           },
+          "filters_added": {
+            "description": "With `add_sources`: the sound filters put on the added sources, by id.\nA sound filter stays on its source, as in OBS; one the mixer refused is\nin `skipped` with its reason.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "filters_duplicated": {
             "description": "OBS attaches a filter to a source, so a camera keyed in one scene is\nkeyed in all of them. Here filters belong to the item, so a source\nfilter is copied onto each placement and each copy is named here. This\nis the one thing an import changes the meaning of, so it is reported\nrather than left for somebody to find on air.",
             "items": {
@@ -8339,6 +8897,175 @@
         ],
         "type": "object"
       },
+      "Invite": {
+        "description": "One invite, without its key.",
+        "properties": {
+          "bus": {
+            "description": "The mix minus bus the guest hears, `guest-<id>`: the programme\nwithout the guest, with talkback added while it is held.",
+            "type": "string"
+          },
+          "created": {
+            "description": "When it was made, RFC 3339.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "When it stops letting the guest in, RFC 3339. The guest is let go then.",
+            "type": "string"
+          },
+          "id": {
+            "description": "A slug, made from the name unless one was given.",
+            "type": "string"
+          },
+          "name": {
+            "description": "What the guest is called on screen and in the desk.",
+            "type": "string"
+          },
+          "source": {
+            "description": "The mixer source the guest's camera is, `guest-<id>`. It exists from\nthe guest's first offer until the invite goes.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GuestState"
+          },
+          "talkback": {
+            "description": "Whether talkback is held into this guest's return now.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created",
+          "expires",
+          "state",
+          "source",
+          "bus",
+          "talkback"
+        ],
+        "type": "object"
+      },
+      "InviteCreateRequest": {
+        "description": "`guest.invite.create`.",
+        "properties": {
+          "base": {
+            "description": "The address the link starts with, such as `https://studio.example.com`,\nfor a mixer reached through a name or a tunnel. Left out, the first\nhttps address of this machine that is not loopback.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_in_secs": {
+            "description": "How long the invite lasts, in seconds. One day when left out; at most\nthirty days.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "A slug for the invite. Made from the name when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The guest's name, as it should appear on screen. 1 to 64 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "InviteCreated": {
+        "description": "What `guest.invite.create` answers.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "invite": {
+            "$ref": "#/components/schemas/Invite"
+          },
+          "link": {
+            "description": "The `/join/` page with the guest's id and key in the fragment, which a\nbrowser never sends to a server.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Set when no guest on another device could open the link as it stands,\nwith what to change.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qr_svg": {
+            "description": "The link as a QR code, an SVG document a page can show as it is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invite",
+          "id",
+          "link",
+          "qr_svg"
+        ],
+        "type": "object"
+      },
+      "InviteIdRequest": {
+        "description": "`guest.invite.revoke` and `guest.invite.link`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "InviteLink": {
+        "description": "The link to send a guest, and the same as a QR code.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "link": {
+            "description": "The `/join/` page with the guest's id and key in the fragment, which a\nbrowser never sends to a server.",
+            "type": "string"
+          },
+          "note": {
+            "description": "Set when no guest on another device could open the link as it stands,\nwith what to change.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "qr_svg": {
+            "description": "The link as a QR code, an SVG document a page can show as it is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "link",
+          "qr_svg"
+        ],
+        "type": "object"
+      },
+      "InviteRevoked": {
+        "description": "What `guest.invite.revoke` answers.",
+        "properties": {
+          "revoked": {
+            "$ref": "#/components/schemas/Invite"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "type": "object"
+      },
       "ItemEdge": {
         "enum": [
           "left",
@@ -8717,6 +9444,21 @@
         ],
         "type": "object"
       },
+      "KeyListing": {
+        "description": "The keys on air, bottom first.",
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeyRecord"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
       "KeyMode": {
         "description": "How a publisher gives its key.",
         "oneOf": [
@@ -8732,6 +9474,21 @@
           }
         ]
       },
+      "KeyRecord": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
       "KeyRevealed": {
         "description": "What `channel.key.reveal` answers: the key itself, and nothing a list\nwould carry.",
         "properties": {
@@ -8741,6 +9498,36 @@
         },
         "required": [
           "secret"
+        ],
+        "type": "object"
+      },
+      "KeySetRequest": {
+        "additionalProperties": false,
+        "description": "`program.key.set`.",
+        "properties": {
+          "on": {
+            "description": "True to put it on air, false to take it off.",
+            "type": "boolean"
+          },
+          "scene": {
+            "description": "The scene to put on air as a key, or take off, by name or by id.",
+            "type": "string"
+          },
+          "transition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the key comes and goes: a name or {type, duration_ms, params}, as\nin `program.take`. A fade of 300 ms when absent; `\"cut\"` for none."
+          }
+        },
+        "required": [
+          "scene",
+          "on"
         ],
         "type": "object"
       },
@@ -8979,6 +9766,24 @@
         ],
         "type": "object"
       },
+      "LoadRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.load`: put a script on the prompter, paused at the top.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "play": {
+            "default": false,
+            "description": "Start playing at once.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "LogGstRequest": {
         "description": "`log.gst`.",
         "properties": {
@@ -9054,6 +9859,369 @@
         ],
         "type": "object"
       },
+      "LookRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.set`: change how the text looks. Only what is named changes.",
+        "properties": {
+          "cue": {
+            "default": null,
+            "description": "Where the cue line sits, 0.1 to 0.9 of the height from the top.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "line_chars": {
+            "default": null,
+            "description": "Characters a row holds, 12 to 80. Fewer is bigger.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "margin": {
+            "default": null,
+            "description": "Percent of the width left on each side, 0 to 30.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mirror": {
+            "default": null,
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "LutEntry": {
+        "description": "One LUT the library has.",
+        "properties": {
+          "about": {
+            "description": "For a built in, what it is for.",
+            "type": "string"
+          },
+          "group": {
+            "description": "`camera` for a log to Rec.709 conversion, `look` for a built in grade,\n`imported` for one brought in with `lut.import`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The slug a filter names it by: `lut = \"teal-orange\"`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Points a side of its cube, or the length of a 1D table.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "group",
+          "size"
+        ],
+        "type": "object"
+      },
+      "LutImportRequest": {
+        "description": "`lut.import`: a file on the mixer's machine.",
+        "properties": {
+          "name": {
+            "description": "The slug to keep it under. Taken from the file name when absent.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "An absolute path, or a name in the media library (where `media.upload`\nputs a file): a `.cube`, a `.3dl` or a `.png`.",
+            "type": "string"
+          },
+          "title": {
+            "description": "What the UI calls it. The file's own title, or its name, when absent.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "LutImported": {
+        "properties": {
+          "lut": {
+            "$ref": "#/components/schemas/LutEntry"
+          }
+        },
+        "required": [
+          "lut"
+        ],
+        "type": "object"
+      },
+      "LutList": {
+        "properties": {
+          "errors": {
+            "description": "Files in the library that would not read, each with the reason.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "formats": {
+            "description": "What `lut.import` reads.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "luts": {
+            "items": {
+              "$ref": "#/components/schemas/LutEntry"
+            },
+            "type": "array"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/LutPreset"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "luts",
+          "presets",
+          "formats"
+        ],
+        "type": "object"
+      },
+      "LutListRequest": {
+        "description": "`lut.list`.",
+        "properties": {
+          "group": {
+            "description": "`camera`, `look` or `imported` to see only those.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "LutNameRequest": {
+        "description": "`lut.remove` and `lut.preset.remove`.",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "LutPreset": {
+        "description": "A saved look: a LUT, how much of it, and a colour correction before it.\nAnything left out is the filter's default.",
+        "properties": {
+          "amount": {
+            "description": "0 to 1.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "brightness": {
+            "description": "-1 to 1.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "contrast": {
+            "description": "-4 to 4.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "gamma": {
+            "description": "-3 to 3.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hue_shift": {
+            "description": "-180 to 180.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lut": {
+            "description": "The LUT, by name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "A slug, made from what is given: \"Church Warm\" is kept as `church-warm`.",
+            "type": "string"
+          },
+          "saturation": {
+            "description": "-1 to 5.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tint": {
+            "description": "-1 greener to 1 more magenta.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "warmth": {
+            "description": "-1 cooler to 1 warmer.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "LutPreview": {
+        "properties": {
+          "image": {
+            "description": "A JPEG as a data URL, ready for an `<img src>`.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`lut` or `preset`.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The LUT or preset name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "image"
+        ],
+        "type": "object"
+      },
+      "LutPreviewRequest": {
+        "description": "`lut.preview`: small pictures of looks, on a source or on a test card.",
+        "properties": {
+          "amount": {
+            "description": "The amount each LUT is shown at, 0 to 1. 1 when absent.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "luts": {
+            "description": "LUT names. Every LUT in the library when absent.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "presets": {
+            "description": "Preset names, previewed after the LUTs.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "The source to show them on. A test card of skin, sky, foliage and\ngreys when absent or when the source has no picture yet.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "width": {
+            "description": "Width of each picture in pixels, 64 to 640. 240 when absent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "LutPreviews": {
+        "properties": {
+          "log_like": {
+            "description": "For a source, whether its picture looks like a log recording (flat,\ngrey, no deep blacks). The camera conversions are for those only: on\na normal camera they push skin bright and red.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "original": {
+            "description": "The picture with no look, to compare against.",
+            "type": "string"
+          },
+          "previews": {
+            "items": {
+              "$ref": "#/components/schemas/LutPreview"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "The source the pictures show, or absent for the test card.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "original",
+          "previews"
+        ],
+        "type": "object"
+      },
       "MachineStatus": {
         "description": "`machine.status`'s answer: the box, not one process.",
         "properties": {
@@ -9125,13 +10293,121 @@
         ],
         "type": "object"
       },
+      "MarkPoint": {
+        "description": "Which point `replay.mark` sets.",
+        "oneOf": [
+          {
+            "const": "in",
+            "description": "Open a new event here.",
+            "type": "string"
+          },
+          {
+            "const": "out",
+            "description": "Close the open event here.",
+            "type": "string"
+          }
+        ]
+      },
       "MarkRequest": {
+        "description": "`replay.mark`. With `point` it sets an in or an out point; with\n`seconds` alone it makes a whole event of the last that many seconds.",
+        "properties": {
+          "angle": {
+            "description": "The angle it was seen on, which playback starts from.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "A name for the event. Its id when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarkPoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seconds": {
+            "description": "For an in point, how many seconds before now it goes. For a whole\nevent, how long it is. 0 is now.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MarkRequest2": {
         "description": "`scene.history.mark`.",
         "properties": {
           "label": {
             "description": "What to call the group of changes that follows. Omit it to end the\ngroup, so the next change is its own undo step.",
             "type": [
               "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "Marker": {
+        "description": "A place in a script a person can jump to: a line that starts with `#`.",
+        "properties": {
+          "name": {
+            "description": "The words after the `#`, or `marker <n>` for a bare `#`.",
+            "type": "string"
+          },
+          "row": {
+            "description": "The row it starts on.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "row"
+        ],
+        "type": "object"
+      },
+      "MasterConfig": {
+        "description": "A master fader and mute.",
+        "properties": {
+          "gain": {
+            "default": 1.0,
+            "description": "0.0 silent, 1.0 unity, up to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "muted": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "MasterSetRequest": {
+        "description": "`audio.master.set`. Only what is named moves.",
+        "properties": {
+          "gain": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "muted": {
+            "type": [
+              "boolean",
               "null"
             ]
           }
@@ -9731,6 +11007,17 @@
               }
             ],
             "description": "Present while an ad break is armed or running."
+          },
+          "audio": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The programme master, the buses and the cue marks. Left out by a core\nthat has no audio desk."
           },
           "backend": {
             "$ref": "#/components/schemas/BackendInfo"
@@ -11230,6 +12517,122 @@
         ],
         "type": "object"
       },
+      "PlayRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.play`.",
+        "properties": {
+          "speed": {
+            "default": null,
+            "description": "Rows a second to play at. Left out keeps the speed it has.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "PlayRequest2": {
+        "description": "`replay.play`: load an event, or the last seconds of an angle, into a\nreplay source and play it from the start.",
+        "properties": {
+          "angle": {
+            "description": "The angle to show. The event's own angle, then the first angle.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event": {
+            "description": "The event to play. Without one, the last `seconds` of the angle.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "seconds": {
+            "description": "How far back to start when no event is named. 10 when left out.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "The source to play it on, added if it is not there. `replay` when\nleft out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speed": {
+            "description": "1.0 is real time, 0.5 half speed, down to 0.1. 1.0 when left out.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "take": {
+            "description": "Put it on air once it is loaded, as `program.take` would.",
+            "type": "boolean"
+          },
+          "transition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transition"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The transition for that take: a name such as `\"fade\"` or a stinger's\nobject. A cut when left out."
+          }
+        },
+        "type": "object"
+      },
+      "PlayStatus": {
+        "description": "What `replay.play` and `replay.set` answer with.",
+        "properties": {
+          "angle": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "description": "How long it plays at this speed.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "event": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position_ms": {
+            "description": "Where it is, in milliseconds of playback.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "description": "The source it plays on.",
+            "type": "string"
+          },
+          "speed": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "angle",
+          "speed",
+          "duration_ms",
+          "position_ms"
+        ],
+        "type": "object"
+      },
       "Playback": {
         "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
         "properties": {
@@ -11729,6 +13132,17 @@
       "PreviewRequest": {
         "description": "`scene.preview.set`.",
         "properties": {
+          "after_take": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AfterTake"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What Preview holds after a Take, for every client of this core:\n`same` (the default) keeps the scene just taken, `swap` arms the scene\nit replaced when the armed scene is taken. `program.take {}` takes\nwhat this leaves armed. Sent alone it changes the setting and nothing\nelse; nothing is disarmed."
+          },
           "draft": {
             "description": "A draft from `scene.edit.begin` for the preview to draw in place of\nthe armed scene, which is how a designer sees what it is laying out.\nWhat is armed is left as it is, and `scene` is ignored. An empty string\ngoes back to the armed scene; so does applying or discarding the draft.",
             "type": [
@@ -11842,6 +13256,14 @@
             },
             "type": "array"
           },
+          "on_air": {
+            "default": null,
+            "description": "What is on air, in one name: the scene when a scene is, whatever it\nholds, else the source, and null for the slate. `program` is null\nunder a scene of more than one item, so read this to say what is up.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "preview": {
             "description": "The scene armed for the next `program.take` with no argument.",
             "type": [
@@ -11879,6 +13301,110 @@
         },
         "required": [
           "running_time_ms"
+        ],
+        "type": "object"
+      },
+      "PrompterState": {
+        "description": "`prompter.get`, and the payload of `event/prompter.changed`.",
+        "properties": {
+          "at_ms": {
+            "description": "When `position` was true, on the mixer's clock.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cue": {
+            "description": "Where the cue line sits, as a fraction of the screen's height from the\ntop. The row at `position` is drawn on it. 0.1 to 0.9.",
+            "format": "double",
+            "type": "number"
+          },
+          "line_chars": {
+            "description": "The text size, as how many characters a row holds. Fewer is bigger.\nEvery screen fits this many across its own width, so all of them break\nthe rows in the same places. 12 to 80; 32 to start.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "margin": {
+            "description": "Space left on each side, as a percentage of the screen's width. 0 to 30.",
+            "format": "double",
+            "type": "number"
+          },
+          "markers": {
+            "items": {
+              "$ref": "#/components/schemas/Marker"
+            },
+            "type": "array"
+          },
+          "mirror": {
+            "description": "Flip the text left to right, for a screen read through beam splitter\nglass. A screen may override it for itself.",
+            "type": "boolean"
+          },
+          "now_ms": {
+            "description": "The mixer's clock as this was written, so a screen can tell how far\nits own clock is from it.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "playing": {
+            "type": "boolean"
+          },
+          "position": {
+            "description": "Where the prompter was at `at_ms`, in rows from the top. 2.5 is half\nway through the third row.",
+            "format": "double",
+            "type": "number"
+          },
+          "revision": {
+            "description": "Moves on every change, so a screen can drop an answer older than the\nlast event it applied.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "description": "How many rows it makes at `line_chars`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "script": {
+            "description": "The script on the prompter, or null when none is loaded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speed": {
+            "description": "Rows a second. Negative scrolls back. It applies only while `playing`.",
+            "format": "double",
+            "type": "number"
+          },
+          "title": {
+            "description": "Its title.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_ms": {
+            "description": "When its text last changed, in milliseconds since the Unix epoch. A\nscreen asks `prompter.rows` again when this or `line_chars` moves.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated_ms",
+          "rows",
+          "markers",
+          "position",
+          "at_ms",
+          "speed",
+          "playing",
+          "line_chars",
+          "margin",
+          "mirror",
+          "cue",
+          "now_ms",
+          "revision"
         ],
         "type": "object"
       },
@@ -12286,6 +13812,136 @@
         ],
         "type": "object"
       },
+      "ReplayConfig": {
+        "description": "The `[replay]` table. With no angles nothing is built.",
+        "properties": {
+          "angles": {
+            "description": "The angles to record: source ids, and `programme` for the programme\nitself. Empty turns replay off.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "bitrate_kbps": {
+            "description": "The bitrate a source angle is encoded at, in kbit/s. 0 or left out\nis the programme's own bitrate.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "seconds": {
+            "description": "Seconds each angle keeps, 1 to 1800. 60 when left out.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ReplayEvent": {
+        "description": "One event: a stretch of time between an in point and an out point, the\nsame stretch on every angle.",
+        "properties": {
+          "angle": {
+            "description": "The angle it was marked on, which playback starts from.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "A slug the mixer gives it: `replay-1`, `replay-2`.",
+            "type": "string"
+          },
+          "in_ms": {
+            "description": "The in point, in milliseconds of the mixer's clock.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "What the desk shows. The id until it is renamed.",
+            "type": "string"
+          },
+          "out_ms": {
+            "description": "The out point. Absent while the event is still open (marked in and not\nout yet).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "in_ms"
+        ],
+        "type": "object"
+      },
+      "ReplaySetRequest": {
+        "description": "`replay.set`: change the angle or the speed of a replay that is playing,\nfrom the frame it is on.",
+        "properties": {
+          "angle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speed": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ReplayStatus": {
+        "description": "`replay.get`: everything about replay on this mixer.",
+        "properties": {
+          "angles": {
+            "items": {
+              "$ref": "#/components/schemas/AngleStatus"
+            },
+            "type": "array"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ReplayConfig"
+          },
+          "events": {
+            "description": "Every event, oldest first. An event whose stretch has left every ring\nis still listed until it is deleted, and plays nothing.",
+            "items": {
+              "$ref": "#/components/schemas/ReplayEvent"
+            },
+            "type": "array"
+          },
+          "now_ms": {
+            "description": "The mixer's clock now, in the same milliseconds as an event's points.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "on": {
+            "description": "Whether anything is being recorded.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "config",
+          "angles",
+          "events",
+          "now_ms"
+        ],
+        "type": "object"
+      },
       "Report": {
         "description": "What `project.import` answers with.",
         "properties": {
@@ -12443,6 +14099,84 @@
           }
         ]
       },
+      "Role": {
+        "description": "What an account may do. The same ladder as a token's scopes, in the words\na person picking one for a colleague would use.",
+        "oneOf": [
+          {
+            "const": "view",
+            "description": "Watches: the multiview, the programme, the state. Takes nothing.",
+            "type": "string"
+          },
+          {
+            "const": "operate",
+            "description": "Runs the show: takes, transitions, graphics, sources and outputs.",
+            "type": "string"
+          },
+          {
+            "const": "admin",
+            "description": "Everything, including Mixer settings and the users themselves.",
+            "type": "string"
+          }
+        ]
+      },
+      "Row": {
+        "description": "One row of a script.",
+        "properties": {
+          "line": {
+            "description": "The line it came from, counting from 0.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "marker": {
+            "description": "True for the rows of a marker line, drawn as a heading.",
+            "type": "boolean"
+          },
+          "text": {
+            "description": "The words, with any asterisks still in them.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "line"
+        ],
+        "type": "object"
+      },
+      "RowsAnswer": {
+        "description": "`prompter.rows`: the script on the prompter, broken into rows.",
+        "properties": {
+          "line_chars": {
+            "description": "The width the rows were made at.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            },
+            "type": "array"
+          },
+          "script": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated_ms",
+          "line_chars",
+          "rows"
+        ],
+        "type": "object"
+      },
       "RtmpInfo": {
         "description": "The RTMP port every channel shares.",
         "properties": {
@@ -12515,6 +14249,67 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "SaveRequest2": {
+        "description": "`replay.save`: write an event, or the whole buffer of one angle, to an\nMP4 in the media folder without encoding it again.",
+        "properties": {
+          "angle": {
+            "description": "The angle to save. The event's own, then `programme` if it is\nrecorded, then the first angle.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event": {
+            "description": "The event to save. The whole buffer when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "The file's name, without a folder. Made from the time when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SaveStatus": {
+        "description": "What `replay.save` answers with once the file is written.",
+        "properties": {
+          "angle": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "duration_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "The file, as the media library names it: `Replays/<name>.mp4`.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Its absolute path on the mixer's machine.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "angle",
+          "duration_ms",
+          "bytes"
         ],
         "type": "object"
       },
@@ -12846,6 +14641,163 @@
         ],
         "type": "string"
       },
+      "Script": {
+        "description": "One script, as `prompter.script.get` and `prompter.script.save` answer.",
+        "properties": {
+          "id": {
+            "description": "A slug: `evening-news`.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Plain text. A line starting with `#` is a marker, `*word*` is drawn in\nitalics and `**word**` in bold.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_ms": {
+            "description": "When it was last saved, in milliseconds since the Unix epoch.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text",
+          "updated_ms"
+        ],
+        "type": "object"
+      },
+      "ScriptChanged": {
+        "description": "`event/prompter.script.changed`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "removed": {
+            "description": "True when the script was removed.",
+            "type": "boolean"
+          },
+          "updated_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "removed",
+          "updated_ms"
+        ],
+        "type": "object"
+      },
+      "ScriptIdRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.script.get` and `prompter.script.remove`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "ScriptList": {
+        "description": "`prompter.script.list`.",
+        "properties": {
+          "on": {
+            "description": "The one on the prompter now.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scripts": {
+            "description": "Every script, by id.",
+            "items": {
+              "$ref": "#/components/schemas/ScriptSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scripts"
+        ],
+        "type": "object"
+      },
+      "ScriptSaveRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.script.save`: make a script, or replace one with the same id.",
+        "properties": {
+          "id": {
+            "default": null,
+            "description": "A slug. Made from the title when left out: \"Evening news\" is\n`evening-news`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "description": "The words. A line starting with `#` is a marker.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ScriptSummary": {
+        "description": "One script in `prompter.script.list`, without its text.",
+        "properties": {
+          "bytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lines": {
+            "description": "Lines as written, blank ones included.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "markers": {
+            "description": "The names of its markers, in order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "lines",
+          "markers",
+          "bytes",
+          "updated_ms"
+        ],
+        "type": "object"
+      },
       "SearchRequest": {
         "description": "`plugin.search`.",
         "properties": {
@@ -12943,6 +14895,143 @@
         "required": [
           "id",
           "position_ms"
+        ],
+        "type": "object"
+      },
+      "SeekRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.seek`: exactly one of these.",
+        "properties": {
+          "by": {
+            "default": null,
+            "description": "Move this many rows on, or back when negative.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "fraction": {
+            "default": null,
+            "description": "A fraction of the way through: 0 is the top, 1 the end.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "marker": {
+            "default": null,
+            "description": "A marker by name, or by its number counting from 1 as a string (\"2\").",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "row": {
+            "default": null,
+            "description": "A row, from 0. 2.5 is half way through the third row.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "step": {
+            "default": null,
+            "description": "Move this many markers on (1 is the next, -1 the one before). From\ninside a section, -1 goes to the start of that section.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SendSetRequest": {
+        "description": "`audio.send.set`: how much of one source goes to one bus.",
+        "properties": {
+          "bus": {
+            "type": "string"
+          },
+          "level": {
+            "description": "0.0 takes the source off the bus, 1.0 is unity, up to 10.0.",
+            "format": "double",
+            "type": "number"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bus",
+          "source",
+          "level"
+        ],
+        "type": "object"
+      },
+      "SessionInfo": {
+        "description": "One signed in browser or device.",
+        "properties": {
+          "address": {
+            "default": "",
+            "description": "The address it signed in from, as the mixer saw it.",
+            "type": "string"
+          },
+          "created": {
+            "description": "When it signed in, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "current": {
+            "default": false,
+            "description": "True for the session that made this call.",
+            "type": "boolean"
+          },
+          "device": {
+            "default": "",
+            "description": "The browser's own description of itself, shortened.",
+            "type": "string"
+          },
+          "expires": {
+            "description": "When it stops working unless the person signs in again.",
+            "type": "string"
+          },
+          "id": {
+            "description": "A short id for this session, to end it with `user.sign_out`. Never the\nsecret.",
+            "type": "string"
+          },
+          "last_seen": {
+            "description": "When this mixer last saw it, since the mixer started. Absent when it\nhas not been seen since then.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user",
+          "created",
+          "expires"
+        ],
+        "type": "object"
+      },
+      "SessionList": {
+        "description": "`user.sessions`.",
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "sessions"
         ],
         "type": "object"
       },
@@ -14448,6 +16537,68 @@
           }
         ]
       },
+      "SignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ip": {
+            "description": "An address the link opens from and from nowhere else, for a link meant\nfor one viewer.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {
+            "description": "The HLS output, by id.",
+            "type": "string"
+          },
+          "ttl_secs": {
+            "description": "How long the link works, in seconds: 3600 when left out, at most\n2592000 (thirty days).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "output"
+        ],
+        "type": "object"
+      },
+      "SignedLink": {
+        "properties": {
+          "expires": {
+            "description": "When it stops working, in Unix seconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "master_url_path": {
+            "description": "The multivariant playlist's path with the signed query on it. Put the\npage's origin in front of it for a link.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "master_url_path",
+          "expires"
+        ],
+        "type": "object"
+      },
+      "SignedOut": {
+        "description": "`user.sign_out`.",
+        "properties": {
+          "sessions_ended": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions_ended"
+        ],
+        "type": "object"
+      },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
         "properties": {
@@ -14839,6 +16990,31 @@
         ],
         "type": "object"
       },
+      "SpeedRequest": {
+        "additionalProperties": false,
+        "description": "`prompter.speed`: one of `speed` or `by`.\n\nShaped for something that follows the speaker as well as for a person: a\nplugin listening to the voice sends `speed` as often as it likes, and the\nscreens follow without a jump, since the position carries on from where it\nwas at the moment of the change.",
+        "properties": {
+          "by": {
+            "default": null,
+            "description": "Add this to the speed it has: what a key or a Stream Deck button sends.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speed": {
+            "default": null,
+            "description": "Rows a second, -20 to 20. Negative scrolls back.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "StatsListing": {
         "properties": {
           "instances": {
@@ -15022,6 +17198,59 @@
             "description": "\"fade\", or {type, duration_ms, params}. Absent is a cut."
           }
         },
+        "type": "object"
+      },
+      "TalkbackRequest": {
+        "description": "`guest.talkback.set`.",
+        "properties": {
+          "guest": {
+            "description": "The guest to talk to. Left out, every guest that is live or joining.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "on": {
+            "description": "Hold talkback (true) or let it go (false).",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "Another input to talk with, such as a microphone on the mixer. It is\nmuted on the programme from then on, for as long as it is the\ntalkback source. Left out, the source stays what it was.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "on"
+        ],
+        "type": "object"
+      },
+      "TalkbackState": {
+        "description": "Talkback as it stands.",
+        "properties": {
+          "held": {
+            "description": "The guests it is held into now.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "present": {
+            "description": "Whether that source is in the mixer now.",
+            "type": "boolean"
+          },
+          "source": {
+            "description": "The source that talks: `guest-talkback` (the operator's browser\nmicrophone, published to `/guest/talkback/whip`) unless another input\nwas chosen. It is kept muted on the programme.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "present",
+          "held"
+        ],
         "type": "object"
       },
       "TaskRequest": {
@@ -15734,6 +17963,34 @@
         ],
         "type": "object"
       },
+      "TokenSafety": {
+        "description": "A token's own safety numbers, `[[tokens]] safety = { .. }`.\n\nThe core's `[safety]` table is the default. A human token may move any of\nthese in either direction; a token marked `agent` may only make them\nharder, which is enforced in `godwinmix_core::safety`. Held here rather\nthan in the engine because the dispatcher has the token and not the config.",
+        "properties": {
+          "flash_guard": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "max_takes_per_minute": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "min_hold_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "ToolCallRequest": {
         "description": "`tool.call`.",
         "properties": {
@@ -16101,6 +18358,214 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "UserAddRequest": {
+        "description": "`user.add`.",
+        "properties": {
+          "confirm": {
+            "$ref": "#/components/schemas/ConfirmPolicy",
+            "default": "none"
+          },
+          "name": {
+            "description": "Lower case letters, digits, `.`, `-` and `_`, up to 32 characters.",
+            "type": "string"
+          },
+          "password": {
+            "description": "At least 8 characters.",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "default": "operate",
+            "description": "`view`, `operate` (the default) or `admin`."
+          }
+        },
+        "required": [
+          "name",
+          "password"
+        ],
+        "type": "object"
+      },
+      "UserChanged": {
+        "description": "What `user.add`, `user.update`, `user.reset_password` and `user.remove`\nanswer with.",
+        "properties": {
+          "sessions_ended": {
+            "default": 0,
+            "description": "How many sessions the change ended.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserInfo"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "type": "object"
+      },
+      "UserInfo": {
+        "description": "One account, without its password.",
+        "properties": {
+          "confirm": {
+            "$ref": "#/components/schemas/ConfirmPolicy",
+            "default": "none",
+            "description": "`required` asks for a confirmation before a destructive call."
+          },
+          "created": {
+            "description": "When it was made, RFC 3339 in UTC.",
+            "type": "string"
+          },
+          "disabled": {
+            "default": false,
+            "description": "A disabled account cannot sign in, and its sessions are ended.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The username. Also the id every take is recorded against in\n`program.history`.",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "safety": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenSafety"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessions": {
+            "default": 0,
+            "description": "How many sessions are signed in now.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "created"
+        ],
+        "type": "object"
+      },
+      "UserList": {
+        "description": "`user.list`.",
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/UserInfo"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "type": "object"
+      },
+      "UserNameRequest": {
+        "description": "`user.remove` and `user.sessions`.",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "UserPasswordRequest": {
+        "description": "`user.reset_password`.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "description": "The new password, at least 8 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "password"
+        ],
+        "type": "object"
+      },
+      "UserSessionsRequest": {
+        "description": "`user.sessions` with no name lists everybody's.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "UserSignOutRequest": {
+        "description": "`user.sign_out`: one session by its id, or every session of one user.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "UserUpdateRequest": {
+        "description": "`user.update`: whatever is given changes, the rest stays.",
+        "properties": {
+          "confirm": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disabled": {
+            "description": "True ends every session of the account at once and refuses its sign in.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },
@@ -16534,6 +18999,72 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/account": {
+      "get": {
+        "description": "JSON-RPC method `account.get`. Needs the `read` scope.",
+        "operationId": "account.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountInfo"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Who this call is signed in as: the account and its role for a sign in, or that it is a token. Also whether this mixer has accounts at all.",
+        "tags": [
+          "account"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/account/change_password": {
+      "post": {
+        "description": "JSON-RPC method `account.change_password`. Needs the `read` scope.",
+        "operationId": "account.change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountPasswordRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change the signed in person's own password, given the current one. Every other session of theirs ends; this one stays signed in. A token has no password and is refused.",
+        "tags": [
+          "account"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/adbreak/end": {
       "post": {
         "description": "JSON-RPC method `adbreak.end`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -16719,6 +19250,290 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/audio/bus/add": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusConfig"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add a bus beside the programme mix, live. Nothing is built for buses until the first one.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/bus/list": {
+      "get": {
+        "description": "JSON-RPC method `audio.bus.list`. Needs the `read` scope.",
+        "operationId": "audio.bus.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The programme master, every bus with its sends, and the sources marked cue.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/audio/bus/remove": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusIdRequest"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take a bus out, live. Refused while an output takes its sound from it.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/bus/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.bus.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.bus.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a bus in place: its name, master, mute, the source a mix minus leaves out, or its sound card.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/cue/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.cue.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.cue.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CueSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Mark or clear a source for the cue bus. `solo` clears every other mark first.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/device/list": {
+      "get": {
+        "description": "JSON-RPC method `audio.device.list`. Needs the `read` scope.",
+        "operationId": "audio.device.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioDeviceList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The sound outputs on the mixer's machine that a bus can play on.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/audio/master/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.master.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.master.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MasterSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MasterConfig"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move the programme's master fader or mute. Only what is named moves.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/audio/send/set": {
+      "post": {
+        "description": "JSON-RPC method `audio.send.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "audio.send.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set how much of one source goes to one bus. 0 takes it off the bus.",
+        "tags": [
+          "audio"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/channels": {
@@ -18355,6 +21170,57 @@
         "x-scope": "operate"
       }
     },
+    "/api/v1/filters/{id}/cutout": {
+      "post": {
+        "description": "JSON-RPC method `filter.cutout`. Needs the `read` scope.",
+        "operationId": "filter.cutout",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CutoutReadiness"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Whether the cutouts are ready: how many are still opening their model,              and so draw nothing of the camera, and how many cut the person out.",
+        "tags": [
+          "filter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/filters/{id}/set": {
       "post": {
         "description": "JSON-RPC method `filter.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -19162,6 +22028,186 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/guest/invite/create": {
+      "post": {
+        "description": "JSON-RPC method `guest.invite.create`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "guest.invite.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteCreateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteCreated"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Invite a guest: a link with a key of its own that publishes only this guest's camera and microphone, as the source guest-<id>, and plays only this guest's return, the programme picture with everyone's sound but theirs. Answers the link and a QR code. It lasts a day unless expires_in_secs says otherwise.",
+        "tags": [
+          "guest"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/guest/invite/link": {
+      "post": {
+        "description": "JSON-RPC method `guest.invite.link`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "guest.invite.link",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLink"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "An invite's link and QR code again, to copy or show.",
+        "tags": [
+          "guest"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/guest/invite/list": {
+      "get": {
+        "description": "JSON-RPC method `guest.invite.list`. Needs the `read` scope.",
+        "operationId": "guest.invite.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every invite, without its key: the guest's name, when it runs out, whether they are invited, joining, live or gone, their source and return bus, and talkback.",
+        "tags": [
+          "guest"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/guest/invite/revoke": {
+      "post": {
+        "description": "JSON-RPC method `guest.invite.revoke`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "guest.invite.revoke",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteRevoked"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take an invite back. The guest's stream and return end at once, their source leaves every scene, and the link lets nobody in again.",
+        "tags": [
+          "guest"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/guest/talkback/set": {
+      "post": {
+        "description": "JSON-RPC method `guest.talkback.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "guest.talkback.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TalkbackRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Talk to one guest, or every guest that has joined, off air: on adds the talkback source to their return, off takes it out. The talkback source is kept muted on the programme. source picks another input to talk with.",
+        "tags": [
+          "guest"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/headend/channel/add": {
       "post": {
         "description": "JSON-RPC method `headend.channel.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -19600,6 +22646,44 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/hls/sign": {
+      "post": {
+        "description": "JSON-RPC method `hls.sign`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "hls.sign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedLink"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A viewer link to one HLS output that stops working after a time, and can be held to one address.",
+        "tags": [
+          "hls"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/log/gst": {
       "post": {
         "description": "JSON-RPC method `log.gst`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -19702,6 +22786,224 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/lut/import": {
+      "post": {
+        "description": "JSON-RPC method `lut.import`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutImportRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutImported"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Import a .cube, .3dl or PNG LUT from the mixer's machine or the media library into the LUT library.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/lut/list": {
+      "get": {
+        "description": "JSON-RPC method `lut.list`. Needs the `read` scope.",
+        "operationId": "lut.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every LUT the mixer has (camera conversions, built in looks, imported ones) and the saved presets.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/lut/preset/remove": {
+      "post": {
+        "description": "JSON-RPC method `lut.preset.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.preset.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutNameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a saved preset.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/lut/preset/save": {
+      "post": {
+        "description": "JSON-RPC method `lut.preset.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.preset.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutPreset"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutPreset"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Save a look under a name: a LUT, how much of it, and a colour correction before it.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/lut/preview": {
+      "post": {
+        "description": "JSON-RPC method `lut.preview`. Needs the `read` scope.",
+        "operationId": "lut.preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutPreviewRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LutPreviews"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Small JPEG pictures of looks on a source, or on a test card, for a picker.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/lut/remove": {
+      "post": {
+        "description": "JSON-RPC method `lut.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "lut.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LutNameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete an imported LUT. The built in ones cannot be deleted.",
+        "tags": [
+          "lut"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/machine/status": {
@@ -21860,6 +25162,72 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/program/key/list": {
+      "get": {
+        "description": "JSON-RPC method `program.key.list`. Needs the `read` scope.",
+        "operationId": "program.key.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The downstream keys on air, bottom first.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/program/key/set": {
+      "post": {
+        "description": "JSON-RPC method `program.key.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "program.key.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeySetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyListing"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a scene on air as a downstream key, above whatever is taken, or take it off.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/program/revert": {
       "post": {
         "description": "JSON-RPC method `program.revert`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -22082,6 +25450,436 @@
         "x-scope": "admin"
       }
     },
+    "/api/v1/prompter": {
+      "get": {
+        "description": "JSON-RPC method `prompter.get`. Needs the `read` scope.",
+        "operationId": "prompter.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The prompter now: the script on it, its rows and markers, the position at at_ms on the mixer's clock, the speed in rows a second, whether it plays, and the look.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/load": {
+      "post": {
+        "description": "JSON-RPC method `prompter.load`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.load",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a script on the prompter, at the top and paused unless play is true.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/pause": {
+      "post": {
+        "description": "JSON-RPC method `prompter.pause`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.pause",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop the prompter where it is.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/play": {
+      "post": {
+        "description": "JSON-RPC method `prompter.play`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.play",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Start the prompter scrolling, at speed when given. From the end it starts again at the top.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/rows": {
+      "post": {
+        "description": "JSON-RPC method `prompter.rows`. Needs the `read` scope.",
+        "operationId": "prompter.rows",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RowsAnswer"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The script on the prompter broken into rows at line_chars, the unit every position is counted in. A screen asks again when updated_ms or line_chars changes.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/script/get": {
+      "get": {
+        "description": "JSON-RPC method `prompter.script.get`. Needs the `read` scope.",
+        "operationId": "prompter.script.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Script"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One prompter script with its text.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/script/list": {
+      "get": {
+        "description": "JSON-RPC method `prompter.script.list`. Needs the `read` scope.",
+        "operationId": "prompter.script.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every prompter script kept on the station, with its title, size and markers, and which one is on the prompter. Without the text.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/prompter/script/remove": {
+      "post": {
+        "description": "JSON-RPC method `prompter.script.remove`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.script.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScriptChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Forget a prompter script. When it is on the prompter the screens go empty.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/script/save": {
+      "post": {
+        "description": "JSON-RPC method `prompter.script.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.script.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScriptSaveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Script"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make a prompter script or replace the one with the same id. A line starting with # is a marker; *word* is italic and **word** bold. Saving the script on the prompter changes every screen at once and keeps the place.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/seek": {
+      "post": {
+        "description": "JSON-RPC method `prompter.seek`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.seek",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeekRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move the prompter: to a row, to a fraction of the way through, to a marker by name or number, a number of markers on or back (step), or a number of rows (by).",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/set": {
+      "post": {
+        "description": "JSON-RPC method `prompter.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change how the text looks on every screen: line_chars (the text size, as characters a row), margin, mirror and the cue line. Only what is named changes.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/prompter/speed": {
+      "post": {
+        "description": "JSON-RPC method `prompter.speed`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "prompter.speed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeedRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrompterState"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set the speed in rows a second (speed), or change it (by). Negative scrolls back. The screens carry on from where they are, so it can be sent as often as wanted.",
+        "tags": [
+          "prompter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/rendition/plan": {
       "post": {
         "description": "JSON-RPC method `rendition.plan`. Needs the `read` scope.",
@@ -22158,6 +25956,368 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/replay": {
+      "get": {
+        "description": "JSON-RPC method `replay.get`. Needs the `read` scope.",
+        "operationId": "replay.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Whether replay is on, each angle's buffer depth and size, and every event.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/replay/event/delete": {
+      "post": {
+        "description": "JSON-RPC method `replay.event.delete`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.event.delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventIdRequest"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Forget a replay event. The recording it pointed at is not touched.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/event/list": {
+      "get": {
+        "description": "JSON-RPC method `replay.event.list`. Needs the `read` scope.",
+        "operationId": "replay.event.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every replay event, oldest first.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/replay/event/rename": {
+      "post": {
+        "description": "JSON-RPC method `replay.event.rename`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.event.rename",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRenameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayEvent"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Give a replay event a name.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/mark": {
+      "post": {
+        "description": "JSON-RPC method `replay.mark`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.mark",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayEvent"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set an in point (now, or `seconds` ago) or an out point, or make an event of the last `seconds`.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/play": {
+      "post": {
+        "description": "JSON-RPC method `replay.play`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.play",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayRequest2"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Play an event, or the last seconds of an angle, on a replay source, added if it is not there.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/save": {
+      "post": {
+        "description": "JSON-RPC method `replay.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRequest2"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Write an event, or the whole buffer of one angle, to an MP4 in the media folder, without encoding it again.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/set": {
+      "post": {
+        "description": "JSON-RPC method `replay.set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaySetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change a playing replay's angle or speed, from the frame it is on.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/start": {
+      "post": {
+        "description": "JSON-RPC method `replay.start`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayConfig"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Record these angles, each the last `seconds`. Called again, it changes them in place.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/replay/stop": {
+      "post": {
+        "description": "JSON-RPC method `replay.stop`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "replay.stop",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop recording, free every buffer and forget every event.",
+        "tags": [
+          "replay"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/scenes": {
@@ -22516,7 +26676,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MarkRequest"
+                "$ref": "#/components/schemas/MarkRequest2"
               }
             }
           },
@@ -23541,7 +27701,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.",
+        "summary": "Arm a scene. The armed scene is the preview, and program.take with no argument takes it. after_take sets what is armed after a take, for every client.",
         "tags": [
           "scene"
         ],
@@ -26082,6 +30242,262 @@
         "x-destructive": false,
         "x-idempotent": false,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/user/add": {
+      "post": {
+        "description": "JSON-RPC method `user.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserAddRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make an account with a username, a role (view, operate or admin) and a password of at least 8 characters. The first account must be an admin, and once one exists the page asks everybody for a username and password instead of a token.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/list": {
+      "get": {
+        "description": "JSON-RPC method `user.list`. Needs the `admin` scope.",
+        "operationId": "user.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every account: its name, role, whether it is disabled, and how many sessions it has signed in. Never a password.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/remove": {
+      "post": {
+        "description": "JSON-RPC method `user.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserNameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove an account and end every session it has at once. The last admin cannot be removed while other accounts remain.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/reset_password": {
+      "post": {
+        "description": "JSON-RPC method `user.reset_password`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.reset_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPasswordRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Give an account a new password, for somebody who forgot theirs. Every session it has ends, so whoever knew the old password is signed out.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/sessions": {
+      "post": {
+        "description": "JSON-RPC method `user.sessions`. Needs the `admin` scope.",
+        "operationId": "user.sessions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSessionsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The signed in browsers, everybody's or one account's: when each signed in, from which address and browser, when it expires and when it was last seen.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/sign_out": {
+      "post": {
+        "description": "JSON-RPC method `user.sign_out`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.sign_out",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSignOutRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "End sessions: one by its id, every session of one account by its name, or with neither every session of everybody. Each browser it ends is asked to sign in again on its next call.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/user/update": {
+      "post": {
+        "description": "JSON-RPC method `user.update`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "user.update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserChanged"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change an account's role, confirm policy, or whether it is disabled. Disabling ends every session it has at once. The last admin cannot be disabled or given a lower role.",
+        "tags": [
+          "user"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/vitals": {

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "connect",
+  "description": "Start talking to a switcher, under a slug of your choosing; it keeps reconnecting by itself until disconnect.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "A slug for the switcher, such as atem-main.",
+      "examples": [
+        "atem-main"
+      ]
+    },
+    "address": {
+      "type": "string",
+      "description": "The switcher's IP address or host name, with :port only when it is not 9910.",
+      "examples": [
+        "192.0.2.10"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "A name for people, such as Main switcher. The id when left out."
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "own",
+        "follow",
+        "lead"
+      ],
+      "default": "own",
+      "description": "own: driven only from the window and agents. follow: a GodwinMix take also cuts it. lead: a cut on its panel moves GodwinMix."
+    },
+    "map": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "description": "GodwinMix source id to ATEM input number."
+    }
+  },
+  "required": [
+    "id",
+    "address"
+  ],
+  "additionalProperties": false
+}

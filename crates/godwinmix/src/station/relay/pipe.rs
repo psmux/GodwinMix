@@ -23,8 +23,8 @@ pub type Upstream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 pub async fn connect(addr: SocketAddr, uri: &Uri, headers: &HeaderMap) -> Result<Upstream, String> {
     let url = upstream_url("ws", addr, uri.path(), uri.query());
     let mut request = url.as_str().into_client_request().map_err(|e| e.to_string())?;
-    if let Some(auth) = headers.get(axum::http::header::AUTHORIZATION) {
-        request.headers_mut().insert(axum::http::header::AUTHORIZATION, auth.clone());
+    if let Some(auth) = headers.get(axum::http::header::AUTHORIZATION).cloned().or_else(|| crate::accounts::cookie::as_bearer(headers)) {
+        request.headers_mut().insert(axum::http::header::AUTHORIZATION, auth);
     }
     let (ws, _) = tokio_tungstenite::connect_async(request).await.map_err(|e| e.to_string())?;
     Ok(ws)

@@ -236,6 +236,35 @@ export class Link {
     if (muted !== undefined) params.muted = muted;
     return this.call("source.audio.set", params);
   }
+
+  /** One of the teleprompter's moves, as the desk's Prompter panel sends it. */
+  prompter(move: "load" | "play" | "pause" | "speed" | "seek", params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.call(`prompter.${move}`, params);
+  }
+
+  /** One `replay.*` call, as the desk's Replay panel sends it. */
+  replay(method: "mark" | "set" | "save", params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.call(`replay.${method}`, params);
+  }
+
+  /** Play an event, or the last one marked when none is named. */
+  async replayPlay(event: string, angle: string, speed: number, take: boolean): Promise<unknown> {
+    let id = event;
+    if (!id) {
+      const list = (await this.call("replay.event.list", {})) as { events?: { id: string; out_ms?: number }[] };
+      id = [...(list.events || [])].reverse().find((e) => e.out_ms)?.id || "";
+    }
+    const params: Record<string, unknown> = { speed, take };
+    if (id) params.event = id;
+    if (angle) params.angle = angle;
+    return this.call("replay.play", params);
+  }
+
+  /** Play when paused, pause when playing: one button for a pedal or a key. */
+  async prompterToggle(): Promise<unknown> {
+    const state = (await this.call("prompter.get", {})) as { playing?: boolean };
+    return this.prompter(state && state.playing ? "pause" : "play");
+  }
 }
 
 /** Seconds as `1:02:03`, which is what an uptime variable should read like. */

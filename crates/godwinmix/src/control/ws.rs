@@ -112,6 +112,21 @@ struct Connection {
     presence_told: u64,
 }
 
+/// The close code a socket gets when its sign in or device token is taken
+/// back. The page reads it as "sign in again" rather than "reconnect".
+pub const SIGNED_OUT: u16 = 4401;
+
+/// A timer for a credential that can be taken back, None for one that can
+/// not.
+fn takeback_watch(token: &Token) -> Option<tokio::time::Interval> {
+    let can = token.secret.starts_with(crate::accounts::SECRET_PREFIX) || token.secret.starts_with(crate::devices::SECRET_PREFIX);
+    can.then(|| {
+        let mut every = tokio::time::interval(Duration::from_secs(3));
+        every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        every
+    })
+}
+
 pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     let (tx, mut rx) = socket.split();
     let mut events = ctx.app.mixer.subscribe();
@@ -120,7 +135,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // A device token's label, so the others see "Sam's phone" rather than
     // the token's slug.
     let label = ctx.app.tokens.devices().and_then(|d| d.list().into_iter().find(|t| t.id == token.id)).map(|t| t.label);
-    let _here = ctx.app.presence.join(&client_id, &token, label, who.user_agent.as_deref());
+    let here = ctx.app.presence.join(&client_id, &token, label, who.user_agent.as_deref());
     let mut conn = Connection {
         tx,
         ctx,
@@ -169,6 +184,11 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // subscribes to `presence.changed`: holding a receiver is what makes the
     // core announce a change at all, so nobody asking costs nothing.
     let mut presence: Option<broadcast::Receiver<()>> = None;
+    // A sign in or a device token can be taken back while this socket is
+    // open. Each call checks, but a viewer who only watches makes none, so a
+    // connection on one of those looks every few seconds as well. A
+    // configured token cannot be taken back and gets no timer.
+    let mut takeback = takeback_watch(&conn.token);
 
     // Why this socket ended, said once at the bottom. Three testers watched
     // the page's "Disconnected from the mixer" dialog sit there while the
@@ -286,6 +306,18 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
                 }
                 Err(broadcast::error::RecvError::Closed) => break 'client "the scene document's channel closed",
             },
+            _ = async {
+                match takeback.as_mut() {
+                    Some(t) => { t.tick().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {
+                if conn.ctx.app.tokens.revoked(&conn.token) {
+                    let close = axum::extract::ws::CloseFrame { code: SIGNED_OUT, reason: "signed out".into() };
+                    let _ = conn.tx.send(Message::Close(Some(close))).await;
+                    break 'client "its sign in or device token was taken back";
+                }
+            },
             // Somebody came, went, or said what they are editing. A lag only
             // means several changes at once, and the list sent is the whole
             // list either way.
@@ -368,6 +400,14 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // Info rather than debug: a page that says it is disconnected while the
     // mixer is up is a support call, and this is the line that answers it.
     info!(client = %conn.client_id, why, "rpc client disconnected");
+    // The seat goes first, so the question below is about the connections
+    // left. A composer whose page closed without a Discard held everybody's
+    // Preview on its draft; it lets go once its client has no page open.
+    drop(here);
+    let app = &conn.ctx.app;
+    if !app.presence.present(&conn.client_id) && app.scenes.client_left(&conn.client_id) {
+        crate::control::push_preview(app);
+    }
 }
 
 impl Connection {
@@ -553,10 +593,23 @@ impl Connection {
             serde_json::to_value(snapshot).map_err(|_| ())?,
         ))
         .await?;
+        self.send_armed().await?;
         self.send_layout(&status.multiview).await?;
         self.send_tally().await?;
         self.send_presence().await?;
         self.flush().await
+    }
+
+    /// What is armed, said once after the snapshot. The status document has
+    /// no field for it, so a page that reconnected after a restart kept the
+    /// scene armed before it and drew an empty Preview under its name. Null
+    /// when nothing is armed, which is news to a page that thought otherwise.
+    async fn send_armed(&mut self) -> Result<(), ()> {
+        if !self.sub.as_ref().is_some_and(|s| s.wants("preview.changed")) {
+            return Ok(());
+        }
+        let scene = self.ctx.app.scenes.armed_name();
+        self.send(rpc::notification("event/preview.changed", json!({ "scene": scene, "seq": self.seq }))).await
     }
 
     /// Tell the client about the grid, when it wants the mosaic and neither the
@@ -671,9 +724,19 @@ impl Connection {
     /// `program` instead, and empty when nothing is on air. Without this the
     /// programme half of tally only ever lit the one source a scene of one
     /// item reports, so a camera in a two box was told it was off.
+    ///
+    /// A downstream key's sources are on air too, over a scene or a source.
     fn program_sources(&self) -> Vec<String> {
-        let Some(scene) = self.program_scene.as_deref() else { return Vec::new() };
-        self.ctx.app.scenes.sources_in(scene)
+        let mut out = match self.program_scene.as_deref() {
+            Some(scene) => self.ctx.app.scenes.sources_in(scene),
+            None => Vec::new(),
+        };
+        for source in self.ctx.app.scenes.key_sources() {
+            if !out.contains(&source) {
+                out.push(source);
+            }
+        }
+        out
     }
 
     fn preview_sources(&self) -> Vec<String> {

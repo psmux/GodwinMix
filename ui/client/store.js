@@ -47,10 +47,11 @@ export function emptyState() {
  * own words.
  */
 export function programLabel(state) {
+  // A one item scene sends its source too; the scene is what was taken.
+  if (state.scene) return state.sceneName || state.scene;
   const source = state.program ? (state.sources || []).find((s) => s.id === state.program) : null;
   if (source) return source.name;
-  if (state.program) return state.program;
-  return state.scene ? state.sceneName || state.scene : null;
+  return state.program || null;
 }
 
 export class Store {
@@ -68,15 +69,10 @@ export class Store {
 
   /** Replace the status document wholesale. Used by `event/snapshot`. */
   snapshot(status, seq) {
-    // The armed scene is kept unless the status names one. The status document
-    // has no field for it and `event/preview.changed` is the only thing that
-    // says what is armed, so resetting it here took the armed scene away a
-    // moment after it arrived: asking for the preview stream re-subscribes,
-    // and a re-subscribe brings a fresh snapshot with it. The pane beside the
-    // programme appeared and went dark again on that one.
-    // The scene's current name is kept for the same reason: it comes from the
-    // scene document rather than the status, and a re-subscribe brings a fresh
-    // snapshot that would otherwise put the stale name back in the header.
+    // The status has no armed scene and no current scene name, so both are
+    // kept: a re-subscribe brings a snapshot, and resetting them darkened
+    // Preview and put a stale name in the header. The core says what is
+    // armed after every snapshot (`event/preview.changed`).
     const keep = {
       media: this.state.media,
       meters: this.state.meters,

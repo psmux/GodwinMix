@@ -3,6 +3,7 @@
 
 import { layoutFromSchema, valuesFrom, changedKeys, refusalField, statusFrom, pendingFrom, APPLIES } from "../shell/mixer-form.js";
 import { openMixerSettings } from "../shell/mixer-settings.js";
+import { openSettingsDialog, SETTINGS_INTRO, AFTER_TAKE_HINT } from "../shell/settings-dialog.js";
 import { SchemaInspector } from "../kits/schema/index.js";
 import { RpcError } from "../client/errors.js";
 
@@ -131,5 +132,21 @@ export async function mixerSettingsTests(test, eq, ok) {
     });
   } finally {
     m.close();
+  }
+
+  // Settings for this page must not claim nothing in it reaches the mixer:
+  // After Take is sent with scene.preview.set and kept for every client.
+  const page = openSettingsDialog({ legacy: false, call: async () => ({}) });
+  try {
+    test("Settings for this page names After Take as the mixer wide choice", () => {
+      const text = page.el.textContent;
+      ok(!text.includes("nothing here changes the mixer"), "the old untrue line is gone");
+      ok(text.includes(SETTINGS_INTRO), "the intro names the exception");
+      const field = [...page.el.querySelectorAll(".field")].find((f) => f.textContent.includes("After Take, Preview shows"));
+      ok(field && field.querySelector(".hint").textContent === AFTER_TAKE_HINT, "the After Take field says it is mixer wide");
+      ok(/mixer keeps/.test(AFTER_TAKE_HINT) && /After Take/.test(SETTINGS_INTRO));
+    });
+  } finally {
+    page.close();
   }
 }

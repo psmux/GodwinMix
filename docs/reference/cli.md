@@ -11,6 +11,7 @@
 | `--supervised` | `GODWINMIX_SUPERVISED` (`1`, `true`, `yes` or `on`) | something starts this mixer again when it exits. Only then does `core.restart` exit, and `core.info` answers `restart: {possible: true, how: "supervised"}`. The systemd unit, the compose file and the desktop app set it. Off by default, because a restart that never comes back is worse than none |
 | `--example-config` | | print the first run config and exit |
 | `--rehearsal` | | refuse `output.add` and accept only rehearsal tokens |
+| | `GODWINMIX_ICE_TCP` (`0`, `off` or `false`) | stop WebRTC viewers' and guests' connections from listening on a TCP port on every network address (ICE-TCP). On by default, so someone on a network that blocks UDP can still connect. The core's own WebRTC tests turn it off, because on one machine those listeners only ask Windows to allow each test program through the firewall |
 
 A mixer leaving because of `core.restart` exits with status 75. The desktop app
 starts its mixer again on that status and on no other, so its Quit stays a quit.
@@ -248,6 +249,24 @@ curl -X POST localhost:8080/api/golive -H 'content-type: application/json' \
 because the caller is a machine and the saving is a CPU core. Pass `"off"`
 to render the whole page in the browser.
 
+
+## Accounts
+
+`godwinmix --config <file> users ...` manages the usernames and passwords
+people sign in with, on the file beside that config, whether or not the
+mixer is running. Passwords come from `--password-stdin` or
+`--password-file <path>`, never from the command line.
+
+```sh
+printf '%s\n' "$PASSWORD" | godwinmix --config /etc/godwinmix/godwinmix.toml users add sam --role admin --password-stdin
+godwinmix --config /etc/godwinmix/godwinmix.toml users list --json
+godwinmix --config /etc/godwinmix/godwinmix.toml users sessions revoke sam
+```
+
+`list`, `add`, `passwd`, `role`, `disable`, `enable`, `remove`, `sessions
+list` and `sessions revoke`. The full table, and `GODWINMIX_ADMIN_USER` for an
+unattended install, are in
+[Sign in with a username and password](../how-to/sign-in-with-a-username-and-password.md).
 
 ## Many shows
 

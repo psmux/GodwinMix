@@ -25,6 +25,8 @@ pub fn answers(method: &str, params: &Value) -> bool {
     method.starts_with("show.")
         || method.starts_with("channel.")
         || method.starts_with("token.")
+        || method.starts_with("user.")
+        || method.starts_with("account.")
         || method.starts_with("headend.")
         || method == "network.share"
         || method == "governor.status"
@@ -51,6 +53,7 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
     }
     match method {
         m if m.starts_with("token.") => crate::devices::call(&st.tokens, m, params).await,
+        m if m.starts_with("user.") || m.starts_with("account.") => crate::accounts::calls::call(&st.tokens, token, m, params).await,
         m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
         // Boxed: an import calls show.add_many back through here.

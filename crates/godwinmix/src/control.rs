@@ -22,6 +22,7 @@
 pub mod call;
 mod clip_leave;
 mod fx_rest;
+mod lut_rest;
 pub mod history;
 pub mod hls;
 pub mod hooks;
@@ -150,6 +151,12 @@ pub struct AppState {
     /// Who is connected to `/rpc` and what each says it is editing. See
     /// `control/presence.rs`.
     pub presence: Arc<presence::Presence>,
+    /// The teleprompter's scripts and its place in them. No task and no
+    /// timer: see `crate::prompter`.
+    pub prompter: Arc<crate::prompter::Prompter>,
+    /// Guest invites and talkback. Nothing runs until a guest offers: see
+    /// `crate::guests`.
+    pub guests: Arc<crate::guests::Guests>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -168,6 +175,12 @@ pub struct Engine {
     /// The plugin singletons. Built before the mixer thread starts so a
     /// service is up by the time the first client connects.
     pub plugins: Arc<godwinmix_core::plugin::supervisor::Supervisor>,
+}
+
+/// What a guest's session makes the picture and sound into: the canvas
+/// rate and the canvas's sound.
+fn guest_shape(cfg: &Config) -> godwinmix_core::guest::Shape {
+    godwinmix_core::guest::Shape { fps: cfg.canvas.fps, rate: cfg.canvas.sample_rate, channels: cfg.canvas.channels }
 }
 
 /// Tell the mixer what the armed scene is, so a preview compositor draws it.
@@ -194,15 +207,22 @@ impl AppState {
             plugins,
         } = engine;
         let channels = channels_for(cfg, &plugins, &mixer, &scenes);
+        let bus = mixer.clone();
         join_channels_to_renditions(&channels);
         // A show under a station has no channels of its own to feed.
         if !crate::station::show::under_station() {
             channels.run_programme_feeds(Arc::new(crate::channels::feed_loop::OwnMixer { mixer: mixer.clone() }));
         }
-        let tokens = plugin_access::accepting_plugins(crate::station::show::with_station_token(cfg.tokens(rehearsal)))
+        // Accounts first: one existing closes an open port, and the station's
+        // own credential is added only to a port that is closed.
+        let accounts = crate::accounts::for_config(&cfg.source_path);
+        if !crate::station::show::under_station() {
+            crate::accounts::seed::from_env(&accounts);
+        }
+        let tokens = plugin_access::accepting_plugins(crate::station::show::with_station_token(cfg.tokens(rehearsal).with_accounts(accounts)))
             .with_devices(crate::devices::for_config(&cfg.source_path));
         let safety =
-            godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
+            godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.rounded().max(1) as u32);
         // The flash guard needs a luminance measurement and the telemetry
         // probes are the only thing that takes one. Binding them here is what
         // lets the guard tell a flash from a dissolve while a client is
@@ -232,11 +252,7 @@ impl AppState {
                 max_idempotency_key_bytes: 255,
                 event_queue: 256,
             },
-            canvas: CanvasInfo {
-                width: cfg.canvas.width,
-                height: cfg.canvas.height,
-                fps: cfg.canvas.fps,
-            },
+            canvas: canvas_info(&cfg.canvas),
             tokens: Arc::new(tokens),
             confirmations: Confirmations::new(),
             idempotency: idempotency::Cache::new(),
@@ -255,6 +271,8 @@ impl AppState {
             plugins,
             feeds: crate::feeds::Feeds::open(&cfg.source_path),
             presence: presence::Presence::new(),
+            prompter: crate::prompter::Prompter::open(&cfg.source_path, bus.clone()),
+            guests: crate::guests::Guests::open(&cfg.source_path, bus, guest_shape(cfg)),
         }
     }
 
@@ -403,6 +421,8 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         // not the control token, so it sits outside every token check.
         .merge(whip::router(ctx.clone()))
         .merge(whep::router(ctx.clone()))
+        // A guest's camera and return: the invite's key lets them in.
+        .merge(crate::guests::router(ctx.clone()))
         .merge(legacy(ctx.clone(), max_upload))
         .merge(rest::router(ctx.clone(), max_upload))
         // The Tauri shell and a browser on another origin both need this. It
@@ -1679,7 +1699,8 @@ pub async fn serve_with(
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.
-    let app = router(state, snapshots).merge(observe);
+    let auth = crate::accounts::http::router(state.tokens.clone());
+    let app = router(state, snapshots).merge(observe).merge(auth);
     crate::tls::serve(listener, app, tls).await?;
     Ok(())
 }
@@ -1700,6 +1721,13 @@ fn observe_state(state: &AppState) -> crate::observe::ObserveState {
         // reads, so the two doors answer the same.
         config_path: crate::observe::doctor_config_path(&state.config_path),
     }
+}
+
+/// The canvas as the protocol reports it: the whole rate, and the exact one
+/// beside it when it is a fraction such as 29.97.
+pub(crate) fn canvas_info(c: &godwinmix_core::config::Canvas) -> CanvasInfo {
+    let exact = (c.fps.denom() != 1).then(|| [c.fps.numer(), c.fps.denom()]);
+    CanvasInfo { width: c.width, height: c.height, fps: c.fps.rounded(), fps_fraction: exact }
 }
 
 #[cfg(test)]

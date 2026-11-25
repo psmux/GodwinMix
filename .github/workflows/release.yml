@@ -30,20 +30,18 @@ jobs:
   core:
     name: core (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
-    # The Windows leg of a release tag is code signed, and only it gets the
-    # windows-signing environment and its Certum secrets. Every other leg,
-    # and a rehearsal run by hand, gets an empty name, which GitHub treats as
-    # no environment at all (sign-test.yml checks that). The environment
-    # itself admits only v* tags.
-    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
+    # 60 to build, and the notary service's queue on the macOS legs.
+    timeout-minutes: 90
+    # On a release tag the Windows leg gets the windows-signing environment
+    # and its Certum secrets, and the macOS legs get macos-signing and the
+    # Apple ones. Every other leg, and a rehearsal run by hand, gets an empty
+    # name, which GitHub treats as no environment at all (sign-test.yml checks
+    # that). Both environments admit only v* tags.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.os == 'windows-latest' && 'windows-signing' || startsWith(matrix.os, 'macos') && 'macos-signing') || '' }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
@@ -57,16 +55,35 @@ jobs:
             archive: zip
     steps:
       - uses: actions/checkout@v4
+      # A v* tag ships a Mac build signed with the Developer ID and notarised,
+      # or nothing: `check` fails the job when a secret is missing, before an
+      # hour of building. A run by hand gets no environment and no secrets, and
+      # is signed ad hoc as before. The keychain and the notary key are
+      # checked here, in seconds. dev/sign-macos.sh and
+      # docs/how-to/sign-macos-builds.md have the rest.
+      - name: Apple signing (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            ./dev/sign-macos.sh check
+          elif [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "no Apple signing secrets in this run, so it is signed ad hoc"; exit 0
+          fi
+          ./dev/sign-macos.sh keychain
+          ./dev/sign-macos.sh preflight
+          echo "MACOS_SIGN=1" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
-
-      - name: GStreamer (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev
 
       - name: GStreamer (macOS)
         if: runner.os == 'macOS' && matrix.os != 'macos-15-intel'
@@ -97,6 +114,24 @@ jobs:
 
       - name: Build
         run: cargo build --release --locked --bins
+
+      # Before the archive, like the Windows signature. A loose program cannot
+      # carry a stapled ticket, so macOS asks Apple for it the first time the
+      # program runs; the notarisation is what it finds there.
+      - name: Sign and notarise (macOS)
+        if: env.MACOS_SIGN == '1'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          ./dev/sign-macos.sh sign target/release/godwinmix target/release/gmx
+          ./dev/sign-macos.sh verify target/release/godwinmix target/release/gmx
+          (cd target/release && zip -q "$RUNNER_TEMP/core.zip" godwinmix gmx)
+          ./dev/sign-macos.sh notarize "$RUNNER_TEMP/core.zip"
 
       # Signed before they go in the archive, so the zip and SHA256SUMS are
       # made from the signed files. A release tag ships signed Windows
@@ -155,61 +190,35 @@ jobs:
         shell: pwsh
         run: ./.github/windows-signing/logout.ps1
 
-  # A Raspberry Pi and any arm64 server, built on GitHub's arm64 runner. It
-  # was built in an arm64 container under QEMU on an x86 runner, which took
-  # 1 h 51 min for 0.3.1 against a two hour limit and held every release back
-  # by over an hour; natively it is a build like the x86 one. It is the
-  # reason a Pi user can install from a release instead of compiling on the
-  # board.
-  core-aarch64:
-    name: core (aarch64-unknown-linux-gnu)
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Remove the signing keychain (macOS)
+        if: always() && env.MACOS_SIGN == '1'
+        run: ./dev/sign-macos.sh cleanup
 
-      - name: Build
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev pkg-config
-          cargo build --release --locked --bins
-          strip target/release/godwinmix target/release/gmx
-
-      - name: Package
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
-          name="godwinmix-${version}-aarch64-unknown-linux-gnu"
-          mkdir -p "pkg/$name"
-          sudo cp target/release/godwinmix target/release/gmx "pkg/$name/"
-          cp README.md LICENSE godwinmix.example.toml deploy/systemd/godwinmix.service "pkg/$name/"
-          sudo chown -R "$USER" pkg
-          tar czf "$name.tar.gz" -C pkg "$name"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: core-aarch64-unknown-linux-gnu
-          path: "*.tar.gz"
+  # Every Linux artefact, x86_64 and arm64: the server archives, the .deb and
+  # the AppImage. Built in the Ubuntu 22.04 baseline image so they run on
+  # Ubuntu 22.04 and later, Debian 12 and later, Raspberry Pi OS and old CPUs,
+  # and proved on each before publish. See the workflow.
+  linux:
+    name: linux
+    uses: ./.github/workflows/linux-packages.yml
+    secrets: inherit
 
   # ---------------------------------------------------------------- desktop --
   desktop:
     name: desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    # The Windows leg of a release tag is code signed, and only it gets the
-    # windows-signing environment and its Certum secrets. Every other leg,
-    # and a rehearsal run by hand, gets an empty name, which GitHub treats as
-    # no environment at all (sign-test.yml checks that). The environment
-    # itself admits only v* tags.
-    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
+    # Two notarisations on the macOS legs, the app and the disk image.
+    timeout-minutes: 180
+    # On a release tag the Windows leg gets the windows-signing environment
+    # and its Certum secrets, and the macOS legs get macos-signing and the
+    # Apple ones. Every other leg, and a rehearsal run by hand, gets an empty
+    # name, which GitHub treats as no environment at all (sign-test.yml checks
+    # that). Both environments admit only v* tags.
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && (matrix.os == 'windows-latest' && 'windows-signing' || startsWith(matrix.os, 'macos') && 'macos-signing') || '' }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: linux
-            bundles: deb,appimage
           - os: macos-latest
             platform: macos
             bundles: app
@@ -249,33 +258,35 @@ jobs:
       ON_DEMAND_PLUGINS_BUDGET_MB: 80
     steps:
       - uses: actions/checkout@v4
+      # A v* tag ships a Mac build signed with the Developer ID and notarised,
+      # or nothing: `check` fails the job when a secret is missing, before an
+      # hour of building. A run by hand gets no environment and no secrets, and
+      # is signed ad hoc as before. The keychain and the notary key are
+      # checked here, in seconds. dev/sign-macos.sh and
+      # docs/how-to/sign-macos-builds.md have the rest.
+      - name: Apple signing (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            ./dev/sign-macos.sh check
+          elif [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "no Apple signing secrets in this run, so it is signed ad hoc"; exit 0
+          fi
+          ./dev/sign-macos.sh keychain
+          ./dev/sign-macos.sh preflight
+          echo "MACOS_SIGN=1" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
-
-      # The desktop shell is a webview pointed at the mixer's own URL, so it
-      # does not link GStreamer. It does need the platform's webview toolkit,
-      # and it needs a GStreamer to cut the bundled runtime out of.
-      - name: Tauri dependencies and GStreamer (Linux)
-        if: runner.os == 'Linux'
-        # A hung package mirror sat here for 78 minutes on the v0.2.1
-        # release; the step normally takes two or three.
-        timeout-minutes: 15
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev patchelf libssl-dev libfuse2 \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-            gstreamer1.0-libav gstreamer1.0-tools \
-            gstreamer1.0-nice gstreamer1.0-alsa gstreamer1.0-pipewire
-      # The last three are packages of their own on Debian and Ubuntu, outside
-      # the four plugin sets. gstreamer1.0-nice is libnice's plugin: without
-      # it the trimmed tree had no nicesrc, and the v0.2.0 AppImage and .deb
-      # could take no phone camera. -pipewire is screen capture on Wayland,
-      # -alsa the audio fallback with no PulseAudio. plugins-ugly is x264enc,
-      # which the HLS ladder and file conversion make by name.
 
       # libnice-gstreamer is the same plugin as a Homebrew formula of its own.
       - name: GStreamer (macOS)
@@ -374,7 +385,6 @@ jobs:
             # see until the next one.
             Windows) choco install -y --no-progress cmake ninja
                      export PATH="/c/Program Files/CMake/bin:$PATH" ;;
-            *) sudo apt-get install -y cmake ninja-build ;;
           esac
           ./dev/bundle-browser.sh
 
@@ -382,22 +392,9 @@ jobs:
       # bundle.resources. Without this step the installers go out expecting
       # the operator to install a 527 MB GStreamer first, which is the thing
       # this whole arrangement exists to avoid.
-      - name: Build private FFmpeg for the Linux runtime
-        if: runner.os == 'Linux'
-        run: |
-          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get update
-          sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm zlib1g-dev libbz2-dev liblzma-dev
-          ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
-
       - name: The bundled GStreamer (Unix)
         if: runner.os != 'Windows'
-        run: |
-          if [ "${{ runner.os }}" = Linux ]; then
-            ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb "$RUNTIME_BUDGET_MB"
-          else
-            ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
-          fi
+        run: ./dev/bundle-gstreamer.sh --budget-mb "$RUNTIME_BUDGET_MB"
 
       - name: The bundled GStreamer (Windows)
         if: runner.os == 'Windows'
@@ -429,6 +426,22 @@ jobs:
           done
           codesign --force --sign - "$bin"
           otool -L "$bin" | grep -c "@executable_path"             || { echo "::error::nothing in the mixer pointed at the runtime in the app" >&2; exit 1; }
+          # The web page renderer links GStreamer too, and was left pointing at
+          # the build machine's copy: it ran only because the mixer starts it
+          # with DYLD_LIBRARY_PATH. From its executable, Contents/MacOS inside
+          # godwinmix-browser.app inside Resources/browser, the app's runtime
+          # is four folders up.
+          app=tauri-app/browser/godwinmix-browser.app
+          renderer="$app/Contents/MacOS/godwinmix-browser"
+          otool -L "$renderer" | awk 'NR>1 {print $1}' | while read -r dep; do
+            leaf="${dep##*/}"
+            if [ -f "$lib/$leaf" ]; then
+              install_name_tool -change "$dep" "@executable_path/../../../../gstreamer/macos/lib/$leaf" "$renderer"
+            fi
+          done
+          codesign --force --deep --sign - "$app"
+          otool -L "$renderer" | grep -c "@executable_path/../../../../gstreamer" \
+            || { echo "::error::nothing in the renderer pointed at the runtime in the app" >&2; exit 1; }
 
       # The person cutout: its two Apache 2.0 models and ONNX Runtime for this
       # platform (DirectML inside on Windows, CoreML on macOS), pinned and
@@ -456,6 +469,24 @@ jobs:
         shell: pwsh
         run: ./.github/windows-signing/sign-staged.ps1
 
+      # Tauri signs the app and the bundles it can see, not a loose library
+      # inside one of them. The Intel CEF download carries unsigned dylibs
+      # (libvulkan.dylib in the framework's Libraries), which the check after
+      # the disk image refuses. Each unsigned program is signed ad hoc here,
+      # innermost first, and the renderer's bundle is sealed again over them.
+      - name: Sign every program the app carries (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for dir in gstreamer plugins browser models onnxruntime; do
+            [ -d "tauri-app/$dir" ] || continue
+            find "tauri-app/$dir" -type f -print0 | while IFS= read -r -d '' f; do
+              case "$(head -c 4 "$f" | xxd -p)" in cffaedfe|cafebabe|feedfacf) ;; *) continue ;; esac
+              codesign -v "$f" 2>/dev/null || { echo "signing $f"; codesign --force --sign - "$f"; }
+            done
+          done
+          codesign --force --deep --sign - tauri-app/browser/godwinmix-browser.app
+
       - name: Bundle
         working-directory: tauri-app
         run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ env.WINDOWS_SIGN_CONFIG }}
@@ -482,6 +513,44 @@ jobs:
         # image from, and the check below and the collect step find nothing.
         run: cargo tauri build --bundles app,dmg
 
+      # Tauri signed the app ad hoc. Here every program in it is signed again
+      # with the Developer ID and the hardened runtime, inside out, and the
+      # app is notarised and stapled. The disk image is then made again from
+      # that app, signed, notarised and stapled itself, under the name Tauri
+      # gave it. The last check is the one a person's Mac makes: the app as
+      # it comes off the disk image is "Notarized Developer ID".
+      - name: Developer ID signature and notarisation (macOS)
+        if: env.MACOS_SIGN == '1'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          app=tauri-app/target/release/bundle/macos/GodwinMix.app
+          dmg=$(find tauri-app/target/release/bundle/dmg -name 'GodwinMix_*.dmg' | head -1)
+          [ -n "$dmg" ] || { echo "::error::Tauri made no disk image" >&2; exit 1; }
+          ./dev/sign-macos.sh sign "$app"
+          ./dev/sign-macos.sh verify "$app"
+          ./dev/sign-macos.sh notarize "$app"
+          ./dev/sign-macos.sh dmg "$app" "$dmg"
+          ./dev/sign-macos.sh notarize "$dmg"
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" >/dev/null
+          # An app whose ticket could not be stapled is looked up online,
+          # over the same flaky connection, so the verdict is asked for again.
+          for try in 1 2 3 4; do
+            verdict=$(spctl -a -vv -t exec "$mnt/GodwinMix.app" 2>&1 || true)
+            grep -q 'source=Notarized Developer ID' <<<"$verdict" && break
+            sleep 30
+          done
+          hdiutil detach "$mnt" >/dev/null
+          echo "$verdict"
+          grep -q 'source=Notarized Developer ID' <<<"$verdict" \
+            || { echo "::error::Gatekeeper does not accept the app on $dmg as notarised" >&2; exit 1; }
+
       # An installer with no media stack inside it is the failure this release
       # is meant to make impossible, so the bundle is opened and looked at.
       - name: The runtime really is inside the app (macOS)
@@ -497,6 +566,27 @@ jobs:
           # will not go live and a log that stops mid sentence.
           grep -q NSCameraUsageDescription "$app/Contents/Info.plist" \
             || { echo "::error::tauri-app/Info.plist was not merged into $app" >&2; exit 1; }
+          # Every program in the app carries a signature, ad hoc at least.
+          # macOS refuses the camera, the microphone and the screen, with no
+          # prompt, to a process it cannot identify, and the Intel linker
+          # signs nothing by itself: the 0.3.12 Intel app's camera never
+          # opened for that reason.
+          codesign --verify --deep --strict "$app" \
+            || { echo "::error::$app does not verify as signed" >&2; exit 1; }
+          find "$app/Contents" -type f -perm -u+x -print0 | while IFS= read -r -d '' f; do
+            case "$(head -c 4 "$f" | xxd -p)" in cffaedfe|cafebabe|feedfacf) ;; *) continue ;; esac
+            codesign -v "$f" 2>/dev/null || { echo "::error::$f is not signed" >&2; exit 1; }
+            # An ad hoc signature with the hardened runtime turns on library
+            # validation, and a Mac on macOS 26 then refuses every GStreamer
+            # library the mixer links ("different Team IDs"). The 0.3.24 app
+            # shipped that way; the runner did not enforce it, so it is looked
+            # for here rather than trusted to the launch below.
+            # A Developer ID build has the hardened runtime on every program,
+            # which the step above checked.
+            if [ "${MACOS_SIGN:-}" != 1 ] && codesign -dv "$f" 2>&1 | grep -q 'flags=.*runtime'; then
+              echo "::error::$f is signed with the hardened runtime, which an ad hoc app cannot load its libraries under" >&2; exit 1
+            fi
+          done
           # --headless-check asks the mixer it starts whether it loaded each
           # of them, which is the claim that matters.
           ./"$app"/Contents/MacOS/godwinmix-desktop --headless-check
@@ -552,6 +642,10 @@ jobs:
           name: desktop-${{ matrix.os }}
           path: bundles/
 
+      - name: Remove the signing keychain (macOS)
+        if: always() && env.MACOS_SIGN == '1'
+        run: ./dev/sign-macos.sh cleanup
+
       - name: Log out of Certum SimplySign (Windows)
         if: always() && runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -601,10 +695,16 @@ jobs:
   # --------------------------------------------------------------- release ---
   publish:
     name: publish the release
-    needs: [core, core-aarch64, desktop, image]
+    needs: [core, linux, desktop, image]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The two extra ones let the job sign its provenance through GitHub's
+    # Sigstore identity, with no key of ours to keep.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -630,6 +730,38 @@ jobs:
           # `sha256sum -c SHA256SUMS` after fetching the ones you want.
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+
+      # A signed statement that this workflow, at this tag, in this
+      # repository, made these files. Anyone can check one with
+      # `gh attestation verify <file> --repo psmux/GodwinMix`, and checking
+      # SHA256SUMS that way vouches for every hash in it. Keyless: the
+      # signature comes from the job's own GitHub identity.
+      - name: Provenance for every file and SHA256SUMS
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: assets/*
+
+      # A minisign signature over SHA256SUMS, for a checker that wants a plain
+      # Ed25519 key it pins itself. Made only once the repository has the
+      # secret key; docs/how-to/verify-a-download.md says how to make one.
+      # The public half is committed at deploy/keys/godwinmix.pub, and the
+      # signature is checked against it before it is published.
+      - name: Sign SHA256SUMS with minisign
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "::notice::No MINISIGN_SECRET_KEY secret, so SHA256SUMS goes out with its provenance and no minisign signature"
+            exit 0
+          fi
+          sudo apt-get update -q && sudo apt-get install -y -q minisign
+          umask 077
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          minisign -S -s "$RUNNER_TEMP/minisign.key" -m assets/SHA256SUMS \
+            -t "GodwinMix ${GITHUB_REF_NAME} SHA256SUMS"
+          rm -f "$RUNNER_TEMP/minisign.key"
+          minisign -V -p deploy/keys/godwinmix.pub -m assets/SHA256SUMS
+          cp deploy/keys/godwinmix.pub assets/godwinmix-minisign.pub
 
       # The image is pushed under the repository's name in lower case, which
       # is the only case a registry takes; `docker run` with the name as
@@ -657,12 +789,19 @@ jobs:
 
             Desktop: the `.dmg` on macOS (`_aarch64` for Apple silicon, `_x64`
             for Intel); the `-setup.exe` or the `.msi` on
-            Windows; the `.deb` on Debian and Ubuntu, or the `.AppImage` on any
-            other Linux. Each carries its own trimmed GStreamer, so nothing
-            else needs installing (see the README, Platforms).
+            Windows; the `.deb` on Debian, Ubuntu and Raspberry Pi OS
+            (`_amd64` for a PC, `_arm64` for a Pi 4 or 5), or the `.AppImage`
+            on any other Linux. The Linux ones run on Ubuntu 22.04, Debian 12
+            and later, with or without a GPU, on any 64 bit CPU. Each carries
+            its own trimmed GStreamer, so nothing else needs installing (see
+            the README, Platforms).
 
             Server: the archive for your platform holds `godwinmix` and `gmx`,
             the same binary under two names, plus the example config. The
-            distribution's GStreamer packages are the only dependency.
+            distribution's GStreamer packages, 1.20 or later, are the only
+            dependency.
 
-            Check what you downloaded against `SHA256SUMS`.
+            Check what you downloaded against `SHA256SUMS`, and check
+            `SHA256SUMS` itself with
+            `gh attestation verify SHA256SUMS --repo psmux/GodwinMix`
+            (see docs/how-to/verify-a-download.md).

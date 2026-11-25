@@ -51,6 +51,10 @@ docker run -d --name godwinmix \
   writable by the container's user first (`sudo chown -R 10001:10001
   /srv/godwinmix/config`), because the mixer does not run as root and a
   directory the daemon created for you is owned by root.
+* `/etc/godwinmix/home` is `GODWINMIX_HOME`: the secret store with channel
+  keys and RTMPS certificates, and installed plugins. It sits in the config
+  volume so a new container, after an upgrade, keeps them. Mount `/etc/godwinmix`
+  and nothing else is needed.
 * `/var/lib/godwinmix/media` is the ad clip library and anything else played
   from a file.
 * `GODWINMIX_TOKEN` overrides `[control] token` in the config. Set it. The

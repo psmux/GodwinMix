@@ -42,7 +42,7 @@ fn install(tag: &str) -> (PathBuf, Arc<Supervisor>) {
     loader::set_dir(dir.clone());
     loader::set_runtime_dir(dir.join("run"));
     loader::install_from_path(&fixture()).expect("installing the fixture");
-    let canvas = CanvasCaps::new(&godwinmix_core::config::Canvas { width: 320, height: 180, fps: 30, sample_rate: 48_000, channels: 2 });
+    let canvas = CanvasCaps::new(&godwinmix_core::config::Canvas { width: 320, height: 180, fps: godwinmix_core::config::FrameRate::whole(30), sample_rate: 48_000, channels: 2 });
     let supervisor = Supervisor::new(canvas, Default::default());
     let failures = supervisor.start_all();
     assert!(failures.is_empty(), "the service would not start: {failures:?}");
@@ -134,7 +134,7 @@ fn a_plugin_is_told_where_the_core_is_and_given_a_token() {
     }
     loader::set_rpc_url("ws://127.0.0.1:23399/rpc".into());
     let tokens = godwinmix_protocol::scope::Tokens::new(Vec::new(), false);
-    loader::set_token_minter(Box::new(move |plugin, instance| tokens.mint_for_plugin(plugin, instance, None)));
+    loader::set_token_minter(Box::new(move |plugin, instance, grants| tokens.mint_for_plugin_with(plugin, instance, None, grants)));
     let (dir, supervisor) = install("rpc");
     let env = echo(&supervisor, "echo")["structuredContent"]["env"].clone();
     assert_eq!(env["GMX_RPC"], "ws://127.0.0.1:23399/rpc", "{env}");

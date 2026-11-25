@@ -3,7 +3,7 @@
 // open, `pub.session` the publish if there is one) and changes only those.
 
 import { fillSelect } from "./form.js";
-import { listDevices, openTrack, mediaErrorText } from "./devices.js";
+import { listDevices, openTrack, mediaErrorText, realCameraFor, rankCameras, camerasToTry } from "./devices.js";
 
 const WHAT = { video: "camera", audio: "microphone" };
 
@@ -41,12 +41,41 @@ export async function install(pub, kind, track) {
   pub.paintTracks();
 }
 
+/**
+ * When nobody picked the camera and the browser's own choice was a program
+ * posing as one (DroidCam, OBS), open the first real camera instead, and when
+ * its choice would not open at all, try the real ones best first. Not
+ * remembered: the person did not choose it, and their own pick always wins.
+ */
+export async function preferRealCamera(pub) {
+  const open = pub.tracks.video;
+  try {
+    const { cameras } = await listDevices();
+    if (open) {
+      const real = realCameraFor(open.getSettings?.().deviceId || "", cameras);
+      if (!real) return;
+      // Opened before the swap, so a real camera another program holds
+      // leaves the guest on the one that works rather than on none.
+      const track = await openTrack("video", real, { exact: true, processing: pub.r.processing.checked, loose: !!pub.shaper });
+      track.enabled = open.enabled;
+      await install(pub, "video", track);
+      return;
+    }
+    for (const c of camerasToTry(cameras)) {
+      await openKind(pub, "video", c.id, true);
+      if (pub.tracks.video) return;
+    }
+  } catch {
+    // The camera already open stays; the list still offers the others.
+  }
+}
+
 /** Fill both device lists, keeping what is open chosen. */
 export async function refreshDevices(pub) {
   try {
     const { cameras, mics } = await listDevices();
     const id = (kind) => pub.tracks[kind]?.getSettings?.().deviceId || "";
-    fillSelect(pub.r.camera, cameras, pub.tracks.video ? id("video") : "off", "No camera");
+    fillSelect(pub.r.camera, rankCameras(cameras), pub.tracks.video ? id("video") : "off", "No camera");
     fillSelect(pub.r.mic, mics, id("audio"), "");
     // A phone has a front and a back camera; one camera has nothing to flip to.
     pub.r.flip.hidden = cameras.length < 2;

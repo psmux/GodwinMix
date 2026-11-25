@@ -18,7 +18,7 @@ use std::time::Duration;
 
 fn config() -> godwinmix_core::config::Config {
     let mut cfg: godwinmix_core::config::Config = toml::from_str("").unwrap();
-    cfg.canvas = godwinmix_core::config::Canvas { width: 320, height: 180, fps: 15, sample_rate: 48000, channels: 2 };
+    cfg.canvas = godwinmix_core::config::Canvas { width: 320, height: 180, fps: godwinmix_core::config::FrameRate::whole(15), sample_rate: 48000, channels: 2 };
     cfg.multiview.enabled = false;
     cfg.program.encoder = "on-demand".into();
     cfg

@@ -350,6 +350,13 @@ pub struct PreviewRequest {
     /// goes back to the armed scene; so does applying or discarding the draft.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<String>,
+    /// What Preview holds after a Take, for every client of this core:
+    /// `same` (the default) keeps the scene just taken, `swap` arms the scene
+    /// it replaced when the armed scene is taken. `program.take {}` takes
+    /// what this leaves armed. Sent alone it changes the setting and nothing
+    /// else; nothing is disarmed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_take: Option<godwinmix_core::scene::server::AfterTake>,
 }
 
 /// `scene.preview.frame`.

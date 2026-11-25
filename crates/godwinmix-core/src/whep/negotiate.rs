@@ -25,6 +25,7 @@ pub struct Branch<'a> {
 pub fn webrtcbin(name: &str, params: &WhepParams) -> Result<gst::Element, Refusal> {
     let bin = make("webrtcbin", name).map_err(|e| Refusal::unavailable(format!("{e:#}")))?;
     crate::probe::set_enum(&bin, "bundle-policy", "max-bundle");
+    crate::webrtc_ice::apply(&bin);
     if !params.stun.is_empty() {
         bin.set_property("stun-server", &params.stun);
     }

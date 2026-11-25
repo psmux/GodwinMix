@@ -21,7 +21,7 @@ async fn serve() -> (String, PreviewHandle, mixer::MixerHandle) {
     let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
     cfg.canvas.width = 640;
     cfg.canvas.height = 360;
-    cfg.canvas.fps = 30;
+    cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(30);
     cfg.multiview.enabled = false;
     cfg.sources = vec![toml::from_str("id = \"bars\"\ntype = \"test/source\"\nuri = \"test://smpte\"\n")
         .expect("a valid source document")];

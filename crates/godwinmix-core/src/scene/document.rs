@@ -50,6 +50,11 @@ pub struct Collection {
     /// Deck and an agent have to agree on.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub sources: BTreeMap<String, SourceMeta>,
+    /// Downstream keys on air: scenes drawn above whatever is taken, in this
+    /// order, until they are switched off. A lower third, a logo or a ticker
+    /// stays up through every take. Kept here so a restart keeps them up.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<Id>,
 }
 
 /// A source's name, colour and tray folder, as this collection has them.
@@ -536,6 +541,7 @@ impl Collection {
             transitions: Vec::new(),
             assets: BTreeMap::new(),
             sources: BTreeMap::new(),
+            keys: Vec::new(),
         }
     }
 

@@ -52,7 +52,7 @@ impl TestCore {
         let mut cfg: Config = toml::from_str("").expect("an empty config is every default");
         cfg.canvas.width = 1280;
         cfg.canvas.height = 720;
-        cfg.canvas.fps = 30;
+        cfg.canvas.fps = godwinmix_core::config::FrameRate::whole(30);
         cfg.multiview.enabled = false;
         // A replay re-issues what was recorded. Holding it to the minimum hold
         // would refuse takes the original run made, and the answer would be a

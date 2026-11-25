@@ -180,7 +180,7 @@ fi
 # --- the three doors --------------------------------------------------------
 
 step "GET / serves the UI"
-if curl -fsS --max-time 30 "$BASE/" | grep -qi "<!doctype html>"; then ok; else bad "no page at /"; fi
+if curl -fsS --max-time 30 "$BASE/" | grep -i "<!doctype html>" >/dev/null; then ok; else bad "no page at /"; fi
 
 step "GET /api/v1/core/info says api_level 1"
 INFO="$(curl -fsS --max-time 30 "$BASE/api/v1/core/info" "${AUTH[@]}")"
@@ -257,7 +257,7 @@ else
 fi
 
 step "/metrics carries gmx_programme_frame_interval_ms"
-if curl -fsS --max-time 30 "$BASE/metrics" | grep -q "gmx_programme_frame_interval_ms"; then
+if curl -fsS --max-time 30 "$BASE/metrics" | grep "gmx_programme_frame_interval_ms" >/dev/null; then
     ok
 else
     bad "the histogram is not in the scrape"
@@ -619,10 +619,14 @@ fi
 
 step "and the preview compositor went away with the asking"
 sleep 3
-if curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" | grep -q '^gmx_multiview_subscribers 0'; then
+# Read whole, then searched: `grep -q` stops at its match and closes the
+# pipe, and under pipefail curl's "Failed writing body" then failed a step
+# whose answer was right.
+METRICS="$(curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}")"
+if grep -q '^gmx_multiview_subscribers 0' <<<"$METRICS"; then
     ok
 else
-    bad "$(curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" | grep multiview_subscribers)"
+    bad "$(grep multiview_subscribers <<<"$METRICS")"
 fi
 
 "$GMX" ctl take bars >/dev/null 2>&1

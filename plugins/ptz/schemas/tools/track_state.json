@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "track_state",
+  "description": "What tracking is doing: who is followed, the framing, the state (following, holding, fallback), the people in view and how fast it runs. With no camera, every camera.",
+  "type": "object",
+  "properties": {
+    "camera": {
+      "type": "string",
+      "title": "Camera",
+      "description": "The camera's id. May be left out when there is only one camera.",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "cam-pulpit"
+      ]
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

@@ -19,12 +19,16 @@
 //! * raises a `memory` alarm (`MixerHandle::memory_alarm`), which the vitals
 //!   add to the show's health and the wall shows like any other;
 //! * restarts the source whose queue holds the most, when one holds at least
-//!   [`BLAME_BYTES`] and can be traced to a source. A source's input pipeline
-//!   is its own; a queue in the programme pipeline is traced up its chain to
-//!   the source branch it hangs off. The programme itself, an output or the
-//!   encoder is never restarted by this: they are named and left alone.
+//!   [`BLAME_BYTES`], is full by its backstop rather than its time limit, and
+//!   can be traced to a source. A source's input pipeline is its own; a queue
+//!   in the programme pipeline is traced up its chain to the source branch it
+//!   hangs off. The programme itself, an output or the encoder is never
+//!   restarted by this: they are named and left alone. Queues full to their
+//!   time limits mean the programme is behind, and restarting a healthy
+//!   source for that only takes it off air (`blame`).
 //!
-//! After a restart it waits [`SETTLE`] before blaming anything again, and the
+//! After a restart it waits [`SETTLE`] before blaming anything again, leaves
+//! the source it restarted alone for [`AGAIN_AFTER`], and the
 //! alarm clears once memory falls under nine tenths of the threshold. The
 //! mixer thread only reads the clock and starts the task; nothing here runs
 //! on a streaming thread.
@@ -37,14 +41,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{error, info, warn};
 
+mod blame;
 mod held;
+pub use blame::{all_by_time, blame, Restarts, AGAIN_AFTER, BLAME_BYTES};
 pub use held::{fullest_queues, source_of, Held};
 use held::describe;
 
 /// How often the show's memory is read.
 pub const EVERY: Duration = Duration::from_secs(5);
-/// What one queue must hold before its source is restarted for it.
-pub const BLAME_BYTES: u64 = 64 * 1024 * 1024;
 /// How long after a restart the guard waits before restarting again.
 pub const SETTLE: Duration = Duration::from_secs(30);
 /// Under this share of the threshold the alarm clears.
@@ -74,6 +78,8 @@ struct Shared {
     /// When the guard last restarted a source, and when it last wrote the error.
     acted: Mutex<Option<Instant>>,
     said: Mutex<Option<Instant>>,
+    /// The sources it restarted, and when.
+    restarts: Restarts,
 }
 
 impl Mixer {
@@ -119,15 +125,20 @@ fn check(cfg: &MemoryConfig, shared: &Shared, handle: &MixerHandle) {
             private_mb = bytes / MB,
             limit_mb = limit / MB,
             queues = %named,
+            behind = all_by_time(&queues),
             "the show's memory is past its guard's threshold. The fullest queues are named \
-             here; the source holding the most is restarted. Set [memory] guard_mb to move \
-             the threshold"
+             here. A source whose queue filled by its backstop is restarted; when every \
+             full queue is full to its time limit (behind = true) the programme has fallen \
+             behind its sources, no source is to blame and none is restarted: take the \
+             heaviest work off air or lower the canvas. Set [memory] guard_mb to move the \
+             threshold"
         );
     }
-    let Some((top, source)) = blame(&queues) else { return };
+    let Some((top, source)) = blame(&queues, |s| shared.restarts.rested(s)) else { return };
     if !due(&shared.acted, SETTLE) {
         return;
     }
+    shared.restarts.note(source);
     warn!(
         source = %source,
         queue = %top.element,
@@ -137,12 +148,6 @@ fn check(cfg: &MemoryConfig, shared: &Shared, handle: &MixerHandle) {
          carries on with the source's last frame"
     );
     let _ = handle.send(Command::RestartSource(source.to_string()));
-}
-
-/// The fullest queue that holds at least [`BLAME_BYTES`] and belongs to a
-/// source, with that source. `queues` is fullest first.
-pub fn blame(queues: &[Held]) -> Option<(&Held, &str)> {
-    queues.iter().take_while(|q| q.bytes >= BLAME_BYTES).find_map(|q| q.source.as_deref().map(|s| (q, s)))
 }
 
 /// Whether `at` is unset or older than `every`, and if so, set it to now.

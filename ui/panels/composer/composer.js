@@ -13,6 +13,7 @@ import { withShow } from "../../client/transport-rpc.js";
 import { el, clear, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
+import { settings } from "../../shell/settings.js";
 import { ComposerCanvas } from "./canvas.js";
 import { Inspector } from "./inspector.js";
 import { Catalogue } from "./catalogue.js";
@@ -375,7 +376,7 @@ export class Composer {
       // A scene on air has already changed: the core applied it.
       const name = this.scenes.summary(this.scene)?.name;
       const onAir = !!name && this.client.state.scene === name;
-      toast({ text: onAir ? "Applied. It is on air now." : "Applied. Tap the scene to put it on air." });
+      toast({ text: onAir ? "Applied. It is on air now." : settings().producer ? "Applied. Tap the scene to put it in Preview, then Take." : "Applied. Tap the scene to put it on air." });
     } catch (e) {
       // Somebody changed the scene while it was open here. Asked, not toasted.
       if (!force && e && e.data && e.data.conflict === "draft") return staleDraft(this, e);

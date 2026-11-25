@@ -16,9 +16,9 @@ desktop app, the release binaries and the container image all are.
 | `quality` | `auto`, `fast`, `fine` | `auto` | Which model: `fast` is MediaPipe selfie segmentation, `fine` is MODNet. `auto` takes `fine` where a GPU will run it and `fast` where none will. |
 | `model` | a name | none | A model of your own, `name.onnx` with `name.json` beside it in a models folder. Takes the place of `quality`. Letters, digits, `-` and `_` only. |
 | `device` | `auto`, `gpu`, `cpu` | `auto` | Where the model runs. `gpu` is refused on a machine with no GPU accelerator; `auto` falls back to the CPU. |
-| `cutoff` | 0 to 1 | 0.5 | Where the edge sits in the model's answer. |
-| `softness` | 0 to 1 | 0.3 | The width of the ramp across the edge. 0 is a hard edge. |
-| `steady` | 0 to 0.95 | 0.5 | How much of the last mask carries into the next. |
+| `cutoff` | 0 to 1 | 0.6 | Where the edge sits in the model's answer. |
+| `softness` | 0 to 1 | 0.2 | The width of the ramp across the edge. 0 is a hard edge. |
+| `steady` | 0 to 0.95 | 0.5 | How much small changes carry into the next mask. Large changes follow the new mask immediately. |
 | `feather` | 0 to 20 pixels | 0 | Softens the edge inwards by about this many pixels. |
 | `matte_left`, `matte_right`, `matte_top`, `matte_bottom` | 0 to 0.98 each | 0 | The fraction of the picture cut away from each edge, whatever the model says. Each opposite pair must add up to less than 0.98. |
 
@@ -30,11 +30,13 @@ A value outside its range is refused with the field named and its range.
 ONNX Runtime, in order: `ORT_DYLIB_PATH`; beside the mixer (`onnxruntime.dll`
 and `onnxruntime/` on Windows, `Resources/onnxruntime/` in a macOS app,
 `lib/GodwinMix/onnxruntime/` and `lib/godwinmix/` on Linux); a checkout's
-`target/onnxruntime/`; then the system's own search. Version 1.20 or newer.
+`target/onnxruntime/`; on macOS the installed
+`/Applications/GodwinMix.app/Contents/Resources/onnxruntime/`; then the system's own search. Version 1.20 or newer.
 
-Models, in order: `GODWINMIX_MODELS_DIR`; `~/.godwinmix/models`; `models/`
+Models, in order: `GODWINMIX_MODELS_DIR`; `~/.godwinmix/models`; `~/.cache/gmx-models`; `models/`
 beside the mixer; `share/godwinmix/models`; a macOS app's
-`Resources/models`; `lib/GodwinMix/models`; a checkout's `models/`. The first
+`Resources/models`; `lib/GodwinMix/models`; a checkout's `models/`; on macOS the installed
+`/Applications/GodwinMix.app/Contents/Resources/models`. The first
 folder holding the file wins, so a model you add replaces one that shipped.
 
 `dev/fetch-models.sh` puts both in place for a checkout, an installer or a
@@ -63,13 +65,88 @@ first output is read as 1 x 1 x height x width, 0 to 1, at the input's size.
   hand the board a keyed picture
 ```
 
-The frame's thread never waits for the model. On a 1080p canvas its own work
-is the mask laid over each 2x2 block, bilinearly, in fixed point: about 2 ms a
-frame, measured on an Intel Arc 140T laptop with
-`cargo test --release --features matte -- --ignored cost_per_1080p`. The board
-draws a cutout exactly as it draws a key, in stacking order with every other
-item. Where nothing can draw it (a source's input side, or a programme
-composited on a GPU), the cutout is written into the frame over black.
+The frame's thread never waits for the model. Small disconnected foreground
+components and small enclosed holes are cleaned at model resolution on the
+worker. Regions larger than one part in 1500 of the mask survive even when
+detached, so a raised hand is not discarded just because it misses the body.
+Eight connected neighbours preserve diagonal attachments. Open background
+regions are never filled.
+
+The current frame's luma guides the newest mask using a native Rust
+[fast guided filter](https://arxiv.org/abs/1505.00996). Linear coefficients
+are fitted at one eighth of the frame width and height, with a radius of four
+samples and epsilon 0.0004 on luma scaled to 0 to 1. Their bilinear expansion
+is evaluated with the average luma of each actual 2x2 block. The edge curve
+then produces soft alpha. This happens on the frame's thread; inference and
+component cleanup stay on the worker. No new crate is required.
+
+On an Apple M4 Pro at 1920 x 1080, the optimized evaluator measured guided
+alpha at 2.04 ms mean and 2.10 ms P95 with the fast model; component cleanup
+added 0.37 ms on the worker. With fine, guided alpha averaged 2.49 ms with
+a 5.45 ms P95, so this is not a hard 3 ms deadline guarantee. These spans
+exclude compositing and I/O. The evaluator compiles the actual refinement
+modules with `cargo rustc -p godwinmix-core --features matte --example matte_eval -- -C opt-level=3`;
+the linked core library is a development build and the native runtime uses
+the CPU. This does not establish full mixer release throughput.
+
+The tighter default cutoff of 0.6 and softness of 0.2 reduce uncertain room
+pixels. Feather stays zero because extra inward blur loses hair. Edge colour
+reconstruction is not enabled: pulling colours from solid foreground can
+spread shirt and skin colours into hair. The guide cannot recover hair the
+model misses or distinguish a room patch with the same luma as hair.
+
+The board draws a cutout in stacking order with every other item. Where
+nothing can draw it (a source's input side, or a programme composited on a
+GPU), the cutout is written into the frame over black.
+
+## In Preview
+
+A cutout on an item of the armed scene is drawn in Preview too, on the
+preview's own copy of the item at thumbnail size, by the preview's board. It
+exists only while somebody watches Preview and that scene is armed.
+
+When the same picture is cut out on air at the same time, with the same
+quality, device and steady settings, the two copies share one model. The same
+picture means the same camera with the same crop and the same quarter turn,
+because those change what the model sees: the same camera wide and cropped in
+one scene, or on both sides of a transition, runs one model for each. Two
+copies of one picture on air at once (one camera twice with the same crop)
+share a model too, and one of them feeds it. The
+programme's copy feeds it; the preview's copy only reads the newest mask,
+which fits any frame size because a mask is at the model's size. With the
+scene armed and not on air, the preview's frames feed the model on their own.
+Different edge, softness, feather or matte settings still share, because those
+are laid on per copy.
+
+A change to quality, device or steady on an item cut out on air and in
+Preview reaches both copies, and they end on one model whichever is told
+first. While a new model loads, the cutout on air keeps drawing its last mask
+rather than the whole camera.
+
+Opening the model is the slow part: three to eleven seconds for the fine
+model on DirectML on a Windows laptop. Preview makes its own copy of a scene's
+filters every time the scene is armed, and each copy used to open the model
+again. Now a cutout that stops leaves its open model behind, one per model
+and device, and the next cutout with the same quality and device takes it, so
+arming the scene again cuts the person out on the first frame. The cost is
+that one idle model stays in memory after the last cutout goes.
+
+Until a new cutout's model has answered its first frame the camera is drawn
+whole. `filter.cutout` says how many cutouts are still preparing and how many
+are running, with the reason when one could not start. The composer's cutout
+settings and the item's box in Preview say "preparing the cutout" while any
+is, and the page asks only while a cutout is new to it, for a minute at most.
+
+A cutout feeds its model only while its item can be seen. A cutout scene
+taken off air used to keep its model running on a camera nobody saw.
+
+Measured on an M4 Pro with the fine model on CoreML, a 1080p presenter clip,
+counting model runs over a minute in each state: nothing on air or in Preview
+with a cutout, 0 a second; the cutout scene only in Preview, about 5 a second
+(the preview's rate); on air with nobody watching Preview, about 15 a second
+(as fast as the model answers); on air and in Preview at once, the same 15
+and one model, not two; taken off air again, 0. Before this, the scene taken
+off air went on at 15 a second.
 
 ## Refusals
 
@@ -81,3 +158,12 @@ composited on a GPU), the cutout is written into the frame over black.
 | `device = "gpu"` with no GPU accelerator | to use `auto` or `cpu`, or a runtime with DirectML, CoreML, CUDA or OpenVINO |
 
 Adding the filter checks all of these first, and a refusal changes nothing.
+
+A filter can still fail later, after it was accepted. Right after a mixer
+restart, for example, the runtime may not be ready yet. When that happens the
+item stays hidden instead of going on air uncut. The mixer tries the filter
+again each time it applies the scene, which is twice a second, and shows the
+item as soon as the filter goes in. The log gets one warning per item and
+filter list, `a scene item's filter could not go on; the item stays hidden
+until it does`, naming the source and the reason. Until the cutout has its
+first frame in the right format, it draws nothing either.
