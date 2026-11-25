@@ -286,7 +286,10 @@ impl Stage {
     /// The picture made progressive, or None to pass it as it is.
     fn picture(&mut self, input: &gst::Buffer, always: bool) -> Result<Option<gst::Buffer>, String> {
         let Some((caps, width, height, scan)) = self.shape.clone() else { return Ok(None) };
-        let flags = input.flags().bits();
+        // The raw flags: `flags()` drops the bits GstBufferFlags does not
+        // name, and the video flags are exactly those.
+        // SAFETY: reading a field of a live buffer.
+        let flags = unsafe { (*input.as_ptr()).mini_object.flags };
         let bottom_first = match scan {
             Scan::Progressive if !always => return Ok(None),
             Scan::Mixed if !always && flags & INTERLACED == 0 => return Ok(None),
