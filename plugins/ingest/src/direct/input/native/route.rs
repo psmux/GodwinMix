@@ -24,8 +24,10 @@ impl Routes {
     }
 
     /// Route each subscriber's program: its PMT, its PCR and every stream
-    /// it lists. A subscriber whose program changed is told first.
-    pub fn build(&mut self, programs: &[Program], subs: &mut [Sub]) {
+    /// it lists. A subscriber whose program changed is told first. Answers
+    /// true while some subscriber could not be told yet (its queue was full).
+    pub fn build(&mut self, programs: &[Program], subs: &mut [Sub]) -> bool {
+        let mut pending = false;
         self.by_pid.iter_mut().for_each(Vec::clear);
         for (i, s) in subs.iter_mut().enumerate() {
             let chosen = match s.program {
@@ -33,10 +35,13 @@ impl Routes {
                 None => programs.first(),
             };
             let Some(p) = chosen else { continue };
-            if s.routed != Some((p.number, p.pmt_pid)) {
+            // Marked routed only once the show has the message: a show whose
+            // queue is full at that moment is told on the next build instead
+            // of never, which left it with its packets and no PMT to read them.
+            if s.routed != Some((p.number, p.pmt_pid)) && s.tx.try_send(Item::Follow(p.number, p.pmt_pid)).is_ok() {
                 s.routed = Some((p.number, p.pmt_pid));
-                let _ = s.tx.try_send(Item::Follow(p.number, p.pmt_pid));
             }
+            pending |= s.routed != Some((p.number, p.pmt_pid));
             let mut pids = vec![p.pmt_pid, p.pcr_pid];
             pids.extend(p.streams.iter().map(|e| e.pid));
             pids.sort_unstable();
@@ -45,5 +50,6 @@ impl Routes {
                 self.by_pid[usize::from(pid & 0x1FFF)].push(i as u16);
             }
         }
+        pending
     }
 }

@@ -30,7 +30,7 @@ pub fn run(group: Arc<Group>, buffer: usize) {
     let mut filter = Filter::new(Choice { program: NONE, pids: Vec::new() });
     let (mut seq, mut batch, mut routes, mut scratch) = (Sequence::default(), Batch::default(), Routes::default(), Vec::new());
     let mut sock = None;
-    let mut publish = false;
+    let (mut publish, mut pending) = (false, false);
     loop {
         if closing(&group) {
             return;
@@ -81,7 +81,7 @@ pub fn run(group: Arc<Group>, buffer: usize) {
             scratch.clear();
             filter.feed(packets, counters, &mut scratch);
             if std::mem::take(&mut filter.changed) || std::mem::take(&mut subs.changed) {
-                routes.build(filter.programs(), &mut subs.list);
+                pending = routes.build(filter.programs(), &mut subs.list);
                 publish = true;
             }
             for p in packets.chunks_exact(PACKET).filter(|p| p[0] == SYNC) {
@@ -90,8 +90,8 @@ pub fn run(group: Arc<Group>, buffer: usize) {
                 }
             }
         }
-        if std::mem::take(&mut subs.changed) {
-            routes.build(filter.programs(), &mut subs.list);
+        if std::mem::take(&mut subs.changed) || pending {
+            pending = routes.build(filter.programs(), &mut subs.list);
         }
         deliver(&mut subs);
         drop(subs);

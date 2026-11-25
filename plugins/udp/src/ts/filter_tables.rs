@@ -34,6 +34,15 @@ impl Filter {
         self.pat_version = Some(version);
         for (number, pmt_pid) in named {
             let kept = old.iter().find(|p| p.number == number && p.pmt_pid == pmt_pid);
+            if kept.is_none() {
+                // A program the last PAT did not list starts with no streams,
+                // so its PMT has to be read again even if that PID carried the
+                // same section before: after a retune the PAT can drop a
+                // program for a moment and bring it back with an unchanged
+                // PMT, which the CRC check would otherwise skip for good.
+                self.seen.remove(&pmt_pid);
+                self.parsed.remove(&pmt_pid);
+            }
             self.programs.push(kept.cloned().unwrap_or(Program { number, pmt_pid, ..Default::default() }));
             self.assemblers.entry(pmt_pid).or_default();
         }
@@ -45,6 +54,9 @@ impl Filter {
     fn on_pmt(&mut self, pid: u16, s: &[u8]) {
         let number = u16::from_be_bytes([s[3], s[4]]);
         let Some(p) = self.programs.iter_mut().find(|p| p.number == number && p.pmt_pid == pid) else {
+            // A PMT ahead of the PAT that lists it: forget it was seen, so it
+            // is read when it comes round again.
+            self.seen.remove(&pid);
             return;
         };
         if let Some((pcr, info, streams)) = tables::parse_pmt(s) {

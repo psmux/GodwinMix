@@ -156,3 +156,30 @@ fn a_pat_naming_other_programs_under_the_same_version_is_a_relayout() {
     f.resumed();
     assert!(!feed(&mut f, &versioned), "a new version is followed by any demuxer");
 }
+
+/// After a retune the PAT may drop programs for a moment and bring them
+/// back with the same PMT as before. The returning programs must get their
+/// streams again, or a show following one is routed its PMT and nothing else.
+#[test]
+fn a_program_the_pat_drops_and_brings_back_gets_its_streams_again() {
+    let mut input = mux();
+    packetize(0, &pat(&[(1, 0x1001)]), &mut 1, &mut input);
+    input.extend(mux());
+    let (f, _, _) = run(Choice { program: 0xFFFF, pids: vec![] }, &input);
+    let two = f.programs().iter().find(|p| p.number == 2).expect("program 2 is back");
+    assert_eq!(two.streams.iter().map(|s| s.pid).collect::<Vec<_>>(), vec![512, 513, 514]);
+}
+
+/// A PMT that arrives before any PAT lists its program is read again later.
+#[test]
+fn a_pmt_ahead_of_its_pat_is_read_once_the_pat_lists_it() {
+    let mut input = Vec::new();
+    packetize(0, &pat(&[(1, 0x1001)]), &mut 0, &mut input);
+    packetize(0x1001, &pmt(1, &[(256, 0x1B)]), &mut 0, &mut input);
+    packetize(0x1001, &pmt(7, &[(700, 0x02)]), &mut 1, &mut input);
+    packetize(0, &pat(&[(7, 0x1001)]), &mut 1, &mut input);
+    packetize(0x1001, &pmt(7, &[(700, 0x02)]), &mut 2, &mut input);
+    let (f, _, _) = run(Choice { program: 0xFFFF, pids: vec![] }, &input);
+    let seven = f.programs().iter().find(|p| p.number == 7).expect("program 7 listed");
+    assert_eq!(seven.streams.iter().map(|s| s.pid).collect::<Vec<_>>(), vec![700]);
+}
