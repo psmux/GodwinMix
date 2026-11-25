@@ -136,3 +136,64 @@ fn cuda_deint_takes_the_comb_off_and_keeps_still_detail() {
     let last = still.last().unwrap();
     assert!(last[101 * W + 160] < 40 && last[100 * W + 160] > 200, "still lines lost: {} {}", last[100 * W + 160], last[101 * W + 160]);
 }
+
+/// Comb over a whole luma plane of any size.
+fn comb_of(l: &[u8], w: usize, h: usize) -> u64 {
+    let mut sum = 0u64;
+    for y in (0..h - 1).step_by(2) {
+        for x in 0..w {
+            sum += u64::from(l[y * w + x].abs_diff(l[(y + 1) * w + x]));
+        }
+    }
+    sum
+}
+
+/// A real NVDEC picture, from an interlaced MPEG-2 file named by
+/// GMX_DEINT_TS, through the scale node at the source's size.
+fn decoded(mode: &str, path: &str) -> Vec<u64> {
+    gmx_netkit::init().unwrap();
+    let n = NodeSpec {
+        id: "scale:nvdec".into(),
+        kind: "scale".into(),
+        input: "decode".into(),
+        raw: json!({"kind": "scale", "width": 1920, "height": 1080, "fps": [30000, 1001], "fit": "pad", "border": 0xff00_0000u64, "rate": false, "memory": "cuda", "deinterlace": mode}),
+    };
+    let built = build(&n).unwrap();
+    let pipeline = gst::parse::launch(&format!("filesrc location={path} ! tsdemux ! mpegvideoparse ! nvmpeg2videodec name=dec")).unwrap().downcast::<gst::Pipeline>().unwrap();
+    super::cuda::share(&pipeline);
+    let dec = pipeline.by_name("dec").unwrap();
+    let down = gst::ElementFactory::make("cudadownload").build().unwrap();
+    let sink = gst::ElementFactory::make("appsink").build().unwrap().downcast::<AppSink>().unwrap();
+    sink.set_caps(Some(&"video/x-raw,format=NV12".parse().unwrap()));
+    sink.set_sync(false);
+    pipeline.add_many(built.elements.iter()).unwrap();
+    pipeline.add_many([&down, sink.upcast_ref()]).unwrap();
+    dec.link_filtered(built.head.as_ref().unwrap(), &"video/x-raw(memory:CUDAMemory)".parse().unwrap()).unwrap();
+    gst::Element::link_many(built.elements.iter()).unwrap();
+    gst::Element::link_many([built.tee.as_ref().unwrap(), &down, sink.upcast_ref()]).unwrap();
+    pipeline.set_state(gst::State::Playing).unwrap();
+    let mut out = Vec::new();
+    while let Some(s) = sink.try_pull_sample(gst::ClockTime::from_seconds(10)) {
+        let vi = gstreamer_video::VideoInfo::from_caps(s.caps().unwrap()).unwrap();
+        let buf = s.buffer_owned().unwrap();
+        let frame = gstreamer_video::VideoFrame::from_buffer_readable(buf, &vi).unwrap();
+        let (w, h, stride) = (vi.width() as usize, vi.height() as usize, frame.plane_stride()[0] as usize);
+        let plane = frame.plane_data(0).unwrap();
+        let luma: Vec<u8> = (0..h).flat_map(|y| plane[y * stride..y * stride + w].iter().copied()).collect();
+        out.push(comb_of(&luma, w, h));
+    }
+    let _ = pipeline.set_state(gst::State::Null);
+    out
+}
+
+#[test]
+#[ignore = "needs an NVIDIA card and GMX_DEINT_TS"]
+fn cuda_deint_on_real_nvdec_pictures() {
+    let Ok(path) = std::env::var("GMX_DEINT_TS") else { return };
+    let woven = decoded("off", &path);
+    let on = decoded("auto", &path);
+    assert!(woven.len() > 10 && on.len() == woven.len(), "pictures: {} woven, {} deinterlaced", woven.len(), on.len());
+    let (a, b): (u64, u64) = (woven.iter().sum(), on.iter().sum());
+    eprintln!("NVDEC 1080i: comb {b} deinterlaced against {a} woven over {} pictures", on.len());
+    assert!(b * 2 < a, "the comb stayed: {b} against {a}");
+}
