@@ -193,8 +193,11 @@ fn cuda_deint_on_real_nvdec_pictures() {
     let Ok(path) = std::env::var("GMX_DEINT_TS") else { return };
     let woven = decoded("off", &path);
     let on = decoded("auto", &path);
-    assert!(woven.len() > 10 && on.len() == woven.len(), "pictures: {} woven, {} deinterlaced", woven.len(), on.len());
-    let (a, b): (u64, u64) = (woven.iter().sum(), on.iter().sum());
-    eprintln!("NVDEC 1080i: comb {b} deinterlaced against {a} woven over {} pictures", on.len());
+    // The leaky branch queue drops a few pictures of a file decoded faster
+    // than real time, so compare the mean comb of a picture.
+    assert!(woven.len() > 10 && on.len() > 10, "pictures: {} woven, {} deinterlaced", woven.len(), on.len());
+    let a = woven.iter().sum::<u64>() / woven.len() as u64;
+    let b = on.iter().sum::<u64>() / on.len() as u64;
+    eprintln!("NVDEC 1080i: mean comb {b} deinterlaced against {a} woven ({} and {} pictures)", on.len(), woven.len());
     assert!(b * 2 < a, "the comb stayed: {b} against {a}");
 }
