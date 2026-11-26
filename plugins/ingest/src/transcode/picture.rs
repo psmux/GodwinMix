@@ -13,7 +13,8 @@ use super::spec::NodeSpec;
 /// node's `method` (YADIF unless it says otherwise), one picture out for
 /// each frame in.
 ///
-/// On the GPU the picture goes down in I420, which YADIF has a fast path
+/// On the GPU the card does it (`cuda_deint.rs`). Where CUDA or NVRTC
+/// cannot be loaded, the picture goes down in I420, which YADIF has a fast path
 /// for (measured on 1080i, about half the time it takes on NV12), and the
 /// result goes back up for the scale. Measured in a headend, a 480i channel
 /// costs about 5% of one core and a 1080i one about 9%; the rest of the
@@ -25,6 +26,14 @@ pub(super) fn deinterlace(node: &NodeSpec, always: bool) -> Result<Vec<gst::Elem
     d.set_property_from_str("fields", "top");
     if !node.cuda() {
         return Ok(vec![d]);
+    }
+    // On the card when it can (`cuda_deint.rs`): no trip down and back up.
+    match super::cuda_deint::available() {
+        Ok(()) => return super::cuda_deint::elements(super::build::name("cudadeint"), always),
+        Err(why) => {
+            static SAID: std::sync::Once = std::sync::Once::new();
+            SAID.call_once(|| eprintln!("transcode: deinterlacing on the CPU: {why}"));
+        }
     }
     let convert = super::build::on_card(make("cudaconvert")?, node);
     let down = super::build::on_card(make("cudadownload")?, node);

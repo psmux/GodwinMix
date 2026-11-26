@@ -23,6 +23,7 @@ mod build;
 mod caps;
 mod cuda;
 mod cuda_ctx;
+mod cuda_deint;
 mod build_video;
 mod graph;
 pub(crate) mod input;
@@ -40,6 +41,8 @@ mod tests;
 mod tests_fit;
 #[cfg(test)]
 mod tests_picture;
+#[cfg(test)]
+mod tests_cuda_deint;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};

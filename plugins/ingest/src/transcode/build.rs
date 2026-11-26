@@ -46,10 +46,15 @@ const BRANCH_BUFFERS: u32 = 8;
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 
-pub(super) fn make(factory: &str) -> Result<gst::Element, String> {
+/// A name for an element of this plugin's graphs, unique in the process.
+pub(super) fn name(what: &str) -> String {
     let n = SERIAL.fetch_add(1, Ordering::Relaxed);
+    format!("xc{n}-{what}")
+}
+
+pub(super) fn make(factory: &str) -> Result<gst::Element, String> {
     gst::ElementFactory::make(factory)
-        .name(format!("xc{n}-{factory}"))
+        .name(name(factory))
         .build()
         .map_err(|_| format!("this machine has no GStreamer element `{factory}`, which the plan chose; install its plugin set or ask for another rendition"))
 }
