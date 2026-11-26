@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.35 (2026-11-26)
+
+A show taking one program from a multicast multiplex comes back by itself after the sender's tables move, and the ingest plugin can deinterlace on the graphics card.
+
+* Every show on one multicast group shares one socket, and that reader skipped a program table it had seen before on the same PID. After a retune a sender can drop programs from its PAT for a moment and list them again with unchanged PMTs. Those programs came back with no streams, so a show following one got its PMT and nothing else and sat in no-input while its neighbours played. Stopping every show on the group was the only cure, and a show waiting on a program that had left the multiplex kept the group open, so even that failed. A program the PAT lists again now has its PMT read again, and so does a PMT that arrives before the PAT naming it.
+* A show whose queue happened to be full when its program was first routed is told again on the next batch, instead of never.
+* An interlaced picture decoded on an NVIDIA card is deinterlaced there by a CUDA kernel, in place of the trip down to YADIF on the CPU and back up, which was the largest single use of CPU on a station transcoding many interlaced channels. `GMX_DEINTERLACE_CPU=1`, or a file at `/etc/godwinmix/deinterlace-on-cpu` for a running station, puts it back on the CPU.
+
 ## 0.3.34 (2026-11-25)
 
 People can sign in to a mixer with a username and a password instead of a token. It is optional, and a mixer with no accounts works as before. The server archive now runs on Ubuntu 22.04 with the distribution's own GStreamer.
